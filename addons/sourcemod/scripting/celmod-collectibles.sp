@@ -33,6 +33,8 @@
 #define SOUND_UNEQUIP "buttons/button10.wav"
 #define SOUND_DENY "buttons/button8.wav"
 #define SOUND_FIRE "ambient/fire/mtov_flame2.wav"
+#define SOUND_WATER "ambient/water/water_splash1.wav"
+#define SOUND_STEAM "ambient/gas/steam2.wav"
 #define SOUND_HEAL "items/medshot4.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
 #define SOUND_BLINK "ambient/machines/teleport1.wav"
@@ -58,6 +60,11 @@ enum struct Item
 	float fScale;
 	int iBeamColor[4];
 	int iDamageType;
+	char sFx[16];
+	char sSprite[PLATFORM_MAX_PATH];
+	int iSpriteIndex;
+	float fSlow;
+	float fKnockback;
 	float fIgnite;
 	float fSpeed;
 	int iSkin;
@@ -94,6 +101,7 @@ ConVar g_cvGiftDays;
 ConVar g_cvShowSelf;
 
 float g_fFrozenUntil[MAXPLAYERS + 1];
+float g_fSkyward[3] = { 0.0, 0.0, 1.0 };
 float g_fNextPower[MAXPLAYERS + 1];
 float g_fNextSecondary[MAXPLAYERS + 1];
 float g_fNextShotSound[MAXPLAYERS + 1];
@@ -241,6 +249,8 @@ public void OnMapStart()
 	PrecacheSound(SOUND_ICE, true);
 	PrecacheSound(SOUND_SHOCK, true);
 	PrecacheSound(SOUND_HEAL, true);
+	PrecacheSound(SOUND_WATER, true);
+	PrecacheSound(SOUND_STEAM, true);
 	PrecacheSound(SOUND_BLINK, true);
 	PrecacheSound(SOUND_DROP, true);
 	PrecacheSound(SOUND_REWARD, true);
@@ -1402,6 +1412,13 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].iWeight = kvItems.GetNum("dropweight", 0);
 	g_Items[iItem].iSkin = kvItems.GetNum("skin", 0);
 	g_Items[iItem].fIgnite = kvItems.GetFloat("ignite", 0.0);
+	g_Items[iItem].fSlow = kvItems.GetFloat("slow", 0.0);
+	g_Items[iItem].fKnockback = kvItems.GetFloat("knockback", 0.0);
+
+	kvItems.GetString("fx", g_Items[iItem].sFx, sizeof(Item::sFx), "beam");
+	kvItems.GetString("sprite", g_Items[iItem].sSprite, sizeof(Item::sSprite), "sprites/glow04_noz.vmt");
+
+	g_Items[iItem].iSpriteIndex = PrecacheModel(g_Items[iItem].sSprite, true);
 	g_Items[iItem].fSpeed = kvItems.GetFloat("speed", 1.0);
 
 	char sDamageType[24];
@@ -1892,6 +1909,8 @@ void FireEmblemShot(int iClient, int iItem)
 		TE_SetupBeamRingPoint(fEnd, 4.0, 120.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.5, 8.0, 0.0, iColor, 10, 0);
 		TE_SendToAll();
 
+		SpriteSpray(fEnd, g_fSkyward, g_Items[iItem].iSpriteIndex, 180, 0.3, 14);
+
 		EmitSoundToAll(SOUND_FIRE, iClient);
 
 		return;
@@ -1899,19 +1918,7 @@ void FireEmblemShot(int iClient, int iItem)
 
 	fStart[2] -= 12.0;
 
-	TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.3, 6.0, 2.0, 1, StrEqual(sPower, "blizzard") ? 0.5 : 3.0, iColor, 20);
-	TE_SendToAll();
-
-	TE_SetupBeamRingPoint(fEnd, 4.0, 60.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.4, 5.0, 0.0, iColor, 10, 0);
-	TE_SendToAll();
-
-	// Fast firing emblems would otherwise stack the same sound many times a second.
-	if (GetGameTime() >= g_fNextShotSound[iClient])
-	{
-		g_fNextShotSound[iClient] = GetGameTime() + 0.6;
-
-		EmitSoundToAll(StrEqual(sPower, "blizzard") ? SOUND_ICE : (StrEqual(sPower, "shock") ? SOUND_SHOCK : SOUND_FIRE), iClient);
-	}
+	DrawShotEffect(iClient, iItem, fStart, fEnd, fDirection, iColor);
 
 	if (StrEqual(sPower, "blast"))
 	{
@@ -1966,6 +1973,10 @@ void FireEmblemShot(int iClient, int iItem)
 		TE_SetupBeamRingPoint(fEnd, 10.0, g_Items[iItem].fValue * 2.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 1.0, 12.0, 0.0, iColor, 10, 0);
 		TE_SendToAll();
 
+		SpriteSpray(fEnd, g_fSkyward, g_Items[iItem].iSpriteIndex, 500, 0.6, 30);
+
+		EmitSoundToAll(SOUND_FIRE, iClient);
+
 		for (int i = 1; i <= MaxClients; i++)
 		{
 			if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i) || Cel_GetNoKill(i))
@@ -2006,6 +2017,27 @@ void FireEmblemShot(int iClient, int iItem)
 		{
 			IgniteEntity(iTarget, g_Items[iItem].fIgnite);
 		}
+
+		// Ice chills its target for a moment.
+		if (g_Items[iItem].fSlow > 0.0)
+		{
+			g_fFrozenUntil[iTarget] = GetGameTime() + g_Items[iItem].fSlow;
+			g_bFrozenTint[iTarget] = true;
+
+			SetEntityRenderColor(iTarget, 90, 160, 255, 255);
+		}
+
+		// Water shoves its target back.
+		if (g_Items[iItem].fKnockback > 0.0)
+		{
+			float fShove[3];
+
+			fShove[0] = fDirection[0] * g_Items[iItem].fKnockback;
+			fShove[1] = fDirection[1] * g_Items[iItem].fKnockback;
+			fShove[2] = 120.0;
+
+			TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fShove);
+		}
 	} else if (StrEqual(sPower, "fire"))
 	{
 		IgniteEntity(iTarget, g_Items[iItem].fDuration);
@@ -2028,6 +2060,204 @@ void FireEmblemShot(int iClient, int iItem)
 
 		TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fPush);
 	}
+}
+
+// What a shot looks and sounds like. Each emblem picks a style with its "fx" key:
+//   flame, ice, water, energy, smoke, orb  - sprites that fly from the player to the target
+//   spray                                  - a burst of sprites thrown forward
+//   laser, plasma, rainbow, beam           - beams
+void DrawShotEffect(int iClient, int iItem, float fStart[3], float fEnd[3], float fDirection[3], int iColor[4])
+{
+	char sFx[16];
+	float fUp[3] = { 0.0, 0.0, 1.0 };
+	int iSprite = g_Items[iItem].iSpriteIndex;
+
+	strcopy(sFx, sizeof(sFx), g_Items[iItem].sFx);
+
+	if (StrEqual(sFx, "none"))
+	{
+		return;
+	}
+
+	if (StrEqual(sFx, "flame"))
+	{
+		LaunchSprite(iItem, fStart, fEnd, iColor, 1100.0, 0.6, false);
+		SpriteSpray(fEnd, fUp, iSprite, 70, 0.6, 3);
+
+		PlayShotSound(iClient, SOUND_FIRE);
+	} else if (StrEqual(sFx, "ice"))
+	{
+		LaunchSprite(iItem, fStart, fEnd, iColor, 1300.0, 0.35, false);
+
+		TE_SetupBeamRingPoint(fEnd, 2.0, 40.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.3, 3.0, 0.0, iColor, 10, 0);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_ICE);
+	} else if (StrEqual(sFx, "water"))
+	{
+		LaunchSprite(iItem, fStart, fEnd, iColor, 900.0, 0.4, true);
+		SpriteSpray(fEnd, fUp, iSprite, 140, 0.8, 4);
+
+		PlayShotSound(iClient, SOUND_WATER);
+	} else if (StrEqual(sFx, "energy"))
+	{
+		LaunchSprite(iItem, fStart, fEnd, iColor, 1600.0, 0.5, false);
+
+		TE_SetupEnergySplash(fEnd, fUp, false);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else if (StrEqual(sFx, "smoke"))
+	{
+		LaunchSprite(iItem, fStart, fEnd, iColor, 500.0, 1.2, false);
+
+		TE_SetupSmoke(fEnd, iSprite, 25.0, 8);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_STEAM);
+	} else if (StrEqual(sFx, "orb"))
+	{
+		LaunchSprite(iItem, fStart, fEnd, iColor, 1400.0, 1.4, false);
+
+		TE_SetupSparks(fEnd, fUp, 6, 4);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else if (StrEqual(sFx, "spray"))
+	{
+		SpriteSpray(fStart, fDirection, iSprite, 650, 0.25, 5);
+
+		PlayShotSound(iClient, SOUND_STEAM);
+	} else if (StrEqual(sFx, "laser"))
+	{
+		TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.15, 2.0, 2.0, 1, 0.0, iColor, 20);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else if (StrEqual(sFx, "plasma"))
+	{
+		int iCore[4] = { 255, 255, 255, 255 };
+
+		TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.15, 10.0, 10.0, 1, 4.0, iColor, 30);
+		TE_SendToAll();
+
+		TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.15, 3.0, 3.0, 1, 0.0, iCore, 30);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else if (StrEqual(sFx, "rainbow"))
+	{
+		int iRainbow[4], iRGB[3];
+
+		HSVtoRGB(GetGameTime() * 240.0, 1.0, 1.0, iRGB);
+
+		iRainbow[0] = iRGB[0];
+		iRainbow[1] = iRGB[1];
+		iRainbow[2] = iRGB[2];
+		iRainbow[3] = 255;
+
+		TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.2, 6.0, 6.0, 1, 1.0, iRainbow, 20);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else {
+		TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.3, 6.0, 2.0, 1, 2.0, iColor, 20);
+		TE_SendToAll();
+
+		TE_SetupBeamRingPoint(fEnd, 4.0, 60.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.4, 5.0, 0.0, iColor, 10, 0);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	}
+}
+
+// Fast firing emblems would otherwise stack the same sound many times a second.
+void PlayShotSound(int iClient, const char[] sSound)
+{
+	if (GetGameTime() >= g_fNextShotSound[iClient])
+	{
+		g_fNextShotSound[iClient] = GetGameTime() + 0.6;
+
+		EmitSoundToAll(sSound, iClient);
+	}
+}
+
+// A sprite that flies from one point to another and removes itself on arrival.
+void LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], float fSpeed, float fScale, bool bGravity)
+{
+	char sBuffer[64];
+	float fVelocity[3];
+
+	float fDistance = GetVectorDistance(fStart, fEnd);
+
+	// Nothing to show at point blank range, and never spawn sprites when the map is nearly out of entities.
+	if (fDistance < 24.0 || GetEntityCount() > GetMaxEntities() - 200)
+	{
+		return;
+	}
+
+	int iSprite = CreateEntityByName("env_sprite");
+
+	if (iSprite == -1)
+	{
+		return;
+	}
+
+	float fLife = fDistance / fSpeed;
+
+	DispatchKeyValue(iSprite, "model", g_Items[iItem].sSprite);
+	DispatchKeyValue(iSprite, "rendermode", "5");
+	DispatchKeyValue(iSprite, "renderamt", "255");
+	DispatchKeyValue(iSprite, "framerate", "15");
+	DispatchKeyValue(iSprite, "spawnflags", "1");
+	DispatchKeyValue(iSprite, "classname", "cel_emblem_shot");
+
+	Format(sBuffer, sizeof(sBuffer), "%d %d %d", iColor[0], iColor[1], iColor[2]);
+	DispatchKeyValue(iSprite, "rendercolor", sBuffer);
+
+	DispatchKeyValueFloat(iSprite, "scale", fScale);
+
+	DispatchSpawn(iSprite);
+
+	fVelocity[0] = (fEnd[0] - fStart[0]) / fLife;
+	fVelocity[1] = (fEnd[1] - fStart[1]) / fLife;
+	fVelocity[2] = (fEnd[2] - fStart[2]) / fLife;
+
+	if (bGravity)
+	{
+		// Thrown upwards just enough to land on the target after falling.
+		fVelocity[2] += 0.5 * FindConVar("sv_gravity").FloatValue * fLife;
+
+		SetEntityMoveType(iSprite, MOVETYPE_FLYGRAVITY);
+	} else {
+		SetEntityMoveType(iSprite, MOVETYPE_NOCLIP);
+	}
+
+	TeleportEntity(iSprite, fStart, NULL_VECTOR, fVelocity);
+
+	Format(sBuffer, sizeof(sBuffer), "OnUser1 !self:Kill::%.2f:1", fLife);
+
+	SetVariantString(sBuffer);
+	AcceptEntityInput(iSprite, "AddOutput");
+	AcceptEntityInput(iSprite, "FireUser1");
+}
+
+// A burst of sprites thrown in a direction, they fall and fade on their own.
+void SpriteSpray(float fOrigin[3], float fDirection[3], int iModelIndex, int iSpeed, float fNoise, int iCount)
+{
+	if (iModelIndex < 1)
+	{
+		return;
+	}
+
+	TE_Start("Sprite Spray");
+	TE_WriteVector("m_vecOrigin", fOrigin);
+	TE_WriteVector("m_vecDirection", fDirection);
+	TE_WriteNum("m_nModelIndex", iModelIndex);
+	TE_WriteNum("m_nSpeed", iSpeed);
+	TE_WriteFloat("m_fNoise", fNoise);
+	TE_WriteNum("m_nCount", iCount);
+	TE_SendToAll();
 }
 
 // Right click with the emblem in hand.

@@ -40,6 +40,14 @@
 //               gold      Earn money. value = CL per minute while enabled.
 //               none      Cosmetic only.
 //   speed       Any emblem can also carry a speed multiplier, on top of its power.
+//   fx          What a shot looks like:
+//               flame, ice, water, energy, smoke, orb  Sprites that fly to the target ("sprite").
+//               spray                                  A burst of sprites thrown forward ("sprite").
+//               laser, plasma, rainbow, beam           Beams. beam is the default.
+//               none                                   Nothing.
+//   sprite      Sprite material used by fx, e.g. "sprites/flamelet1.vmt".
+//   slow        "shot" only: seconds the target is slowed and tinted blue.
+//   knockback   "shot" only: how hard the target is shoved back.
 //   beamcolor   "R G B A" color of a shot power's beam. Defaults to "color".
 //   Powers only work while the emblem is enabled and the gravity gun is the weapon in hand.
 //
@@ -67,6 +75,8 @@
 			"range"			"900"
 			"dmgtype"		"burn"
 			"ignite"		"1.0"
+			"fx"			"flame"
+			"sprite"		"sprites/flamelet1.vmt"
 			"dropweight"	"15"
 		}
 		"blizzard"
@@ -84,6 +94,9 @@
 			"range"			"900"
 			"dmgtype"		"drown"
 			"beamcolor"		"180 220 255 255"
+			"fx"			"ice"
+			"sprite"		"sprites/glow04_noz.vmt"
+			"slow"			"1.5"
 			"dropweight"	"12"
 		}
 		"water"
@@ -100,6 +113,10 @@
 			"cooldown"		"0.15"
 			"range"			"700"
 			"dmgtype"		"drown"
+			"fx"			"water"
+			"sprite"		"sprites/glow04_noz.vmt"
+			"knockback"		"250"
+			"beamcolor"		"40 110 255 255"
 			"dropweight"	"12"
 		}
 		"energy"
@@ -116,6 +133,8 @@
 			"cooldown"		"0.15"
 			"range"			"1200"
 			"dmgtype"		"dissolve"
+			"fx"			"energy"
+			"sprite"		"sprites/plasmaember.vmt"
 			"dropweight"	"8"
 		}
 		"laser"
@@ -133,6 +152,7 @@
 			"range"			"2000"
 			"dmgtype"		"energy"
 			"ignite"		"1.0"
+			"fx"			"laser"
 			"dropweight"	"6"
 		}
 		"plasma"
@@ -149,6 +169,7 @@
 			"cooldown"		"0.1"
 			"range"			"2000"
 			"dmgtype"		"energy"
+			"fx"			"plasma"
 			"dropweight"	"6"
 		}
 		"prism"
@@ -166,6 +187,7 @@
 			"range"			"2000"
 			"dmgtype"		"energy"
 			"beamcolor"		"255 0 255 255"
+			"fx"			"rainbow"
 			"dropweight"	"5"
 		}
 		"rainbow"
@@ -181,6 +203,7 @@
 			"cooldown"		"0.1"
 			"range"			"2000"
 			"beamcolor"		"255 255 0 255"
+			"fx"			"rainbow"
 			"dropweight"	"6"
 		}
 		"smog"
@@ -198,6 +221,8 @@
 			"range"			"500"
 			"dmgtype"		"poison"
 			"beamcolor"		"150 150 150 255"
+			"fx"			"smoke"
+			"sprite"		"sprites/steam1.vmt"
 			"dropweight"	"10"
 		}
 		"grey"
@@ -213,6 +238,8 @@
 			"cooldown"		"0.15"
 			"range"			"700"
 			"beamcolor"		"70 70 70 255"
+			"fx"			"spray"
+			"sprite"		"sprites/glow04_noz.vmt"
 			"dropweight"	"10"
 		}
 		"error_red"
@@ -228,6 +255,8 @@
 			"value"			"25"
 			"cooldown"		"1.5"
 			"range"			"3000"
+			"fx"			"orb"
+			"sprite"		"sprites/glow04_noz.vmt"
 			"dropweight"	"4"
 		}
 		"error_blue"
@@ -243,6 +272,8 @@
 			"value"			"50"
 			"cooldown"		"1.5"
 			"range"			"3000"
+			"fx"			"orb"
+			"sprite"		"sprites/glow04_noz.vmt"
 			"dropweight"	"3"
 		}
 		"error_green"
@@ -258,6 +289,8 @@
 			"value"			"75"
 			"cooldown"		"1.5"
 			"range"			"3000"
+			"fx"			"orb"
+			"sprite"		"sprites/glow04_noz.vmt"
 			"dropweight"	"2"
 		}
 		"speed"
@@ -312,6 +345,7 @@
 			"cooldown"		"0.3"
 			"range"			"2000"
 			"speed"			"1.5"
+			"fx"			"beam"
 			"dropweight"	"6"
 		}
 		"demon"
@@ -328,6 +362,7 @@
 			"range"			"1000"
 			"speed"			"1.2"
 			"beamcolor"		"200 0 255 255"
+			"sprite"		"sprites/purpleglow1.vmt"
 			"dropweight"	"6"
 		}
 		"spooky"
@@ -357,6 +392,7 @@
 			"value"			"5"
 			"cooldown"		"0.25"
 			"range"			"1500"
+			"fx"			"laser"
 			"dropweight"	"10"
 		}
 		"abyss"
@@ -389,6 +425,7 @@
 			"cooldown"		"15.0"
 			"range"			"600"
 			"beamcolor"		"255 120 0 255"
+			"sprite"		"sprites/flamelet1.vmt"
 			"dropweight"	"3"
 		}
 		"solar"
@@ -404,6 +441,7 @@
 			"value"			"80"
 			"cooldown"		"4.0"
 			"range"			"1500"
+			"fx"			"laser"
 			"dropweight"	"3"
 		}
 		"nuke"
@@ -420,6 +458,8 @@
 			"cooldown"		"10.0"
 			"range"			"3000"
 			"beamcolor"		"80 80 255 255"
+			"fx"			"orb"
+			"sprite"		"sprites/glow04_noz.vmt"
 			"dropweight"	"0"
 		}
 		"gold"

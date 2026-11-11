@@ -65,6 +65,45 @@ public void OnClientPutInServer(int iClient)
 	}
 }
 
+//Finds the client's Steam id and makes sure their save folder exists. Returns false if the id is not known yet.
+bool Cel_PrepareSaveFolder(int iClient, char[] sAuthID, int iMaxLength)
+{
+	char sPath[PLATFORM_MAX_PATH];
+	
+	Cel_GetAuthID(iClient, sAuthID, iMaxLength);
+	
+	//The stored id is empty when Steam had not confirmed the player when they joined.
+	if (sAuthID[0] == '\0' && !GetClientAuthId(iClient, AuthId_SteamID64, sAuthID, iMaxLength, false))
+	{
+		sAuthID[0] = '\0';
+	}
+	
+	if (sAuthID[0] == '\0')
+	{
+		return false;
+	}
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/users");
+	if (!DirExists(sPath))
+	{
+		CreateDirectory(sPath, 511);
+	}
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/users/%s", sAuthID);
+	if (!DirExists(sPath))
+	{
+		CreateDirectory(sPath, 511);
+	}
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/users/%s/saves", sAuthID);
+	if (!DirExists(sPath))
+	{
+		CreateDirectory(sPath, 511);
+	}
+	
+	return DirExists(sPath);
+}
+
 public Action Command_LoadBuild(int iClient, int iArgs)
 {
 	char sSaveName[64];
@@ -108,7 +147,12 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 	
 	GetNativeString(2, sSaveName, sizeof(sSaveName));
 	
-	Cel_GetAuthID(iClient, sAuthID, sizeof(sAuthID));
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Your builds cannot be reached right now: your Steam ID is not known to the server yet. Try again in a moment.");
+		
+		return false;
+	}
 	
 	Cel_GetCrosshairHitOrigin(iClient, g_fCrosshairOrigin[iClient]);
 	
@@ -141,6 +185,9 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 				kvLoadBuild.GetString("model", sBuffer[2], sizeof(sBuffer[]));
 				
 				EntityType etType = view_as<EntityType>(kvLoadBuild.GetNum("entitytype"));
+				
+				//Entity types that cannot be loaded are skipped instead of re-using the previous entity.
+				iProp = -1;
 				
 				switch(etType)
 				{
@@ -291,7 +338,12 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 		return false;
 	}
 	
-	Cel_GetAuthID(iClient, sAuthID, sizeof(sAuthID));
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Your build cannot be saved right now: your Steam ID is not known to the server yet. Try again in a moment.");
+		
+		return false;
+	}
 	
 	Format(sRelPath, sizeof(sRelPath), "data/celmod/users/%s/saves/%s.txt", sAuthID, sSaveName);
 	
@@ -488,11 +540,27 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 		}
 	}
 	
-	kvSaveBuild.ExportToFile(sFile[0]);
+	kvSaveBuild.Rewind();
+	
+	bool bWritten = kvSaveBuild.ExportToFile(sFile[0]);
 	
 	kvSaveBuild.Close();
 	
 	g_iSaveOverride[iClient] = 0;
+	
+	if (!bWritten)
+	{
+		LogError("|CelMod| Could not write the build file '%s'.", sFile[0]);
+		
+		Cel_ReplyToCommand(iClient, "Your build {green}%s{default} could not be written to disk. The server log has the details.", sSaveName);
+		
+		return false;
+	}
+	
+	if (iCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "Nothing was saved: none of your entities are inside your land.");
+	}
 	
 	if (bPropOutside)
 	Cel_ReplyToCommand(iClient, "%t", "PropOutsideLand");
