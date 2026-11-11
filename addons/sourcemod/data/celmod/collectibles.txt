@@ -5,14 +5,16 @@
 //
 // Shared keys:
 //   name        Display name.
-//   model       Model path. Emblems should be a weapon world model (rigged to the right hand like
-//               w_physics.mdl) so it sits correctly in other players' hands. The placeholders below
-//               use the stock gravity gun tinted with "color". Custom files must also be listed in
-//               data/celmod/downloads.txt.
-//   color       "R G B A" tint. Use "255 255 255 255" for a custom model with its own texture.
+//   model       Model path. Custom files must also be listed in data/celmod/downloads.txt.
+//   color       "R G B A" tint. Use "255 255 255 255" to leave the model's own texture untouched.
 //   dropweight  Chance weight in emblem drops and "random" rewards. 0 = never drops.
 //
 // Emblem keys:
+//   skin        Skin number of the model. models/celmod/bhys8.mdl has 15 (0 to 14, materials s1 to s15).
+//   scale       Size of the emblem cel in the world. The collision box does not scale with it.
+//   handscale   Size of the copy other players see in the owner's right hand.
+//   handoffset  "forward left up" from the right hand, to line the copy up with the hand.
+//   handangles  "pitch yaw roll" of the copy relative to the hand.
 //   power       fire      Primary fire shoots a flame that ignites a player.  (cooldown, duration, range)
 //               blizzard  Primary fire shoots ice that slows a player.        (cooldown, duration, range)
 //               speed     Run faster. value = speed multiplier.
@@ -33,8 +35,12 @@
 		"fire"
 		{
 			"name"			"Fire"
-			"model"			"models/weapons/w_physics.mdl"
-			"color"			"255 80 0 255"
+			"model"			"models/celmod/bhys8.mdl"
+			"skin"			"3"
+			"color"			"255 255 255 255"
+			"handscale"		"0.12"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
 			"power"			"fire"
 			"cooldown"		"2.0"
 			"duration"		"5.0"
@@ -44,8 +50,12 @@
 		"speed"
 		{
 			"name"			"Speed"
-			"model"			"models/weapons/w_physics.mdl"
-			"color"			"0 255 80 255"
+			"model"			"models/celmod/bhys8.mdl"
+			"skin"			"4"
+			"color"			"255 255 255 255"
+			"handscale"		"0.12"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
 			"power"			"speed"
 			"value"			"1.6"
 			"dropweight"	"25"
@@ -53,8 +63,12 @@
 		"jump"
 		{
 			"name"			"Jump"
-			"model"			"models/weapons/w_physics.mdl"
-			"color"			"200 0 255 255"
+			"model"			"models/celmod/bhys8.mdl"
+			"skin"			"7"
+			"color"			"255 255 255 255"
+			"handscale"		"0.12"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
 			"power"			"jump"
 			"value"			"520"
 			"dropweight"	"25"
@@ -62,8 +76,12 @@
 		"blizzard"
 		{
 			"name"			"Blizzard"
-			"model"			"models/weapons/w_physics.mdl"
-			"color"			"90 160 255 255"
+			"model"			"models/celmod/bhys8.mdl"
+			"skin"			"2"
+			"color"			"255 255 255 255"
+			"handscale"		"0.12"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
 			"power"			"blizzard"
 			"cooldown"		"4.0"
 			"duration"		"4.0"
@@ -73,8 +91,12 @@
 		"health"
 		{
 			"name"			"Health"
-			"model"			"models/weapons/w_physics.mdl"
-			"color"			"255 60 120 255"
+			"model"			"models/celmod/bhys8.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 255"
+			"handscale"		"0.12"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
 			"power"			"heal"
 			"value"			"2"
 			"dropweight"	"15"
@@ -82,8 +104,12 @@
 		"gold"
 		{
 			"name"			"Gold"
-			"model"			"models/weapons/w_physics.mdl"
-			"color"			"255 200 0 255"
+			"model"			"models/celmod/bhys8.mdl"
+			"skin"			"1"
+			"color"			"255 255 255 255"
+			"handscale"		"0.12"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
 			"power"			"gold"
 			"value"			"250"
 			"dropweight"	"0"

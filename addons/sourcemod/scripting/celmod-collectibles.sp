@@ -53,12 +53,17 @@ enum struct Item
 	float fOffset[3];
 	float fAngles[3];
 	float fScale;
+	int iSkin;
+	float fHandOffset[3];
+	float fHandAngles[3];
+	float fHandScale;
 	int iModelIndex;
 }
 
 bool g_bLate;
 bool g_bDropBox[MAXENTITIES + 1];
 bool g_bFrozenTint[MAXPLAYERS + 1];
+bool g_bHeldShown[MAXPLAYERS + 1];
 bool g_bHoldingGravGun[MAXPLAYERS + 1];
 bool g_bInvFromDisk[MAXPLAYERS + 1];
 bool g_bSpeedManaged[MAXPLAYERS + 1];
@@ -75,6 +80,7 @@ ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
 ConVar g_cvGiftChance;
 ConVar g_cvGiftDays;
+ConVar g_cvShowSelf;
 
 float g_fFrozenUntil[MAXPLAYERS + 1];
 float g_fNextPower[MAXPLAYERS + 1];
@@ -82,7 +88,8 @@ float g_fNextPower[MAXPLAYERS + 1];
 int g_iActiveEmblem[MAXPLAYERS + 1];
 int g_iActiveHat[MAXPLAYERS + 1];
 int g_iEntItem[MAXENTITIES + 1];
-int g_iGravGunModelIndex;
+int g_iHandEntRef[MAXPLAYERS + 1];
+int g_iHandItem[MAXPLAYERS + 1];
 int g_iHatEntRef[MAXPLAYERS + 1];
 int g_iItemCount;
 int g_iLastButtons[MAXPLAYERS + 1];
@@ -123,11 +130,11 @@ public void OnPluginStart()
 	LoadTranslations("common.phrases");
 
 	char sInvDir[PLATFORM_MAX_PATH];
-	
+
 	BuildPath(Path_SM, g_sItemDB, sizeof(g_sItemDB), "data/celmod/collectibles.txt");
-	
+
 	BuildPath(Path_SM, sInvDir, sizeof(sInvDir), "data/celmod/inventory");
-	
+
 	if (!DirExists(sInvDir))
 	{
 		CreateDirectory(sInvDir, 511);
@@ -151,6 +158,8 @@ public void OnPluginStart()
 	g_cvDropRadius = CreateConVar("cm_drop_radius", "1200.0", "How far from a player or land a crate can fall.", _, true, 64.0);
 	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
 	g_cvGiftDays = CreateConVar("cm_emblem_gift_days", "3", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
+
+	g_cvShowSelf = CreateConVar("cm_emblem_show_self", "0", "Testing only: 1 also shows a player their own held emblem (it will float in their first person view).", _, true, 0.0, true, 1.0);
 
 	AutoExecConfig(true, "celmod.collectibles");
 
@@ -205,7 +214,7 @@ public void OnMapStart()
 {
 	GetCurrentMap(g_sMap, sizeof(g_sMap));
 
-	g_iGravGunModelIndex = PrecacheModel(GRAVGUN_WORLDMODEL, true);
+	PrecacheModel(GRAVGUN_WORLDMODEL, true);
 	PrecacheModel(DROPBOX_MODEL, true);
 
 	PrecacheSound(SOUND_EQUIP, true);
@@ -232,7 +241,7 @@ public void OnMapStart()
 public void OnClientPutInServer(int iClient)
 {
 	ResetClient(iClient);
-	
+
 	Inv_Close(iClient);
 	Inv_Open(iClient);
 
@@ -252,11 +261,11 @@ public void OnClientDisconnect(int iClient)
 			AcceptEntityInput(i, "kill");
 		}
 	}
-	
+
 	RemoveHatEntity(iClient);
 	RestoreWeapon(iClient);
 	ResetClient(iClient);
-	
+
 	Inv_Close(iClient);
 }
 
@@ -913,19 +922,16 @@ public Action Timer_Think(Handle hTimer)
 			g_bHoldingGravGun[i] = StrEqual(sClassname, GRAVGUN_CLASS);
 		}
 
-		// Third person model: only the world model index is changed, so every other player sees the
-		// emblem in this player's hands while the first person view model stays the gravity gun.
+		// Third person model: other players see the emblem in this player's hand in place of the
+		// gravity gun. The player's own first person view model is never touched.
 		if (g_bHoldingGravGun[i] && iItem != -1)
 		{
-			if (g_Items[iItem].iModelIndex > 0)
+			if (!g_bHeldShown[i] || g_iHandItem[i] != iItem || g_iModdedWeaponRef[i] != EntIndexToEntRef(iWeapon))
 			{
-				SetEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex", g_Items[iItem].iModelIndex);
+				RestoreWeapon(i);
+				ShowHeldEmblem(i, iItem, iWeapon);
 			}
-
-			SetEntityRenderColor(iWeapon, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
-
-			g_iModdedWeaponRef[i] = EntIndexToEntRef(iWeapon);
-		} else if (iItem == -1 && g_iModdedWeaponRef[i] != INVALID_ENT_REFERENCE)
+		} else if (g_bHeldShown[i])
 		{
 			RestoreWeapon(i);
 		}
@@ -1199,7 +1205,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].iKind = iKind;
 
 	kvItems.GetSectionName(g_Items[iItem].sId, sizeof(Item::sId));
-	
+
 	// The engine's KeyValues are case insensitive and can hand back another casing of the section name.
 	for (int i = 0; g_Items[iItem].sId[i] != '\0'; i++)
 	{
@@ -1226,6 +1232,11 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fRange = kvItems.GetFloat("range", 900.0);
 	g_Items[iItem].fScale = kvItems.GetFloat("scale", 1.0);
 	g_Items[iItem].iWeight = kvItems.GetNum("dropweight", 0);
+	g_Items[iItem].iSkin = kvItems.GetNum("skin", 0);
+	g_Items[iItem].fHandScale = kvItems.GetFloat("handscale", 1.0);
+
+	kvItems.GetVector("handoffset", g_Items[iItem].fHandOffset);
+	kvItems.GetVector("handangles", g_Items[iItem].fHandAngles);
 
 	kvItems.GetVector("offset", g_Items[iItem].fOffset);
 	kvItems.GetVector("angles", g_Items[iItem].fAngles);
@@ -1292,38 +1303,38 @@ int PickRandomItem(int iKind)
 void Inv_Open(int iClient)
 {
 	char sAuthID[64];
-	
+
 	if (g_kvInv[iClient] == null)
 	{
 		g_kvInv[iClient] = new KeyValues("Inventory");
 	}
-	
+
 	if (g_bInvFromDisk[iClient] || IsFakeClient(iClient))
 	{
 		return;
 	}
-	
+
 	if (!GetClientAuthId(iClient, AuthId_SteamID64, sAuthID, sizeof(sAuthID), false) || sAuthID[0] == '\0')
 	{
 		// No Steam id yet. Tried again the next time the inventory is used.
 		return;
 	}
-	
+
 	BuildPath(Path_SM, g_sInvPath[iClient], sizeof(g_sInvPath[]), "data/celmod/inventory/%s.txt", sAuthID);
-	
+
 	if (FileExists(g_sInvPath[iClient]))
 	{
 		// Anything changed before the Steam id was known is replaced by what is on disk.
 		delete g_kvInv[iClient];
-		
+
 		g_kvInv[iClient] = new KeyValues("Inventory");
-		
+
 		if (!g_kvInv[iClient].ImportFromFile(g_sInvPath[iClient]))
 		{
 			LogError("|CelMod| Could not read the inventory file '%s'.", g_sInvPath[iClient]);
 		}
 	}
-	
+
 	g_bInvFromDisk[iClient] = true;
 }
 
@@ -1333,9 +1344,9 @@ void Inv_Save(int iClient)
 	{
 		return;
 	}
-	
+
 	g_kvInv[iClient].Rewind();
-	
+
 	if (!g_kvInv[iClient].ExportToFile(g_sInvPath[iClient]))
 	{
 		LogError("|CelMod| Could not write the inventory file '%s'. Items will be lost when the player leaves.", g_sInvPath[iClient]);
@@ -1347,10 +1358,10 @@ void Inv_Close(int iClient)
 	if (g_kvInv[iClient] != null)
 	{
 		Inv_Save(iClient);
-		
+
 		delete g_kvInv[iClient];
 	}
-	
+
 	g_bInvFromDisk[iClient] = false;
 	g_sInvPath[iClient][0] = '\0';
 }
@@ -1358,26 +1369,26 @@ void Inv_Close(int iClient)
 int Inv_GetInt(int iClient, const char[] sKey)
 {
 	Inv_Open(iClient);
-	
+
 	g_kvInv[iClient].Rewind();
-	
+
 	return g_kvInv[iClient].GetNum(sKey, -1);
 }
 
 void Inv_SetInt(int iClient, const char[] sKey, int iValue)
 {
 	Inv_Open(iClient);
-	
+
 	g_kvInv[iClient].Rewind();
 	g_kvInv[iClient].SetNum(sKey, iValue);
-	
+
 	Inv_Save(iClient);
 }
 
 void Inv_GetString(int iClient, const char[] sKey, char[] sValue, int iMaxLength)
 {
 	Inv_Open(iClient);
-	
+
 	g_kvInv[iClient].Rewind();
 	g_kvInv[iClient].GetString(sKey, sValue, iMaxLength, "none");
 }
@@ -1385,10 +1396,10 @@ void Inv_GetString(int iClient, const char[] sKey, char[] sValue, int iMaxLength
 void Inv_SetString(int iClient, const char[] sKey, const char[] sValue)
 {
 	Inv_Open(iClient);
-	
+
 	g_kvInv[iClient].Rewind();
 	g_kvInv[iClient].SetString(sKey, sValue);
-	
+
 	Inv_Save(iClient);
 }
 
@@ -1491,7 +1502,14 @@ int SpawnItemEntity(int iClient, int iItem, float fOrigin[3], float fAngles[3])
 	DispatchKeyValue(iEntity, "classname", g_Items[iItem].iKind == KIND_EMBLEM ? "cel_emblem" : "cel_hat");
 	DispatchKeyValue(iEntity, "spawnflags", "256");
 
+	if (g_Items[iItem].iKind == KIND_EMBLEM && g_Items[iItem].fScale != 1.0)
+	{
+		DispatchKeyValueFloat(iEntity, "modelscale", g_Items[iItem].fScale);
+	}
+
 	DispatchSpawn(iEntity);
+
+	SetEntProp(iEntity, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
 
 	TeleportEntity(iEntity, fOrigin, fAngles, NULL_VECTOR);
 
@@ -1531,16 +1549,91 @@ void SetActiveEmblem(int iClient, int iItem)
 	}
 }
 
+// Attaches a copy of the emblem to the player's right hand and hides the gravity gun's world model.
+void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
+{
+	char sSkin[16];
+
+	g_bHeldShown[iClient] = true;
+	g_iHandItem[iClient] = iItem;
+	g_iModdedWeaponRef[iClient] = EntIndexToEntRef(iWeapon);
+
+	// Player models without the hand attachment keep the gravity gun, tinted in the emblem's color.
+	if (LookupEntityAttachment(iClient, "anim_attachment_RH") < 1)
+	{
+		SetEntityRenderColor(iWeapon, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+
+		return;
+	}
+
+	int iHand = CreateEntityByName("prop_dynamic_override");
+
+	if (iHand == -1)
+	{
+		return;
+	}
+
+	IntToString(g_Items[iItem].iSkin, sSkin, sizeof(sSkin));
+
+	DispatchKeyValue(iHand, "model", g_Items[iItem].sModel);
+	DispatchKeyValue(iHand, "solid", "0");
+	DispatchKeyValue(iHand, "skin", sSkin);
+	DispatchKeyValue(iHand, "classname", "cel_emblem_held");
+	DispatchKeyValueFloat(iHand, "modelscale", g_Items[iItem].fHandScale);
+
+	DispatchSpawn(iHand);
+
+	SetEntityRenderColor(iHand, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+
+	SetVariantString("!activator");
+	AcceptEntityInput(iHand, "SetParent", iClient, iHand);
+
+	SetVariantString("anim_attachment_RH");
+	AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
+
+	// Once parented to the attachment these are relative to the player's right hand.
+	TeleportEntity(iHand, g_Items[iItem].fHandOffset, g_Items[iItem].fHandAngles, NULL_VECTOR);
+
+	g_iHandEntRef[iClient] = EntIndexToEntRef(iHand);
+
+	SDKHook(iHand, SDKHook_SetTransmit, Hook_HandTransmit);
+
+	SetEntityRenderMode(iWeapon, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(iWeapon, 255, 255, 255, 0);
+}
+
+public Action Hook_HandTransmit(int iEntity, int iClient)
+{
+	// The holder does not see the attached emblem, it would float in their first person view.
+	if (!g_cvShowSelf.BoolValue && iClient > 0 && iClient <= MaxClients && EntRefToEntIndex(g_iHandEntRef[iClient]) == iEntity)
+	{
+		return Plugin_Handled;
+	}
+
+	return Plugin_Continue;
+}
+
+// Removes the held emblem and makes the gravity gun's world model visible again.
 void RestoreWeapon(int iClient)
 {
+	int iHand = EntRefToEntIndex(g_iHandEntRef[iClient]);
 	int iWeapon = EntRefToEntIndex(g_iModdedWeaponRef[iClient]);
+
+	if (g_iHandEntRef[iClient] != INVALID_ENT_REFERENCE && iHand != INVALID_ENT_REFERENCE && iHand > MaxClients)
+	{
+		AcceptEntityInput(iHand, "ClearParent");
+		AcceptEntityInput(iHand, "kill");
+	}
 
 	if (g_iModdedWeaponRef[iClient] != INVALID_ENT_REFERENCE && iWeapon != INVALID_ENT_REFERENCE && iWeapon > MaxClients)
 	{
-		SetEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex", g_iGravGunModelIndex);
+		SetEntityRenderMode(iWeapon, RENDER_NORMAL);
 		SetEntityRenderColor(iWeapon, 255, 255, 255, 255);
 	}
 
+	g_bHeldShown[iClient] = false;
+	g_iHandEntRef[iClient] = INVALID_ENT_REFERENCE;
+	g_iHandItem[iClient] = -1;
 	g_iModdedWeaponRef[iClient] = INVALID_ENT_REFERENCE;
 }
 
@@ -1928,6 +2021,11 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 	SetEntityRenderColor(iEntity, iColor[0], iColor[1], iColor[2], 255);
 	SetEntityRenderFx(iEntity, RENDERFX_PULSE_FAST);
 
+	if (iItem != -1)
+	{
+		SetEntProp(iEntity, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
+	}
+
 	g_bDropBox[iEntity] = false;
 	g_iEntItem[iEntity] = (iItem == -1) ? -(iKind + 2) : iItem;
 	g_iRewardId[iEntity] = iId;
@@ -1956,5 +2054,8 @@ void ResetClient(int iClient)
 	g_iActiveHat[iClient] = -1;
 	g_iHatEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iLastButtons[iClient] = 0;
+	g_bHeldShown[iClient] = false;
+	g_iHandEntRef[iClient] = INVALID_ENT_REFERENCE;
+	g_iHandItem[iClient] = -1;
 	g_iModdedWeaponRef[iClient] = INVALID_ENT_REFERENCE;
 }
