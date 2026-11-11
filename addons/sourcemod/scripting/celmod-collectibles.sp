@@ -60,8 +60,10 @@ bool g_bLate;
 bool g_bDropBox[MAXENTITIES + 1];
 bool g_bFrozenTint[MAXPLAYERS + 1];
 bool g_bHoldingGravGun[MAXPLAYERS + 1];
+bool g_bInvFromDisk[MAXPLAYERS + 1];
 bool g_bSpeedManaged[MAXPLAYERS + 1];
 
+char g_sInvPath[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
 char g_sItemDB[PLATFORM_MAX_PATH];
 char g_sMap[64];
 char g_sRewardDB[PLATFORM_MAX_PATH];
@@ -91,6 +93,8 @@ int g_iTick;
 
 Item g_Items[MAX_ITEMS];
 
+KeyValues g_kvInv[MAXPLAYERS + 1];
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_GetCollectibleId", Native_GetCollectibleId);
@@ -118,7 +122,16 @@ public void OnPluginStart()
 	LoadTranslations("celmod.phrases");
 	LoadTranslations("common.phrases");
 
+	char sInvDir[PLATFORM_MAX_PATH];
+	
 	BuildPath(Path_SM, g_sItemDB, sizeof(g_sItemDB), "data/celmod/collectibles.txt");
+	
+	BuildPath(Path_SM, sInvDir, sizeof(sInvDir), "data/celmod/inventory");
+	
+	if (!DirExists(sInvDir))
+	{
+		CreateDirectory(sInvDir, 511);
+	}
 
 	for (int i = 0; i <= MAXENTITIES; i++)
 	{
@@ -219,6 +232,9 @@ public void OnMapStart()
 public void OnClientPutInServer(int iClient)
 {
 	ResetClient(iClient);
+	
+	Inv_Close(iClient);
+	Inv_Open(iClient);
 
 	if (!IsFakeClient(iClient))
 	{
@@ -240,6 +256,8 @@ public void OnClientDisconnect(int iClient)
 	RemoveHatEntity(iClient);
 	RestoreWeapon(iClient);
 	ResetClient(iClient);
+	
+	Inv_Close(iClient);
 }
 
 public void OnEntityDestroyed(int iEntity)
@@ -295,16 +313,16 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 		return;
 	}
 
-	if (Cel_GetClientSettingInt(iClient, "emblem_gift") == 1)
+	if (Inv_GetInt(iClient, "emblem_gift") == 1)
 	{
 		return;
 	}
 
-	int iFirst = Cel_GetClientSettingInt(iClient, "emblem_gift_first");
+	int iFirst = Inv_GetInt(iClient, "emblem_gift_first");
 
 	if (iFirst < 1)
 	{
-		Cel_SetClientSettingInt(iClient, "emblem_gift_first", GetTime());
+		Inv_SetInt(iClient, "emblem_gift_first", GetTime());
 		return;
 	}
 
@@ -350,7 +368,7 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 
 	SetOwned(iClient, iItem, GetOwned(iClient, iItem) + 1);
 
-	Cel_SetClientSettingInt(iClient, "emblem_gift", 1);
+	Inv_SetInt(iClient, "emblem_gift", 1);
 
 	Cel_PrintToChat(iClient, "Something new has appeared in your build... a {green}%s{default} emblem! Press {green}E{default} on it to enable it.", g_Items[iItem].sName);
 }
@@ -717,7 +735,7 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 
 	Format(sKey, sizeof(sKey), "reward_%d_%s", g_iRewardId[iEntity], g_sMap);
 
-	if (Cel_GetClientSettingInt(iActivator, sKey) == 1)
+	if (Inv_GetInt(iActivator, sKey) == 1)
 	{
 		EmitSoundToClient(iActivator, SOUND_DENY);
 
@@ -739,7 +757,7 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 		return;
 	}
 
-	Cel_SetClientSettingInt(iActivator, sKey, 1);
+	Inv_SetInt(iActivator, sKey, 1);
 
 	GiveItem(iActivator, iItem);
 
@@ -826,7 +844,7 @@ public Action Timer_RestoreClient(Handle hTimer, any iUserId)
 		return Plugin_Stop;
 	}
 
-	Cel_GetClientSettingString(iClient, "active_emblem", sId, sizeof(sId));
+	Inv_GetString(iClient, "active_emblem", sId, sizeof(sId));
 
 	int iItem = FindItem(KIND_EMBLEM, sId);
 
@@ -835,7 +853,7 @@ public Action Timer_RestoreClient(Handle hTimer, any iUserId)
 		g_iActiveEmblem[iClient] = iItem;
 	}
 
-	Cel_GetClientSettingString(iClient, "active_hat", sId, sizeof(sId));
+	Inv_GetString(iClient, "active_hat", sId, sizeof(sId));
 
 	iItem = FindItem(KIND_HAT, sId);
 
@@ -1181,6 +1199,12 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].iKind = iKind;
 
 	kvItems.GetSectionName(g_Items[iItem].sId, sizeof(Item::sId));
+	
+	// The engine's KeyValues are case insensitive and can hand back another casing of the section name.
+	for (int i = 0; g_Items[iItem].sId[i] != '\0'; i++)
+	{
+		g_Items[iItem].sId[i] = CharToLower(g_Items[iItem].sId[i]);
+	}
 	kvItems.GetString("name", g_Items[iItem].sName, sizeof(Item::sName), g_Items[iItem].sId);
 	kvItems.GetString("model", g_Items[iItem].sModel, sizeof(Item::sModel), iKind == KIND_EMBLEM ? GRAVGUN_WORLDMODEL : "models/props_junk/trafficcone001a.mdl");
 	kvItems.GetString("power", g_Items[iItem].sPower, sizeof(Item::sPower), "none");
@@ -1262,6 +1286,112 @@ int PickRandomItem(int iKind)
 	return -1;
 }
 
+//Inventory storage:
+// One file per player in data/celmod/inventory, kept in memory while they are connected. It holds
+// how many of each item they own, their active emblem and hat, and which rewards they have claimed.
+void Inv_Open(int iClient)
+{
+	char sAuthID[64];
+	
+	if (g_kvInv[iClient] == null)
+	{
+		g_kvInv[iClient] = new KeyValues("Inventory");
+	}
+	
+	if (g_bInvFromDisk[iClient] || IsFakeClient(iClient))
+	{
+		return;
+	}
+	
+	if (!GetClientAuthId(iClient, AuthId_SteamID64, sAuthID, sizeof(sAuthID), false) || sAuthID[0] == '\0')
+	{
+		// No Steam id yet. Tried again the next time the inventory is used.
+		return;
+	}
+	
+	BuildPath(Path_SM, g_sInvPath[iClient], sizeof(g_sInvPath[]), "data/celmod/inventory/%s.txt", sAuthID);
+	
+	if (FileExists(g_sInvPath[iClient]))
+	{
+		// Anything changed before the Steam id was known is replaced by what is on disk.
+		delete g_kvInv[iClient];
+		
+		g_kvInv[iClient] = new KeyValues("Inventory");
+		
+		if (!g_kvInv[iClient].ImportFromFile(g_sInvPath[iClient]))
+		{
+			LogError("|CelMod| Could not read the inventory file '%s'.", g_sInvPath[iClient]);
+		}
+	}
+	
+	g_bInvFromDisk[iClient] = true;
+}
+
+void Inv_Save(int iClient)
+{
+	if (g_kvInv[iClient] == null || !g_bInvFromDisk[iClient])
+	{
+		return;
+	}
+	
+	g_kvInv[iClient].Rewind();
+	
+	if (!g_kvInv[iClient].ExportToFile(g_sInvPath[iClient]))
+	{
+		LogError("|CelMod| Could not write the inventory file '%s'. Items will be lost when the player leaves.", g_sInvPath[iClient]);
+	}
+}
+
+void Inv_Close(int iClient)
+{
+	if (g_kvInv[iClient] != null)
+	{
+		Inv_Save(iClient);
+		
+		delete g_kvInv[iClient];
+	}
+	
+	g_bInvFromDisk[iClient] = false;
+	g_sInvPath[iClient][0] = '\0';
+}
+
+int Inv_GetInt(int iClient, const char[] sKey)
+{
+	Inv_Open(iClient);
+	
+	g_kvInv[iClient].Rewind();
+	
+	return g_kvInv[iClient].GetNum(sKey, -1);
+}
+
+void Inv_SetInt(int iClient, const char[] sKey, int iValue)
+{
+	Inv_Open(iClient);
+	
+	g_kvInv[iClient].Rewind();
+	g_kvInv[iClient].SetNum(sKey, iValue);
+	
+	Inv_Save(iClient);
+}
+
+void Inv_GetString(int iClient, const char[] sKey, char[] sValue, int iMaxLength)
+{
+	Inv_Open(iClient);
+	
+	g_kvInv[iClient].Rewind();
+	g_kvInv[iClient].GetString(sKey, sValue, iMaxLength, "none");
+}
+
+void Inv_SetString(int iClient, const char[] sKey, const char[] sValue)
+{
+	Inv_Open(iClient);
+	
+	g_kvInv[iClient].Rewind();
+	g_kvInv[iClient].SetString(sKey, sValue);
+	
+	Inv_Save(iClient);
+}
+
 //Ownership ledger:
 void GetLedgerKey(int iItem, char[] sKey, int iMaxLength)
 {
@@ -1274,7 +1404,7 @@ int GetOwned(int iClient, int iItem)
 
 	GetLedgerKey(iItem, sKey, sizeof(sKey));
 
-	int iOwned = Cel_GetClientSettingInt(iClient, sKey);
+	int iOwned = Inv_GetInt(iClient, sKey);
 
 	return iOwned < 0 ? 0 : iOwned;
 }
@@ -1285,7 +1415,7 @@ void SetOwned(int iClient, int iItem, int iOwned)
 
 	GetLedgerKey(iItem, sKey, sizeof(sKey));
 
-	Cel_SetClientSettingInt(iClient, sKey, iOwned < 0 ? 0 : iOwned);
+	Inv_SetInt(iClient, sKey, iOwned < 0 ? 0 : iOwned);
 }
 
 int CountSpawned(int iClient, int iItem)
@@ -1395,9 +1525,9 @@ void SetActiveEmblem(int iClient, int iItem)
 	{
 		RestoreWeapon(iClient);
 
-		Cel_SetClientSettingString(iClient, "active_emblem", "none");
+		Inv_SetString(iClient, "active_emblem", "none");
 	} else {
-		Cel_SetClientSettingString(iClient, "active_emblem", g_Items[iItem].sId);
+		Inv_SetString(iClient, "active_emblem", g_Items[iItem].sId);
 	}
 }
 
@@ -1491,9 +1621,9 @@ void SetActiveHat(int iClient, int iItem)
 
 	if (iItem == -1)
 	{
-		Cel_SetClientSettingString(iClient, "active_hat", "none");
+		Inv_SetString(iClient, "active_hat", "none");
 	} else {
-		Cel_SetClientSettingString(iClient, "active_hat", g_Items[iItem].sId);
+		Inv_SetString(iClient, "active_hat", g_Items[iItem].sId);
 
 		CreateHatEntity(iClient);
 	}
