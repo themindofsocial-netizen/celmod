@@ -27,6 +27,7 @@ float g_fCopyMoveOrigin[MAXPLAYERS + 1][3];
 float g_fFadeTime[MAXENTITIES + 1];
 float g_fRainbowTime[MAXENTITIES + 1];
 
+Handle g_hOnEntityOwnerChanged;
 Handle g_hOnEntityRemove;
 
 int g_iColor[MAXENTITIES + 1][4];
@@ -119,6 +120,7 @@ public void OnPluginStart()
 		ThrowError("|CelMod| %t", "FileNotFound", g_sColorDB);
 	}
 	
+	g_hOnEntityOwnerChanged = CreateGlobalForward("Cel_OnEntityOwnerChanged", ET_Ignore, Param_Cell, Param_Cell, Param_Cell);
 	g_hOnEntityRemove = CreateGlobalForward("Cel_OnEntityRemove", ET_Hook, Param_Cell, Param_Cell, Param_Cell);
 	
 	RegAdminCmd("v_autobuild", Command_AutoBuild, ADMFLAG_SLAY, "|CelMod| Stacks props on the x, y and z axis.");
@@ -227,8 +229,7 @@ public void OnEntityDestroyed(int iEntity)
 		
 		Call_PushCell(iEntity);
 		Call_PushCell(Cel_GetOwner(iEntity));
-		Call_PushCell(view_as<int>(Cel_GetEntityCatagory(iEntity)));
-		Call_PushCell(view_as<int>(Cel_GetEntityType(iEntity)));
+		Call_PushCell(Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_CEL));
 		
 		Call_Finish();
 		
@@ -1949,7 +1950,7 @@ public int Native_GetEntityCatagory(Handle hPlugin, int iNumParams)
 	if (etEntityType == ENTTYPE_AMMO || etEntityType == ENTTYPE_AMMOCRATE || etEntityType == ENTTYPE_BIT || etEntityType == ENTTYPE_CHARGER || etEntityType == ENTTYPE_TRIGGER || etEntityType == ENTTYPE_WEAPONSPWNER)
 	{
 		return view_as<int>(ENTCATAGORY_BIT);
-	}else if (etEntityType == ENTTYPE_DOOR || etEntityType == ENTTYPE_EFFECT || etEntityType == ENTTYPE_INTERNET || etEntityType == ENTTYPE_LADDER || etEntityType == ENTTYPE_LIGHT)
+	}else if (etEntityType == ENTTYPE_DOOR || etEntityType == ENTTYPE_EFFECT || etEntityType == ENTTYPE_INTERNET || etEntityType == ENTTYPE_LADDER || etEntityType == ENTTYPE_LIGHT || etEntityType == ENTTYPE_EMBLEM || etEntityType == ENTTYPE_HAT)
 	{
 		return view_as<int>(ENTCATAGORY_CEL);
 	} else if (etEntityType == ENTTYPE_CYCLER || etEntityType == ENTTYPE_DYNAMIC || etEntityType == ENTTYPE_PHYSICS || etEntityType == ENTTYPE_CLEER)
@@ -2040,6 +2041,12 @@ public int Native_GetEntityType(Handle hPlugin, int iNumParams)
 	} else if (StrContains(sClassname, "bit_trigger_", false) != -1)
 	{
 		return view_as<int>(ENTTYPE_TRIGGER);
+	} else if (StrEqual(sClassname, "cel_emblem", false))
+	{
+		return view_as<int>(ENTTYPE_EMBLEM);
+	} else if (StrEqual(sClassname, "cel_hat", false))
+	{
+		return view_as<int>(ENTTYPE_HAT);
 	} else {
 		return view_as<int>(ENTTYPE_UNKNOWN);
 	}
@@ -2096,6 +2103,12 @@ public int Native_GetEntityTypeFromName(Handle hPlugin, int iNumParams)
 	} else if (StrEqual(sEntityType, "trigger", false))
 	{
 		return view_as<int>(ENTTYPE_TRIGGER);
+	} else if (StrEqual(sEntityType, "emblem", false))
+	{
+		return view_as<int>(ENTTYPE_EMBLEM);
+	} else if (StrEqual(sEntityType, "hat", false))
+	{
+		return view_as<int>(ENTTYPE_HAT);
 	} else {
 		return view_as<int>(ENTTYPE_UNKNOWN);
 	}
@@ -2167,6 +2180,14 @@ public int Native_GetEntityTypeName(Handle hPlugin, int iNumParams)
 		case ENTTYPE_TRIGGER:
 		{
 			Format(sEntityType, sizeof(sEntityType), "trigger bit cel");
+		}
+		case ENTTYPE_EMBLEM:
+		{
+			Format(sEntityType, sizeof(sEntityType), "emblem cel");
+		}
+		case ENTTYPE_HAT:
+		{
+			Format(sEntityType, sizeof(sEntityType), "hat cel");
 		}
 		case ENTTYPE_UNKNOWN:
 		{
@@ -2512,7 +2533,32 @@ public int Native_SetOwner(Handle hPlugin, int iNumParams)
 	int iClient = GetNativeCell(1);
 	int iEntity = GetNativeCell(2);
 	
-	Entity_SetGlobalName(iEntity, "CelMod:%i", GetClientSerial(iClient));
+	bool bValidOwner = (iClient > 0 && iClient <= MaxClients && IsClientConnected(iClient));
+	
+	int iOldOwner = Cel_IsEntity(iEntity) ? Cel_GetOwner(iEntity) : -1;
+	
+	Entity_SetGlobalName(iEntity, "CelMod:%i", bValidOwner ? GetClientSerial(iClient) : -1);
+	
+	//An entity changing hands between two players (sale, trade, gift or admin command).
+	if (bValidOwner && iOldOwner > 0 && iOldOwner != iClient && Cel_IsPlayer(iOldOwner))
+	{
+		if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_PROP))
+		{
+			Cel_SubFromPropCount(iOldOwner);
+			Cel_AddToPropCount(iClient);
+		} else {
+			Cel_SubFromCelCount(iOldOwner);
+			Cel_AddToCelCount(iClient);
+		}
+		
+		Call_StartForward(g_hOnEntityOwnerChanged);
+		
+		Call_PushCell(iEntity);
+		Call_PushCell(iOldOwner);
+		Call_PushCell(iClient);
+		
+		Call_Finish();
+	}
 	
 	return true;
 }

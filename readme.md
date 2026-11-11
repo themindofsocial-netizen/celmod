@@ -33,16 +33,23 @@ v_colorlist|Displays the color list.|v_colors|Client|[Color List](https://delawa
 v_commandlist|Displays the command list.|v_cmds, v_commands|Client|[Command List](https://delaware.rockzehh.net/cmds.html)
 v_copy|Copies the prop you are looking at into your copy buffer.|None|Client|
 v_delete|Removes the prop you are looking at.|v_del, v_remove|Client|
+v_delreward|Removes the reward pickup you are looking at.|None|Admin|
 v_dm|Changes the deathmatch setting within the land.|v_landdeathmatch|Client|
 v_door|Spawns a working door cel.|None|Client|
 v_drop|Teleports the entity you are looking at to the floor.|None|Client|
 v_effect|Spawns a working effect cel.|v_emitter|Client|
 v_effectlist|Displays the effect list.|v_effects|Client|[Effects List](https://delaware.rockzehh.net/effects.html)
+v_emblem|Spawns an emblem you own, or disables your active emblem (off).|None|Client|
+v_emblemdrop|Starts an emblem drop.|None|Admin|
+v_emblems|Lists the emblems and hats you own.|v_hats, v_inventory|Client|
 v_fadecolor|Fades the prop you are looking at between two colors.|None|Client|
 v_fly|Enables/disables nocip on the player.|None|Client|
 v_freeze|Freezes the prop you are looking at.|v_freezeit|Client|
+v_give|Gives the entity you are looking at to another player.|None|Client|
+v_giveitem|Gives an emblem or hat to a player.|None|Admin|
 v_god|Enables/disables breakability on the prop you are looking at.|None|Client|
 v_gravity|Changes the gravity within the land.|v_landgravity|Client|
+v_hat|Spawns a hat you own, or takes off your hat (off).|None|Client|
 v_internet|Creates a working internet cel.|None|Client|
 v_ladder|Creates a working ladder cel.|None|Client|
 v_land|Creates a building zone.|None|Client|
@@ -54,6 +61,7 @@ v_nokill|Enables/disables godmode on the player.|None|Client|
 v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Client|
 v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://delaware.rockzehh.net/props/index.html)
 v_renderfx|Changes the RenderFX on what prop you are looking at.|None|Client|
+v_reward|Creates a reward pickup that gives an emblem or hat once per player.|None|Admin|
 v_rotate|Rotates the prop you are looking at.|None|Client|
 v_save|Saves all server entties that are in your land.|None|Client|
 v_sell|Sells the entity you are looking at.|None|Client|
@@ -67,6 +75,7 @@ v_stack|Stacks props on the x, y and z axis.|None|Client|
 v_stackinfo|Gets the origin difference between props for help stacking.|None|Client|
 v_stand|Resets the angles on the prop you are looking at.|v_straight, v_straighten|Client|
 v_switch|Switches the side the hud is on the screen.|None|Client|
+v_trade|Offers the entity you are looking at in a trade with another player.|None|Client|
 v_unfreeze|Unfreezes the prop you are looking at.|v_unfreezeit|Client|
 v_unlock|Unlocks the cel you are looking at.|None|Client|
 v_wep|Creates a weapon bit that will give a weapon when the player touches it.|None|Client|

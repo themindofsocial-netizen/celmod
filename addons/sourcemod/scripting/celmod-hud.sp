@@ -455,7 +455,21 @@ public Action Timer_HUD(Handle hTimer)
 				
 				if (iEntity != -1)
 				{
-					if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_BIT)) {
+					if (Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM || Cel_GetEntityType(iEntity) == ENTTYPE_HAT)
+					{
+						Cel_GetCollectibleName(iEntity, sPropName, sizeof(sPropName));
+						
+						if (Cel_CheckOwner(i, iEntity))
+						{
+							Format(sHUDMessage, sizeof(sHUDMessage), "%s: %s", Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM ? "Emblem" : "Hat", sPropName);
+							
+							Cel_GetHudColor(i, iHUDColor);
+						} else {
+							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\n%s: %s", Cel_GetOwner(iEntity), Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM ? "Emblem" : "Hat", sPropName);
+							
+							Cel_GetHudColor(Cel_GetOwner(iEntity), iHUDColor);
+						}
+					} else if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_BIT)) {
 						if(Cel_GetEntityType(iEntity) == ENTTYPE_AMMO)
 						{
 							Cel_GetAmmoTypeName(Cel_GetAmmoType(iEntity), sCelBuffer, sizeof(sCelBuffer));
@@ -601,6 +615,12 @@ public Action Timer_HUD(Handle hTimer)
 						Format(sHUDMessage, sizeof(sHUDMessage), "%N\nBalance: %s | Spawned: %d", iEntity, sBalance, Cel_GetCombinedCount(iEntity));
 						
 						Cel_GetHudColor(iEntity, iHUDColor);
+					}
+					
+					//Anything that is for sale shows its price to everyone looking at it.
+					if (Cel_IsEntityForSale(iEntity))
+					{
+						Format(sHUDMessage, sizeof(sHUDMessage), "%s\nPrice: %d CL%s", sHUDMessage, Cel_GetEntityPrice(iEntity), Cel_CheckOwner(i, iEntity) ? "" : " (!buy)");
 					}
 				} else if(Cel_IsClientCrosshairInLand(i)){
 					Cel_GetCrosshairHitOrigin(i, fCrosshairOrigin);

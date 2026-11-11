@@ -8,6 +8,8 @@ bool g_bLate;
 
 float g_fCrosshairOrigin[MAXPLAYERS + 1][3];
 
+Handle g_hOnBuildLoaded;
+
 int g_iSaveOverride[MAXPLAYERS + 1];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
@@ -30,6 +32,8 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	LoadTranslations("celmod.phrases");
+	
+	g_hOnBuildLoaded = CreateGlobalForward("Cel_OnBuildLoaded", ET_Ignore, Param_Cell, Param_String);
 	
 	if (g_bLate)
 	{
@@ -202,12 +206,26 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 					{
 						iProp = Cel_SpawnWeaponBit(iClient, view_as<WeaponBitType>(kvLoadBuild.GetNum("weaponbittype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
 					}
+					case ENTTYPE_EMBLEM, ENTTYPE_HAT:
+					{
+						char sItemId[64];
+						
+						kvLoadBuild.GetString("itemid", sItemId, sizeof(sItemId));
+						
+						//Returns -1 when the player no longer owns the item, or it is already spawned.
+						iProp = Cel_SpawnCollectible(iClient, etType == ENTTYPE_EMBLEM ? "emblem" : "hat", sItemId, fEnt[0], fOrigin);
+					}
 					case ENTTYPE_UNKNOWN:
 					{
 						kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
 						
 						iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
 					}
+				}
+				
+				if (iProp == -1 || !IsValidEntity(iProp))
+				{
+					continue;
 				}
 				
 				Entity_SetName(iProp, sBuffer[1]);
@@ -234,6 +252,13 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		iProp = -1;
 		
 		Cel_ReplyToCommand(iClient, "%t", "LoadedBuild", sSaveName);
+		
+		Call_StartForward(g_hOnBuildLoaded);
+		
+		Call_PushCell(iClient);
+		Call_PushString(sSaveName);
+		
+		Call_Finish();
 		
 		return true;
 	}else{
@@ -444,6 +469,14 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 							kvSaveBuild.SetFloat("a2", fEnt[0][1]);
 							
 							kvSaveBuild.SetNum("weaponbittype", Cel_GetWeaponType(i));
+						}
+						case ENTTYPE_EMBLEM, ENTTYPE_HAT:
+						{
+							char sItemId[64];
+							
+							Cel_GetCollectibleId(i, sItemId, sizeof(sItemId));
+							
+							kvSaveBuild.SetString("itemid", sItemId);
 						}
 					}
 					

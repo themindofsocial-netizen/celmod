@@ -20,6 +20,7 @@
 	
 	"Files"
 	{
+		"Plugin"	"Path_SM/data/celmod/collectibles.txt"
 		"Plugin"	"Path_SM/data/celmod/colors.txt"
 		"Plugin"	"Path_SM/data/celmod/shop.txt"
 		"Plugin"	"Path_SM/data/celmod/sounds.txt"
@@ -31,6 +32,7 @@
 		"Plugin"	"Path_SM/plugins/celmod-cels.smx"
 		"Plugin"	"Path_SM/plugins/celmod-chat.smx"
 		"Plugin"	"Path_SM/plugins/celmod-clientstorage.smx"
+		"Plugin"	"Path_SM/plugins/celmod-collectibles.smx"
 		"Plugin"	"Path_SM/plugins/celmod-economy.smx"
 		"Plugin"	"Path_SM/plugins/celmod-effects.smx"
 		"Plugin"	"Path_SM/plugins/celmod-entity.smx"
@@ -49,6 +51,7 @@
 		"Source"	"Path_SM/scripting/celmod-cels.sp"
 		"Source"	"Path_SM/scripting/celmod-chat.sp"
 		"Source"	"Path_SM/scripting/celmod-clientstorage.sp"
+		"Source"	"Path_SM/scripting/celmod-collectibles.sp"
 		"Source"	"Path_SM/scripting/celmod-economy.sp"
 		"Source"	"Path_SM/scripting/celmod-effects.sp"
 		"Source"	"Path_SM/scripting/celmod-entity.sp"

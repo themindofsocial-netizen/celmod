@@ -1,0 +1,126 @@
+// |CelMod| emblems and hats.
+//
+// The section name is the item's id: it is what players type (!emblem fire) and what is stored in
+// their inventory and builds, so do not rename an id once players own the item.
+//
+// Shared keys:
+//   name        Display name.
+//   model       Model path. Emblems should be a weapon world model (rigged to the right hand like
+//               w_physics.mdl) so it sits correctly in other players' hands. The placeholders below
+//               use the stock gravity gun tinted with "color". Custom files must also be listed in
+//               data/celmod/downloads.txt.
+//   color       "R G B A" tint. Use "255 255 255 255" for a custom model with its own texture.
+//   dropweight  Chance weight in emblem drops and "random" rewards. 0 = never drops.
+//
+// Emblem keys:
+//   power       fire      Primary fire shoots a flame that ignites a player.  (cooldown, duration, range)
+//               blizzard  Primary fire shoots ice that slows a player.        (cooldown, duration, range)
+//               speed     Run faster. value = speed multiplier.
+//               jump      Jump higher. value = upward jump speed (a normal jump is about 200).
+//               heal      Regenerate health. value = health per second.
+//               gold      Earn money. value = CL per minute while enabled.
+//               none      Cosmetic only.
+//   Powers only work while the emblem is enabled and the gravity gun is the weapon in hand.
+//
+// Hat keys:
+//   offset      "forward left up" from the player's eyes.
+//   angles      "pitch yaw roll" relative to the player's head.
+//   scale       Model scale.
+"Collectibles"
+{
+	"Emblems"
+	{
+		"fire"
+		{
+			"name"			"Fire"
+			"model"			"models/weapons/w_physics.mdl"
+			"color"			"255 80 0 255"
+			"power"			"fire"
+			"cooldown"		"2.0"
+			"duration"		"5.0"
+			"range"			"900"
+			"dropweight"	"20"
+		}
+		"speed"
+		{
+			"name"			"Speed"
+			"model"			"models/weapons/w_physics.mdl"
+			"color"			"0 255 80 255"
+			"power"			"speed"
+			"value"			"1.6"
+			"dropweight"	"25"
+		}
+		"jump"
+		{
+			"name"			"Jump"
+			"model"			"models/weapons/w_physics.mdl"
+			"color"			"200 0 255 255"
+			"power"			"jump"
+			"value"			"520"
+			"dropweight"	"25"
+		}
+		"blizzard"
+		{
+			"name"			"Blizzard"
+			"model"			"models/weapons/w_physics.mdl"
+			"color"			"90 160 255 255"
+			"power"			"blizzard"
+			"cooldown"		"4.0"
+			"duration"		"4.0"
+			"range"			"900"
+			"dropweight"	"10"
+		}
+		"health"
+		{
+			"name"			"Health"
+			"model"			"models/weapons/w_physics.mdl"
+			"color"			"255 60 120 255"
+			"power"			"heal"
+			"value"			"2"
+			"dropweight"	"15"
+		}
+		"gold"
+		{
+			"name"			"Gold"
+			"model"			"models/weapons/w_physics.mdl"
+			"color"			"255 200 0 255"
+			"power"			"gold"
+			"value"			"250"
+			"dropweight"	"0"
+		}
+	}
+	
+	"Hats"
+	{
+		"cone"
+		{
+			"name"			"Traffic Cone"
+			"model"			"models/props_junk/trafficcone001a.mdl"
+			"color"			"255 255 255 255"
+			"offset"		"-3 0 14"
+			"angles"		"0 0 0"
+			"scale"			"0.7"
+			"dropweight"	"4"
+		}
+		"pot"
+		{
+			"name"			"Cooking Pot"
+			"model"			"models/props_c17/metalpot001a.mdl"
+			"color"			"255 255 255 255"
+			"offset"		"-3 0 7"
+			"angles"		"180 0 0"
+			"scale"			"1.0"
+			"dropweight"	"4"
+		}
+		"melon"
+		{
+			"name"			"Melon"
+			"model"			"models/props_junk/watermelon01.mdl"
+			"color"			"255 255 255 255"
+			"offset"		"-3 0 9"
+			"angles"		"0 0 0"
+			"scale"			"0.8"
+			"dropweight"	"2"
+		}
+	}
+}

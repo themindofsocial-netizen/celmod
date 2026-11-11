@@ -21,6 +21,10 @@ enum struct Economy
 
 int g_iCleerAmount[MAXENTITIES + 1];
 int g_iEntityPrice[MAXENTITIES + 1];
+int g_iTradeEntityRef[MAXPLAYERS + 1];
+int g_iTradeTarget[MAXPLAYERS + 1];
+
+float g_fTradeExpire[MAXPLAYERS + 1];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
@@ -36,10 +40,13 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetClientBalanceTranslated", Native_GetClientBalanceTranslated);
 	CreateNative("Cel_GetClientPurchaseStatus", Native_GetClientPurchaseStatus);
 	CreateNative("Cel_GetEntityPrice", Native_GetEntityPrice);
+	CreateNative("Cel_GiveEntity", Native_GiveEntity);
 	CreateNative("Cel_IsEntityForSale", Native_IsEntityForSale);
 	CreateNative("Cel_SetClientBalance", Native_SetClientBalance);
 	CreateNative("Cel_StartSale", Native_StartSale);
 	CreateNative("Cel_SubFromClientBalance", Native_SubFromClientBalance);
+	
+	g_bLate = bLate;
 	
 	return APLRes_Success;
 }
@@ -86,8 +93,9 @@ public void OnPluginStart()
 	RegAdminCmd("v_setbalance", Command_SetBalance, ADMFLAG_SLAY, "|CelMod| Sets the balance of the client you are specifing.");
 	RegConsoleCmd("v_balance", Command_Balance, "|CelMod| Gets the players current balance.");
 	RegConsoleCmd("v_buy", Command_Buy, "|CelMod| Purchases the current entity you are looking at or command you specified.");
-	//RegConsoleCmd("v_give", Command_Give, "|CelMod| Gives the entity you are looking at to another client.");
+	RegConsoleCmd("v_give", Command_Give, "|CelMod| Gives the entity you are looking at to another player.");
 	RegConsoleCmd("v_sell", Command_Sell, "|CelMod| Sells the entity you are looking at.");
+	RegConsoleCmd("v_trade", Command_Trade, "|CelMod| Offers the entity you are looking at in a trade with another player.");
 	//RegConsoleCmd("v_cl", Command_CleerBox, "|CelMod| Creates a box containing cleers that you can deposit/withdraw from.");
 }
 
@@ -104,6 +112,25 @@ public void OnClientPutInServer(int iClient)
 public void OnClientDisconnect(int iClient)
 {
 	Cel_SetClientSettingInt(iClient, "balance", Cel_GetClientBalance(iClient));
+	
+	g_iTradeTarget[iClient] = 0;
+	
+	//Nothing a leaving player owned can stay on the market.
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (g_iEntityPrice[i] > 0 && Cel_CheckOwner(iClient, i))
+		{
+			g_iEntityPrice[i] = 0;
+		}
+	}
+}
+
+public void OnEntityDestroyed(int iEntity)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		g_iEntityPrice[iEntity] = 0;
+	}
 }
 
 public void CMEconomy_OnConVarChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
@@ -180,20 +207,27 @@ public Action Command_Buy(int iClient, int iArgs)
 		}
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
+		int iSeller = Cel_GetOwner(iProp);
 		
-		if (Cel_IsEntityForSale(iProp))
+		if (!Cel_IsEntityForSale(iProp) || iSeller < 1 || !Cel_IsPlayer(iSeller))
 		{
-			if(Cel_CheckClientBalance(iClient, Cel_GetEntityPrice(iProp)))
-			{
-				Cel_BuyEntity(iClient, Cel_GetOwner(iProp), iProp, Cel_GetEntityPrice(iProp));
-				
-				return Plugin_Handled;
-			}else{
-				Cel_ReplyToCommand(iClient, "%t", "InsufficantFunds");
-				return Plugin_Handled;
-			}
-		} else {
-			Cel_NotYours(iClient, iProp);
+			Cel_ReplyToCommandEntity(iClient, iProp, "This [type] is not for sale.");
+			return Plugin_Handled;
+		}
+		
+		if (iSeller == iClient)
+		{
+			Cel_ReplyToCommandEntity(iClient, iProp, "You already own this [type]. Type {green}[tag]sell 0{default} to take it off the market.");
+			return Plugin_Handled;
+		}
+		
+		if(Cel_CheckClientBalance(iClient, Cel_GetEntityPrice(iProp)))
+		{
+			Cel_BuyEntity(iClient, iSeller, iProp, Cel_GetEntityPrice(iProp));
+			
+			return Plugin_Handled;
+		}else{
+			Cel_ReplyToCommand(iClient, "%t", "InsufficantFunds");
 			return Plugin_Handled;
 		}
 	}
@@ -247,19 +281,118 @@ public Action Command_Sell(int iClient, int iArgs)
 				return Plugin_Handled;
 			}
 		}else{
-			if(Cel_CheckClientBalance(iClient, StringToInt(sPrice)))
-			{
-				Cel_StartSale(iClient, iProp, StringToInt(sPrice));
-				return Plugin_Handled;
-			}else{
-				Cel_ReplyToCommand(iClient, "%t", "InsufficantFundsSale");
-				return Plugin_Handled;
-			}
+			Cel_StartSale(iClient, iProp, StringToInt(sPrice));
+			return Plugin_Handled;
 		}
 	} else {
 		Cel_NotYours(iClient, iProp);
 		return Plugin_Handled;
 	}
+}
+
+public Action Command_Give(int iClient, int iArgs)
+{
+	char sTarget[MAX_NAME_LENGTH];
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]give{default} <player>");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	if (Cel_GetClientAimTarget(iClient) == -1)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+	
+	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (!Cel_CheckOwner(iClient, iProp))
+	{
+		Cel_NotYours(iClient, iProp);
+		return Plugin_Handled;
+	}
+	
+	int iTarget = FindTarget(iClient, sTarget, true, false);
+	
+	if (iTarget == -1 || iTarget == iClient)
+	{
+		return Plugin_Handled;
+	}
+	
+	Cel_GiveEntity(iClient, iTarget, iProp);
+	
+	return Plugin_Handled;
+}
+
+//Both players look at the entity they are offering and type !trade <other player>. The second one completes the swap.
+public Action Command_Trade(int iClient, int iArgs)
+{
+	char sTarget[MAX_NAME_LENGTH];
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]trade{default} <player> (while looking at the entity you are offering)");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	if (Cel_GetClientAimTarget(iClient) == -1)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+	
+	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (!Cel_CheckOwner(iClient, iProp))
+	{
+		Cel_NotYours(iClient, iProp);
+		return Plugin_Handled;
+	}
+	
+	int iTarget = FindTarget(iClient, sTarget, true, false);
+	
+	if (iTarget == -1 || iTarget == iClient)
+	{
+		return Plugin_Handled;
+	}
+	
+	int iTheirProp = EntRefToEntIndex(g_iTradeEntityRef[iTarget]);
+	
+	//The other player already offered something to this player: swap the two entities.
+	if (g_iTradeTarget[iTarget] == GetClientUserId(iClient) && GetGameTime() < g_fTradeExpire[iTarget] && iTheirProp != INVALID_ENT_REFERENCE && iTheirProp > MaxClients && Cel_CheckOwner(iTarget, iTheirProp))
+	{
+		g_iTradeTarget[iTarget] = 0;
+		g_iTradeTarget[iClient] = 0;
+		
+		g_iEntityPrice[iProp] = 0;
+		g_iEntityPrice[iTheirProp] = 0;
+		
+		Cel_SetOwner(iTarget, iProp);
+		Cel_SetOwner(iClient, iTheirProp);
+		
+		Cel_ChangeBeam(iClient, iTheirProp);
+		Cel_ChangeBeam(iTarget, iProp);
+		
+		Cel_ReplyToCommandEntity(iClient, iTheirProp, "Trade complete. You received a [type] from {green}%N{default}.", iTarget);
+		Cel_ReplyToCommandEntity(iTarget, iProp, "Trade complete. You received a [type] from {green}%N{default}.", iClient);
+		
+		return Plugin_Handled;
+	}
+	
+	g_iTradeTarget[iClient] = GetClientUserId(iTarget);
+	g_iTradeEntityRef[iClient] = EntIndexToEntRef(iProp);
+	g_fTradeExpire[iClient] = GetGameTime() + 60.0;
+	
+	Cel_ReplyToCommandEntity(iClient, iProp, "You offered this [type] to {green}%N{default}. The offer lasts 60 seconds.", iTarget);
+	Cel_ReplyToCommandEntity(iTarget, iProp, "{green}%N{default} is offering you a [type] in a trade. Look at what you want to give in return and type {green}!trade %N{default}.", iClient, iClient);
+	
+	return Plugin_Handled;
 }
 
 //Natives:
@@ -302,16 +435,19 @@ public int Native_BuyEntity(Handle hPlugin, int iNumParams)
 	GetClientName(iBuyer, sBuyer, sizeof(sBuyer));
 	GetClientName(iOwner, sOwner, sizeof(sOwner));
 	
-	Cel_SetOwner(iBuyer, iProp);
+	g_iEntityPrice[iProp] = 0;
 	
-	Cel_CancelSale(iOwner, iProp);
+	Cel_SetOwner(iBuyer, iProp);
 	
 	Cel_AddToClientBalance(iOwner, iPrice);
 	
 	Cel_SubFromClientBalance(iBuyer, iPrice);
 	
-	Cel_ReplyToCommandEntity(iBuyer, iProp, "%t", "BoughtEntity", iPrice);
-	Cel_ReplyToCommandEntity(iOwner, iProp, "%t", "SoldEntity", sBuyer, iPrice);
+	Cel_ChangeBeam(iBuyer, iProp);
+	
+	Cel_ReplyToCommandEntity(iBuyer, iProp, "You bought this [type] from {green}%s{default} for {green}%d CL{default}. It is now yours.", sOwner, iPrice);
+	
+	Cel_PrintToChat(iOwner, "{green}%s{default} bought your %s for {green}%d CL{default}.", sBuyer, sEntityType, iPrice);
 	
 	return true;
 }
@@ -334,7 +470,7 @@ public int Native_CheckClientBalance(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1), iPrice = GetNativeCell(2);
 	
-	return (Cel_GetClientBalance(iClient) <= iPrice) ? false : true;
+	return (Cel_GetClientBalance(iClient) >= iPrice);
 }
 
 public int Native_CheckShopDB(Handle hPlugin, int iNumParams)
@@ -425,11 +561,27 @@ public int Native_GetEntityPrice(Handle hPlugin, int iNumParams)
 	return g_iEntityPrice[iEntity];
 }
 
+public int Native_GiveEntity(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1), iTarget = GetNativeCell(2), iProp = GetNativeCell(3);
+	
+	g_iEntityPrice[iProp] = 0;
+	
+	Cel_SetOwner(iTarget, iProp);
+	
+	Cel_ChangeBeam(iClient, iProp);
+	
+	Cel_ReplyToCommandEntity(iClient, iProp, "You gave this [type] to {green}%N{default}.", iTarget);
+	Cel_ReplyToCommandEntity(iTarget, iProp, "{green}%N{default} gave you a [type].", iClient);
+	
+	return true;
+}
+
 public int Native_IsEntityForSale(Handle hPlugin, int iNumParams)
 {
 	int iEntity = GetNativeCell(1);
 	
-	return (g_iEntityPrice[iEntity] > 1) ? false : true;
+	return (iEntity > 0 && iEntity <= MAXENTITIES && g_iEntityPrice[iEntity] > 0);
 }
 
 public int Native_SetClientBalance(Handle hPlugin, int iNumParams)

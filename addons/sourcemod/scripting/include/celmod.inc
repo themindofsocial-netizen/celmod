@@ -37,6 +37,8 @@ enum EntityType
 	ENTTYPE_TRIGGER = 14,
 	ENTTYPE_LINK = 15,
 	ENTTYPE_UNKNOWN = 16,
+	ENTTYPE_EMBLEM = 17,
+	ENTTYPE_HAT = 18,
 };
 
 enum EffectType
@@ -163,6 +165,23 @@ forward void Cel_OnEntityRemove(int iEntity, int iOwner, bool bCel);
 forward void Cel_OnPropSpawn(int iProp, int iOwner, EntityType etEntityType);
 
 //Natives:
+/**
+ * Called when an entity passes from one player to another (sale, trade, gift or admin command).
+ *
+ * @param iEntity	The entity index.
+ * @param iOldOwner  The client index of the previous owner.
+ * @param iNewOwner  The client index of the new owner.
+ */
+forward void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner);
+
+/**
+ * Called after a client has loaded a build.
+ *
+ * @param iClient	The client index.
+ * @param sSaveName  The name of the build that was loaded.
+ */
+forward void Cel_OnBuildLoaded(int iClient, const char[] sSaveName);
+
 native void Cel_AddToBlacklist(char[] sAlias);
 
 /**
@@ -479,6 +498,31 @@ native void Cel_GetClientSettingString(int iClient, char[] sSetting, char[] sVal
  * @param iColor   An integer array [R, G, B, A] storing the color values.
  * @return		 The color as an integer array.
  */
+/**
+ * Retrieves the id of the emblem or hat an entity is (the section name in collectibles.txt).
+ *
+ * @return  True if the entity is an emblem or hat.
+ */
+native bool Cel_GetCollectibleId(int iEntity, char[] sId, int iMaxLength);
+
+/**
+ * Retrieves the display name of the emblem or hat an entity is.
+ *
+ * @return  True if the entity is an emblem or hat.
+ */
+native bool Cel_GetCollectibleName(int iEntity, char[] sName, int iMaxLength);
+
+/**
+ * Adds an emblem or hat to a client's inventory.
+ *
+ * @param sKind  "emblem" or "hat".
+ * @param sId	The id or name of the item.
+ * @return	   True if the item exists and was given.
+ */
+native bool Cel_GiveCollectible(int iClient, const char[] sKind, const char[] sId);
+
+native bool Cel_IsCollectible(int iEntity);
+
 native int Cel_GetColor(int iEntity, int iColor[4]);
 
 native int Cel_GetCombinedCount(int iClient);
@@ -586,6 +630,8 @@ native EntityType Cel_GetEntityTypeFromName(const char[] sEntityType);
  * @return			  The entity type name as a string.
  */
 native char Cel_GetEntityTypeName(EntityType etEntityType, char[] sEntityType, int iMaxLength);
+
+native void Cel_GiveEntity(int iClient, int iTarget, int iEntity);
 
 native void Cel_GetFadeColor(int iEntity, iFadeFrom[3], iFadeTo[3]);
 
@@ -1184,6 +1230,15 @@ native int Cel_SpawnCharger(int iClient, ChargerType ctType, float fAngles[3], f
  * @return		  The entity index of the spawned door.
  */
 native int Cel_SpawnDoor(int iClient, int iSkin, float fAngles[3], float fOrigin[3], int iR, int iG, int iB, int iA);
+
+/**
+ * Spawns an emblem or hat entity the client owns. Fails if every copy the client owns is already spawned.
+ *
+ * @param sKind  "emblem" or "hat".
+ * @param sId	The id or name of the item.
+ * @return	   The entity index, or -1 on failure.
+ */
+native int Cel_SpawnCollectible(int iClient, const char[] sKind, const char[] sId, float fAngles[3], float fOrigin[3]);
 
 /**
  * Spawns an effect at a specified location.

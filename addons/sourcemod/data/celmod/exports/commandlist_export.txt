@@ -29,21 +29,30 @@ v_del - Client - Removes the prop you are looking at.
 v_delall - Client - Removes all the entities that you own.
 v_delete - Client - Removes the prop you are looking at.
 v_deleteall - Client - Removes all the entities that you own.
+v_delreward - Admin - Removes the reward pickup you are looking at.
 v_dm - Client - Changes the mode to deathmatch within the land.
 v_door - Client - Spawns a working door cel.
 v_drop - Client - Teleports the entity you are looking at to the floor.
 v_effect - Client - Spawns a working effect cel.
 v_effectlist - Client - Displays the effect list.
 v_effects - Client - Displays the effect list.
+v_emblem - Client - Spawns an emblem you own, or disables your active emblem.
+v_emblemdrop - Admin - Starts an emblem drop.
+v_emblems - Client - Lists the emblems and hats you own.
 v_emitter - Client - Spawns a working effect cel.
 v_fadecolor - Client - Fades the prop you are looking at between two colors.
 v_flip - Client - Flips the prop you are looking at.
 v_fly - Client - Enables/disables noclip on the player.
 v_freeze - Client - Freezes the prop you are looking at.
 v_freezeit - Client - Freezes the prop you are looking at.
+v_give - Client - Gives the entity you are looking at to another player.
+v_giveitem - Admin - Gives an emblem or hat to a player.
 v_god - Client - Enables/disables breakability on the prop you are looking at.
 v_gravity - Client - Changes the gravity within the land.
+v_hat - Client - Spawns a hat you own, or takes off your hat.
+v_hats - Client - Lists the emblems and hats you own.
 v_internet - Client - Creates a working internet cel.
+v_inventory - Client - Lists the emblems and hats you own.
 v_ladder - Client - Creates a working ladder cel.
 v_land - Client - Creates a building zone.
 v_landcoop - Client - Changes the mode to co-op within the land.
@@ -69,6 +78,7 @@ v_remove - Client - Removes the prop you are looking at.
 v_removeall - Client - Removes all the entities that you own.
 v_renderfx - Client - Changes the RenderFX on the prop you are looking at.
 v_replace - Client - Replaces the model on the entity you are looking at.
+v_reward - Admin - Creates a reward pickup that gives an emblem or hat once per player.
 v_roll - Client - Rolls the prop you are looking at.
 v_rotate - Client - Flips, rotates and rolls the prop you are looking at.
 v_s - Client - Spawns a prop by name.
@@ -88,6 +98,7 @@ v_stand - Client - Resets the angles on the prop you are looking at.
 v_straight - Client - Resets the angles on the prop you are looking at.
 v_straighten - Client - Resets the angles on the prop you are looking at.
 v_switch - Client - Switches the side the hud is on the screen.
+v_trade - Client - Offers the entity you are looking at in a trade with another player.
 v_unfreeze - Client - Unfreezes the prop you are looking at.
 v_unfreezeit - Client - Unfreezes the prop you are looking at.
 v_unlock - Client - Unlocks the cel you are looking at.

@@ -25,3 +25,12 @@
 	 - 06/09/25: Added commands !replace/v_replace to replace the model of a prop and !owner/v_owner to print the owner of the entity.
 		 - Updated !lock/v_lock and !unlock/v_unlock to be their own commands instead of being hidden in !freeze/!unfreeze.
 		 - Added command !drop/v_drop to drop entities to the floor.
+	 - 11/11/26: Added emblems. Press E on an emblem you own to enable it, then hold your gravity gun to use its power.
+		 - Other players see the emblem in your hands. Emblems: fire, speed, jump, blizzard, health, gold.
+		 - Added hats. Press E on a hat you own to wear it.
+		 - Added !emblem, !hat and !emblems/!hats/!inventory to spawn and list the items you own.
+		 - Added emblem drops: crates fall from the sky, and any crate inside your land when the timer ends is yours.
+		 - Added reward pickups for mazes and parkour (!reward, !delreward) and !giveitem, !emblemdrop for admins.
+		 - A free emblem can appear in your build when you load it, once you have been building for a few days.
+		 - Fixed !buy and !sell. The price and owner now show on the HUD when looking at something for sale.
+		 - Added !give to give an entity to another player and !trade to swap entities with another player.
