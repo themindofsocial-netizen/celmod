@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CelMod Emblem Editor</title>
+<style>
+:root {
+	--bg: #f4f5f7; --panel: #ffffff; --line: #d9dde3; --text: #1c2026; --muted: #5d6673;
+	--accent: #1f6feb; --accent-text: #ffffff; --field: #ffffff; --stage: #e6e9ee; --code: #f0f2f5;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #14171c; --panel: #1c2027; --line: #2e343e; --text: #e7eaee; --muted: #9aa4b2;
+		--accent: #4d8ef7; --accent-text: #0b0d10; --field: #12151a; --stage: #0f1216; --code: #12151a;
+	}
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+header h1 { font-size: 18px; margin: 0; }
+header p { margin: 0; color: var(--muted); }
+main { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 420px); gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+@media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
+#list { list-style: none; margin: 0 0 10px; padding: 0; max-height: 420px; overflow: auto; }
+#list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+#list li.sel { background: var(--accent); color: var(--accent-text); }
+#list .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+#stage { width: 100%; aspect-ratio: 4 / 3; background: var(--stage); border-radius: 6px; display: block; touch-action: none; cursor: grab; }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; margin-top: 10px; }
+.skins button { height: 40px; border-radius: 6px; border: 2px solid var(--line); cursor: pointer; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; font-weight: 600; background-size: cover; background-position: center; padding: 0; }
+.skins button.sel { border-color: var(--accent); outline: 2px solid var(--accent); }
+form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+label.wide { grid-column: 1 / -1; }
+label[hidden] { display: none; }
+input, select, textarea, button { font: inherit; color: var(--text); }
+input, select, textarea { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
+input[type=color] { padding: 2px; height: 32px; }
+.btn { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+textarea { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--code); min-height: 220px; resize: vertical; white-space: pre; tab-size: 4; }
+#out { grid-column: 1 / -1; }
+#status { color: var(--muted); font-size: 12px; align-self: center; }
+</style>
+</head>
+<body>
+<header>
+	<h1>CelMod Emblem Editor</h1>
+	<p>Design an emblem, then paste the result into <code>addons/sourcemod/data/celmod/collectibles.txt</code>.</p>
+</header>
+<main>
+	<section>
+		<h2>Emblems</h2>
+		<ul id="list"></ul>
+		<div class="row">
+			<button class="btn primary" id="add">New</button>
+			<button class="btn" id="dup">Duplicate</button>
+			<button class="btn" id="del">Delete</button>
+		</div>
+	</section>
+
+	<section>
+		<h2>Preview</h2>
+		<canvas id="stage"></canvas>
+		<p class="hint">Drag to rotate, scroll to zoom. Skins that use stock Half-Life 2 textures are shown as a flat stand-in color.</p>
+		<h2 style="margin-top:14px">Skin</h2>
+		<div class="skins" id="skins"></div>
+	</section>
+
+	<section>
+		<h2>Settings</h2>
+		<form id="form" autocomplete="off">
+			<label>Id (what players type)<input name="id" pattern="[a-z0-9_]+" required></label>
+			<label>Name<input name="name"></label>
+			<label>Color<input name="color" type="color"></label>
+			<label>Drop weight (0 = never drops)<input name="dropweight" type="number" min="0" step="1"></label>
+			<label class="wide">Power<select name="power"></select></label>
+			<label data-f="value"><span id="valueLabel">Value</span><input name="value" type="number" step="any"></label>
+			<label data-f="cooldown">Cooldown (seconds)<input name="cooldown" type="number" min="0.05" step="any"></label>
+			<label data-f="range">Range (units)<input name="range" type="number" min="1" step="any"></label>
+			<label data-f="duration">Duration (seconds)<input name="duration" type="number" min="0" step="any"></label>
+			<label data-f="dmgtype">Damage type<select name="dmgtype"><option>generic</option><option>burn</option><option>drown</option><option>poison</option><option>shock</option><option>dissolve</option><option>energy</option></select></label>
+			<label data-f="ignite">Ignite target (seconds)<input name="ignite" type="number" min="0" step="any"></label>
+			<label data-f="slow">Slow target (seconds)<input name="slow" type="number" min="0" step="any"></label>
+			<label data-f="knockback">Knockback force<input name="knockback" type="number" min="0" step="any"></label>
+			<label>Speed multiplier while held<input name="speed" type="number" min="0.1" step="any"></label>
+			<label data-f="fx">Shot effect<select name="fx"></select></label>
+			<label data-f="sprite" class="wide">Effect sprite<input name="sprite" list="sprites"></label>
+			<label data-f="beamcolor">Effect color<input name="beamcolor" type="color"></label>
+			<label data-f="beamcolor">Use emblem color for effect<select name="beamauto"><option value="1">Yes</option><option value="0">No, use effect color</option></select></label>
+			<label class="wide">Model<input name="model"></label>
+			<label>Hand scale<input name="handscale" type="number" min="0.01" step="any"></label>
+			<label>World scale<input name="scale" type="number" min="0.01" step="any"></label>
+			<label>Hand offset (forward left up)<input name="handoffset"></label>
+			<label>Hand angles (pitch yaw roll)<input name="handangles"></label>
+		</form>
+		<datalist id="sprites">
+			<option value="sprites/flamelet1.vmt"><option value="sprites/glow04_noz.vmt"><option value="sprites/plasmaember.vmt">
+			<option value="sprites/steam1.vmt"><option value="sprites/purpleglow1.vmt"><option value="sprites/blueglow2.vmt">
+			<option value="sprites/orangeglow1.vmt"><option value="sprites/redglow1.vmt"><option value="sprites/light_glow03.vmt">
+		</datalist>
+	</section>
+
+	<section id="out">
+		<h2>Export / import</h2>
+		<textarea id="text" spellcheck="false"></textarea>
+		<div class="row">
+			<button class="btn primary" id="copy">Copy this emblem</button>
+			<button class="btn" id="showAll">Show all emblems</button>
+			<button class="btn" id="download">Download emblems.txt</button>
+			<button class="btn" id="import">Import from the box above</button>
+			<label class="btn" style="flex-direction:row;color:var(--text);font-size:14px">Import a file<input type="file" id="file" accept=".txt" hidden></label>
+			<span id="status"></span>
+		</div>
+		<p class="hint">Import accepts a whole <code>collectibles.txt</code>, just its "Emblems" section, or one or more emblem blocks. Keys this editor does not know are kept as they are.</p>
+	</section>
+</main>
+
+<script type="module">
+import * as THREE from './three.module.min.js';
+
+// ---- What the plugin understands -------------------------------------------------------------
+const POWERS = [
+	['none', 'None (cosmetic)', [], ''],
+	['shot', 'Shot: hurts a player', ['value', 'cooldown', 'range', 'dmgtype', 'ignite', 'slow', 'knockback', 'fx'], 'Damage per hit'],
+	['spray', 'Spray: harmless effect', ['cooldown', 'range', 'fx'], ''],
+	['medic', 'Medic: heals target, right click heals you', ['value', 'cooldown', 'range', 'fx'], 'Health per hit'],
+	['magnitude', 'Magnitude: throw and pull', ['value', 'cooldown', 'range', 'fx'], 'Throw force'],
+	['portal', 'Portal: two linked portals', ['cooldown', 'range'], ''],
+	['chaos', 'Chaos: fiery eruption', ['value', 'duration', 'cooldown', 'range', 'sprite'], 'Radius'],
+	['blast', 'Blast: explosion where you aim', ['value', 'cooldown', 'range', 'fx'], 'Magnitude'],
+	['demon', 'Demon: burst, right click slams down', ['cooldown', 'range', 'sprite'], ''],
+	['blink', 'Blink: teleport where you aim', ['cooldown', 'range'], ''],
+	['speed', 'Speed: run faster', ['value'], 'Speed multiplier'],
+	['sprint', 'Sprint: never runs out', [], ''],
+	['gravity', 'Gravity: lighter or heavier', ['value'], 'Gravity multiplier'],
+	['jump', 'Jump: jump higher', ['value'], 'Jump speed (normal is about 200)'],
+	['feather', 'Feather: fall slowly', ['value'], 'Fastest falling speed'],
+	['heal', 'Heal: regenerate health', ['value'], 'Health per second'],
+	['armor', 'Armor: regenerate suit power', ['value'], 'Suit power per second'],
+	['resist', 'Resist: take less damage', ['value'], 'Damage multiplier (0.5 = half)'],
+	['cloak', 'Cloak: turn translucent', ['value'], 'Visibility (0 to 255)'],
+	['drain', 'Drain: hurts its holder', ['value'], 'Damage per second'],
+	['gold', 'Gold: earn money', ['value'], 'CL per minute'],
+];
+const FX = [
+	['beam', 'Beam with impact ring', false], ['flame', 'Flame sprites', true], ['ice', 'Ice shards', true],
+	['water', 'Water arc', true], ['energy', 'Energy bolts', true], ['smoke', 'Smoke puffs', true],
+	['orb', 'Large orb', true], ['spray', 'Sprite spray', true], ['laser', 'Thin laser', false],
+	['plasma', 'Plasma beam', false], ['rainbow', 'Rainbow beam', false], ['none', 'Nothing', false],
+];
+// Skins of the emblem model. Skins without a texture here use stock game textures in game.
+const SKINS = [
+	{ c: '#a9c0cb', note: 'glass' }, { t: 's2', c: '#30343a', note: 'chrome' }, { c: '#eef3f7', note: 'snow' },
+	{ t: 's4' }, { c: '#ff5a48', note: 'pulsing light' }, { t: 's6' }, { t: 's7' },
+	{ c: '#3fd0ff', note: 'combine shield' }, { t: 's9' }, { c: '#cfd6dd', wire: true, note: 'wireframe' },
+	{ t: 's11_3' }, { c: '#6b6f73', note: 'tram metal' }, { c: '#2b3440', note: 'citadel metal' },
+	{ t: 's14' }, { t: 's15' }, { c: '#808080', note: 'no preview' }, { c: '#808080', note: 'no preview' },
+];
+const DEFAULTS = {
+	name: 'New Emblem', model: 'models/celmod/phys8.mdl', skin: '0', color: '255 255 255 255', handscale: '1.0',
+	handoffset: '0 0 0', handangles: '0 0 0', power: 'none', dropweight: '10',
+};
+const ORDER = ['name', 'model', 'skin', 'color', 'scale', 'handscale', 'handoffset', 'handangles', 'power', 'value', 'cooldown',
+	'duration', 'range', 'dmgtype', 'ignite', 'slow', 'knockback', 'speed', 'fx', 'sprite', 'beamcolor', 'dropweight'];
+
+// ---- State ---------------------------------------------------------------------------------
+let emblems = [{ id: 'new_emblem', kv: { ...DEFAULTS } }];
+let current = 0;
+let showingAll = false;
+const $ = (id) => document.getElementById(id);
+const form = $('form');
+
+const toHex = (s) => '#' + (s || '255 255 255').trim().split(/\s+/).slice(0, 3).map((n) => Math.max(0, Math.min(255, +n || 0)).toString(16).padStart(2, '0')).join('');
+const toRGBA = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(' ') + ' 255';
+
+// ---- KeyValues ------------------------------------------------------------------------------
+function parseKV(text) {
+	const tokens = [];
+	const re = /\/\/[^\n]*|"((?:[^"\\]|\\.)*)"|([{}])|([^\s{}"]+)/g;
+	let m;
+	while ((m = re.exec(text))) {
+		if (m[0].startsWith('//')) continue;
+		tokens.push(m[2] ? { brace: m[2] } : { str: m[1] !== undefined ? m[1] : m[3] });
+	}
+	let i = 0;
+	function block() {
+		const out = [];
+		while (i < tokens.length && tokens[i].brace !== '}') {
+			const key = tokens[i++];
+			if (!key || key.brace) throw new Error('Expected a key name.');
+			const next = tokens[i++];
+			if (!next) throw new Error('"' + key.str + '" has no value.');
+			if (next.brace === '{') { out.push([key.str, block()]); if (!tokens[i] || tokens[i].brace !== '}') throw new Error('Missing a closing brace.'); i++; }
+			else if (next.brace) throw new Error('Unexpected brace after "' + key.str + '".');
+			else out.push([key.str, next.str]);
+		}
+		return out;
+	}
+	return block();
+}
+function findEmblemBlocks(tree) {
+	for (const [k, v] of tree) {
+		if (Array.isArray(v) && k.toLowerCase() === 'emblems') return v;
+	}
+	for (const [, v] of tree) {
+		if (Array.isArray(v)) { const hit = v.some(([, x]) => Array.isArray(x)) ? findEmblemBlocks(v) : null; if (hit) return hit; }
+	}
+	// Otherwise: a bare list of emblem blocks.
+	return tree.every(([, v]) => Array.isArray(v) && v.every(([, x]) => !Array.isArray(x))) ? tree : null;
+}
+function emblemText(e, indent) {
+	const keys = [...ORDER.filter((k) => e.kv[k] !== undefined && e.kv[k] !== ''), ...Object.keys(e.kv).filter((k) => !ORDER.includes(k))];
+	const pad = (k) => '\t'.repeat(Math.max(1, 4 - Math.floor((k.length + 2) / 4)));
+	return `${indent}"${e.id}"\n${indent}{\n` + keys.map((k) => `${indent}\t"${k}"${pad(k)}"${e.kv[k]}"\n`).join('') + `${indent}}\n`;
+}
+const allText = () => '\t"Emblems"\n\t{\n' + emblems.map((e) => emblemText(e, '\t\t')).join('') + '\t}\n';
+
+// ---- 3D preview -----------------------------------------------------------------------------
+const canvas = $('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 4 / 3, 0.1, 50);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.8); sun.position.set(2, 3, 2); scene.add(sun);
+const pivot = new THREE.Group(); scene.add(pivot);
+const material = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.15 });
+const loader = new THREE.TextureLoader();
+const textures = {};
+let mesh = null, yaw = 0.7, pitch = 0.25, dist = 4.2;
+
+fetch('model.json').then((r) => r.json()).then((d) => {
+	const g = new THREE.BufferGeometry();
+	g.setAttribute('position', new THREE.Float32BufferAttribute(d.positions, 3));
+	g.setAttribute('normal', new THREE.Float32BufferAttribute(d.normals, 3));
+	g.setAttribute('uv', new THREE.Float32BufferAttribute(d.uvs, 2));
+	g.setIndex(d.indices);
+	mesh = new THREE.Mesh(g, material);
+	material.side = THREE.DoubleSide;
+	pivot.add(mesh);
+	applyLook();
+}).catch(() => { $('status').textContent = 'The 3D model could not be loaded (model.json).'; });
+
+function applyLook() {
+	const e = emblems[current];
+	const skin = SKINS[+e.kv.skin] || SKINS[15];
+	const tint = new THREE.Color(toHex(e.kv.color));
+	material.wireframe = !!skin.wire;
+	if (skin.t) {
+		if (!textures[skin.t]) {
+			textures[skin.t] = loader.load('textures/' + skin.t + '.png');
+			textures[skin.t].wrapS = textures[skin.t].wrapT = THREE.RepeatWrapping;
+			textures[skin.t].colorSpace = THREE.SRGBColorSpace;
+		}
+		material.map = textures[skin.t];
+		material.color.copy(tint);
+	} else {
+		material.map = null;
+		material.color.set(skin.c).multiply(tint);
+	}
+	material.metalness = skin.note === 'chrome' ? 0.9 : 0.15;
+	material.roughness = skin.note === 'chrome' || skin.note === 'glass' ? 0.2 : 0.55;
+	material.needsUpdate = true;
+}
+function frame() {
+	const w = canvas.clientWidth, h = canvas.clientHeight;
+	if (canvas.width !== Math.floor(w * devicePixelRatio) || canvas.height !== Math.floor(h * devicePixelRatio)) {
+		renderer.setPixelRatio(devicePixelRatio); renderer.setSize(w, h, false);
+		camera.aspect = w / h; camera.updateProjectionMatrix();
+	}
+	camera.position.set(Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, Math.cos(yaw) * Math.cos(pitch) * dist);
+	camera.lookAt(0, 0, 0);
+	if (!dragging) yaw += 0.003;
+	renderer.render(scene, camera);
+	requestAnimationFrame(frame);
+}
+let dragging = false, lastX = 0, lastY = 0;
+canvas.addEventListener('pointerdown', (ev) => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; canvas.setPointerCapture(ev.pointerId); });
+canvas.addEventListener('pointerup', () => { dragging = false; });
+canvas.addEventListener('pointermove', (ev) => {
+	if (!dragging) return;
+	yaw -= (ev.clientX - lastX) * 0.01; pitch = Math.max(-1.4, Math.min(1.4, pitch + (ev.clientY - lastY) * 0.01));
+	lastX = ev.clientX; lastY = ev.clientY;
+});
+canvas.addEventListener('wheel', (ev) => { ev.preventDefault(); dist = Math.max(2, Math.min(10, dist + ev.deltaY * 0.004)); }, { passive: false });
+requestAnimationFrame(frame);
+
+// ---- UI -------------------------------------------------------------------------------------
+form.power.innerHTML = POWERS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
+form.fx.innerHTML = FX.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
+$('skins').innerHTML = SKINS.map((s, i) => `<button type="button" data-skin="${i}" title="Skin ${i}${s.note ? ' (' + s.note + ')' : ''}" style="background-color:${s.c || '#555'};${s.t ? `background-image:url(textures/${s.t}.png)` : ''}">${i}</button>`).join('');
+
+function renderList() {
+	$('list').innerHTML = emblems.map((e, i) => `<li data-i="${i}" class="${i === current ? 'sel' : ''}"><span class="dot" style="background:${toHex(e.kv.color)}"></span>${escapeHtml(e.kv.name || e.id)}</li>`).join('');
+}
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function fillForm() {
+	const e = emblems[current], kv = e.kv;
+	form.id.value = e.id;
+	for (const k of ['name', 'dropweight', 'value', 'cooldown', 'range', 'duration', 'ignite', 'slow', 'knockback', 'speed', 'sprite', 'model', 'handscale', 'scale', 'handoffset', 'handangles']) {
+		form[k].value = kv[k] ?? '';
+	}
+	form.color.value = toHex(kv.color);
+	form.power.value = POWERS.some(([id]) => id === kv.power) ? kv.power : 'none';
+	form.dmgtype.value = kv.dmgtype || 'generic';
+	form.fx.value = kv.fx || 'beam';
+	form.beamauto.value = kv.beamcolor ? '0' : '1';
+	form.beamcolor.value = toHex(kv.beamcolor || kv.color);
+	showFields();
+	document.querySelectorAll('#skins button').forEach((b) => b.classList.toggle('sel', b.dataset.skin === String(+kv.skin || 0)));
+	applyLook(); renderList(); refreshText();
+}
+function showFields() {
+	const power = POWERS.find(([id]) => id === form.power.value) || POWERS[0];
+	const fxInfo = FX.find(([id]) => id === form.fx.value) || FX[0];
+	const shown = new Set(power[2]);
+	if (shown.has('fx')) { shown.add('beamcolor'); if (fxInfo[2]) shown.add('sprite'); }
+	if (shown.has('sprite') || power[0] === 'portal') shown.add('beamcolor');
+	document.querySelectorAll('label[data-f]').forEach((l) => { l.hidden = !shown.has(l.dataset.f); });
+	$('valueLabel').textContent = power[3] || 'Value';
+	return shown;
+}
+function readForm() {
+	const e = emblems[current], kv = e.kv;
+	const shown = showFields();
+	e.id = (form.id.value || 'emblem').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+	kv.name = form.name.value; kv.model = form.model.value; kv.color = toRGBA(form.color.value);
+	kv.power = form.power.value; kv.dropweight = form.dropweight.value || '0';
+	for (const k of ['value', 'cooldown', 'range', 'duration', 'ignite', 'slow', 'knockback', 'sprite']) {
+		if (shown.has(k) && form[k].value !== '' && !(['ignite', 'slow', 'knockback'].includes(k) && +form[k].value === 0)) kv[k] = form[k].value; else delete kv[k];
+	}
+	if (shown.has('dmgtype') && form.dmgtype.value !== 'generic') kv.dmgtype = form.dmgtype.value; else delete kv.dmgtype;
+	if (shown.has('fx') && form.fx.value !== 'beam') kv.fx = form.fx.value; else delete kv.fx;
+	if (shown.has('beamcolor') && form.beamauto.value === '0') kv.beamcolor = toRGBA(form.beamcolor.value); else delete kv.beamcolor;
+	if (form.speed.value !== '' && +form.speed.value !== 1 && kv.power !== 'speed') kv.speed = form.speed.value; else delete kv.speed;
+	if (form.scale.value !== '' && +form.scale.value !== 1) kv.scale = form.scale.value; else delete kv.scale;
+	kv.handscale = form.handscale.value || '1.0'; kv.handoffset = form.handoffset.value || '0 0 0'; kv.handangles = form.handangles.value || '0 0 0';
+	applyLook(); renderList(); refreshText();
+}
+function refreshText() { $('text').value = showingAll ? allText() : emblemText(emblems[current], ''); }
+function say(msg) { $('status').textContent = msg; }
+
+form.addEventListener('input', () => { showingAll = false; readForm(); });
+$('skins').addEventListener('click', (ev) => {
+	const b = ev.target.closest('button'); if (!b) return;
+	emblems[current].kv.skin = b.dataset.skin; showingAll = false; fillForm();
+});
+$('list').addEventListener('click', (ev) => { const li = ev.target.closest('li'); if (!li) return; current = +li.dataset.i; showingAll = false; fillForm(); });
+$('add').onclick = () => { emblems.push({ id: uniqueId('new_emblem'), kv: { ...DEFAULTS } }); current = emblems.length - 1; fillForm(); };
+$('dup').onclick = () => { const e = emblems[current]; emblems.push({ id: uniqueId(e.id), kv: { ...e.kv } }); current = emblems.length - 1; fillForm(); };
+$('del').onclick = () => { if (emblems.length < 2) return say('Keep at least one emblem.'); emblems.splice(current, 1); current = Math.max(0, current - 1); fillForm(); };
+function uniqueId(base) { let id = base, n = 2; while (emblems.some((e) => e.id === id)) id = base + '_' + n++; return id; }
+
+$('copy').onclick = async () => {
+	showingAll = false; refreshText();
+	try { await navigator.clipboard.writeText($('text').value); say('Copied. Paste it inside the "Emblems" section.'); }
+	catch { $('text').select(); say('Select the text and copy it.'); }
+};
+$('showAll').onclick = () => { showingAll = true; refreshText(); say('Showing the whole "Emblems" section.'); };
+$('download').onclick = () => {
+	const a = document.createElement('a');
+	a.href = URL.createObjectURL(new Blob([allText()], { type: 'text/plain' })); a.download = 'emblems.txt'; a.click();
+	URL.revokeObjectURL(a.href);
+};
+function importText(text) {
+	try {
+		const blocks = findEmblemBlocks(parseKV(text));
+		if (!blocks || !blocks.length) return say('No emblems were found in that text.');
+		emblems = blocks.filter(([, v]) => Array.isArray(v)).map(([id, rows]) => ({ id: id.toLowerCase(), kv: Object.fromEntries(rows.filter(([, v]) => !Array.isArray(v))) }));
+		current = 0; showingAll = false; fillForm(); say('Imported ' + emblems.length + ' emblem' + (emblems.length === 1 ? '' : 's') + '.');
+	} catch (err) { say('Could not read that text: ' + err.message); }
+}
+$('import').onclick = () => importText($('text').value);
+$('file').onchange = (ev) => { const f = ev.target.files[0]; if (f) f.text().then(importText); ev.target.value = ''; };
+
+fillForm();
+</script>
+</body>
+</html>

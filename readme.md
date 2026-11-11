@@ -54,20 +54,25 @@ v_giveitem|Gives an emblem or hat to a player.|None|Admin|
 v_god|Enables/disables breakability on the prop you are looking at.|None|Client|
 v_gravity|Changes the gravity within the land.|v_landgravity|Client|
 v_hat|Spawns a hat you own, or takes off your hat (off).|None|Client|
+v_hide|Hides another player's entities from your view.|None|Client|
 v_internet|Creates a working internet cel.|None|Client|
 v_ladder|Creates a working ladder cel.|None|Client|
 v_land|Creates a building zone.|None|Client|
-v_landkick|Respawns a player who is inside your land.|None|Client|
+v_landban|Bans a player from your land.|None|Client|
+v_landkick|Kicks a player out of your land for 10 seconds.|None|Client|
 v_landslay|Slays a player, or everyone, inside your land.|None|Client|
+v_landunban|Lets a banned player back into your land.|None|Client|
 v_light|Creates a working light cel.|None|Client|
 v_link|Creates a link between a trigger bit and an entity.|None|Client|
 v_load|Loads entites from a save file.|None|Client|
 v_lock|Locks the cel you are looking at.|None|Client|
+v_message|Spawns a message cel that shows your text to whoever uses it.|None|Client|
 v_moveto|Moves one of your entities onto another entity.|None|Client|
 v_noclip|Enables/disables noclip on the player.|None|Client|
 v_nokill|Enables/disables godmode on the player.|None|Client|
 v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Client|
 v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://delaware.rockzehh.net/props/index.html)
+v_release|Releases the entity you are looking at from a weld.|None|Client|
 v_renderfx|Changes the RenderFX on what prop you are looking at.|None|Client|
 v_reward|Creates a reward pickup that gives an emblem or hat once per player.|None|Admin|
 v_rotate|Rotates the prop you are looking at.|None|Client|
@@ -76,8 +81,10 @@ v_sell|Sells the entity you are looking at.|None|Client|
 v_setbalance|Sets the balance of the client you are specifing.|None|Admin|
 v_setowner|Sets the owner of the prop you are looking at.|None|Admin|
 v_seturl|Sets the url of the internet cel you are looking at|None|Client|
+v_show|Shows a hidden player's entities again.|None|Client|
 v_smove|Moves the prop you are looking at on it's origin|v_pmove|Client|
 v_solid|Enables/disables solidicity on the prop you are looking at.|None|Client|
+v_sound|Spawns a sound cel that plays a sound when used.|None|Client|
 v_spawn|Spawns a prop by name.|v_p, v_s|Client|
 v_stack|Stacks props on the x, y and z axis.|None|Client|
 v_stackinfo|Gets the origin difference between props for help stacking.|None|Client|
@@ -87,8 +94,10 @@ v_switch|Switches the side the hud is on the screen.|None|Client|
 v_thirdperson|Switches to a third person view so you can see your emblem and hat.|None|Client|
 v_trade|Offers the entity you are looking at in a trade with another player.|None|Client|
 v_turn|Rotates the prop you are looking at.|None|Client|
+v_undo|Removes the last entity you spawned.|None|Client|
 v_unfreeze|Unfreezes the prop you are looking at.|v_unfreezeit|Client|
 v_unlock|Unlocks the cel you are looking at.|None|Client|
+v_weld|Welds one of your entities to another so they move together.|None|Client|
 v_wep|Creates a weapon bit that will give a weapon when the player touches it.|None|Client|
 v_weps|Gives you every weapon.|None|Client|
 

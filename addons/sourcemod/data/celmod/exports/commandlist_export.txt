@@ -55,22 +55,26 @@ v_god - Client - Enables/disables breakability on the prop you are looking at.
 v_gravity - Client - Changes the gravity within the land.
 v_hat - Client - Spawns a hat you own, or takes off your hat.
 v_hats - Client - Lists the emblems and hats you own.
+v_hide - Client - Hides another player's entities from your view.
 v_internet - Client - Creates a working internet cel.
 v_inventory - Client - Lists the emblems and hats you own.
 v_ladder - Client - Creates a working ladder cel.
 v_land - Client - Creates a building zone.
+v_landban - Client - Bans a player from your land.
 v_landcoop - Client - Changes the mode to co-op within the land.
 v_landdeathmatch - Client - Changes the mode to deathmatch within the land.
 v_landgravity - Client - Changes the gravity within the land.
-v_landkick - Client - Respawns a player who is inside your land.
+v_landkick - Client - Kicks a player out of your land for 10 seconds.
 v_landshop - Client - Changes the mode to shop (merchant) within the land.
 v_landslay - Client - Slays a player, or everyone, inside your land.
+v_landunban - Client - Lets a banned player back into your land.
 v_light - Client - Creates a working light cel.
 v_link - Client - Creates a link between a trigger bit and an entity.
 v_load - Client - Loads entities from a save file.
 v_lock - Client - Locks the cel you are looking at.
 v_mark - Client - Creates a marker to the player showing every axis.
 v_marker - Client - Creates a marker to the player showing every axis.
+v_message - Client - Spawns a message cel that shows your text to whoever uses it.
 v_moveto - Client - Moves one of your entities onto another entity.
 v_noclip - Client - Enables/disables noclip on the player.
 v_nokill - Client - Enables/disables godmode on the player.
@@ -82,6 +86,7 @@ v_pmove - Client - Moves the prop you are looking at on it's origin.
 v_proplist - Client - Displays the prop list.
 v_props - Client - Displays the prop list.
 v_r - Client - Rotates the prop you are looking at.
+v_release - Client - Releases the entity you are looking at from a weld.
 v_remove - Client - Removes the prop you are looking at.
 v_removeall - Client - Removes all the entities that you own.
 v_renderfx - Client - Changes the RenderFX on the prop you are looking at.
@@ -96,9 +101,11 @@ v_setbalance - Admin - Sets the balance of the client you are specifing.
 v_setowner - Admin - Sets the owner of the prop you are looking at.
 v_seturl - Client - Sets the url of the internet cel you are looking at.
 v_shop - Client - Changes the mode to shop (merchant) within the land.
+v_show - Client - Shows a hidden player's entities again.
 v_skin - Client - Changes the skin on the prop you are looking at.
 v_smove - Client - Moves the prop you are looking at on it's origin.
 v_solid - Client - Enables/disables solidicity on the prop you are looking at.
+v_sound - Client - Spawns a sound cel that plays a sound when used.
 v_spawn - Client - Spawns a prop by name.
 v_stack - Client - Stacks one prop on the x, y and z axis.
 v_stackinfo - Client - Gets the origin difference between props for help stacking.
@@ -110,10 +117,12 @@ v_switch - Client - Switches the side the hud is on the screen.
 v_thirdperson - Client - Switches to a third person view so you can see your emblem and hat.
 v_trade - Client - Offers the entity you are looking at in a trade with another player.
 v_turn - Client - Rotates the prop you are looking at.
+v_undo - Client - Removes the last entity you spawned.
 v_unfreeze - Client - Unfreezes the prop you are looking at.
 v_unfreezeit - Client - Unfreezes the prop you are looking at.
 v_unlock - Client - Unlocks the cel you are looking at.
 v_updatelist - Client - Displays the update list.
 v_updates - Client - Displays the update list.
+v_weld - Client - Welds one of your entities to another so they move together.
 v_wep - Client - Creates a weapon bit that will give a weapon when the player touches it.
 v_weps - Client - Gives you every weapon.

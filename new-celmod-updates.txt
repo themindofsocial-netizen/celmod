@@ -39,3 +39,7 @@
 		 - Added the yearhat, delaware, partyhat and santahat hats.
 		 - Added !cl to drop money, !moveto, !turn, !noclip, !fire, !weps, !stuck, !clear, !landslay and !landkick.
 		 - Added fire, cland and landskin to the shop.
+	 - 11/13/26: Emblem shots now have their own effects: flames, ice, water, energy bolts, smoke, orbs, lasers and rainbow beams.
+		 - Added !undo, !hide, !show, !weld, !release, !landban, !landunban, !message and !sound. !landkick now keeps a player out for 10 seconds.
+		 - Saving and loading builds is more reliable and reports when a build cannot be written.
+		 - Added a standalone emblem editor web page in webapp/emblem-editor.
