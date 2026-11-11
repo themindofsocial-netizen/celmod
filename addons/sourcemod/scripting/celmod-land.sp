@@ -6,6 +6,7 @@
 
 #define LAND_MODEL "models/error.mdl"
 
+bool g_bLandColor[MAXPLAYERS + 1];
 bool g_bLate;
 
 ConVar g_cvMaxLandSize;
@@ -20,6 +21,7 @@ int g_iCurrentLandEntity[MAXPLAYERS + 1];
 int g_iCurrentLandOwner[MAXPLAYERS + 1];
 int g_iHalo = -1;
 int g_iLand = -1;
+int g_iLandColor[MAXPLAYERS + 1][3];
 int g_iLandEntOwner[MAXENTITIES + 1];
 int g_iLaser = -1;
 int g_iPhys = -1;
@@ -115,6 +117,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_deathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_dm", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_gravity", Command_LandGravity, "|CelMod| Changes the gravity within the land.");
+	RegConsoleCmd("v_landcolor", Command_LandColor, "|CelMod| Changes the color of your land's border.");
 	RegConsoleCmd("v_land", Command_Land, "|CelMod| Creates a building zone.");
 	RegConsoleCmd("v_landcoop", Command_LandCoop, "|CelMod| Changes the mode to co-op within the land.");
 	RegConsoleCmd("v_landdeathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
@@ -126,6 +129,8 @@ public void OnPluginStart()
 public void OnClientPutInServer(int iClient)
 {
 	Cel_ClearLand(iClient);
+	
+	g_bLandColor[iClient] = false;
 	
 	g_hGettingTop[iClient] = CreateTimer(0.1, Timer_GettingTop, GetClientUserId(iClient), TIMER_REPEAT);
 	g_hLandTimer[iClient] = CreateTimer(0.1, Timer_Land, GetClientUserId(iClient), TIMER_REPEAT);
@@ -997,11 +1002,63 @@ public Action Timer_GettingTop(Handle hTimer, any iPlayer)
 	return Plugin_Continue;
 }
 
+public Action Command_LandColor(int iClient, int iArgs)
+{
+	char sColor[64], sColorBuffer[3][8], sColorString[32];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]landcolor{default} <color/off>");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sColor, sizeof(sColor));
+	
+	if (StrEqual(sColor, "off", false) || StrEqual(sColor, "none", false))
+	{
+		g_bLandColor[iClient] = false;
+		
+		Cel_ReplyToCommand(iClient, "Your land's border uses your HUD color again.");
+		
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckColorDB(sColor, sColorString, sizeof(sColorString)))
+	{
+		Cel_ReplyToCommand(iClient, "There is no color called {green}%s{default}. Type {green}[tag]colorlist{default} to see them.", sColor);
+		return Plugin_Handled;
+	}
+	
+	ExplodeString(sColorString, "|", sColorBuffer, 3, sizeof(sColorBuffer[]));
+	
+	g_bLandColor[iClient] = true;
+	g_iLandColor[iClient][0] = StringToInt(sColorBuffer[0]);
+	g_iLandColor[iClient][1] = StringToInt(sColorBuffer[1]);
+	g_iLandColor[iClient][2] = StringToInt(sColorBuffer[2]);
+	
+	Cel_ReplyToCommand(iClient, "Your land's border is now {green}%s{default}.", sColor);
+	
+	return Plugin_Handled;
+}
+
 public Action Timer_Land(Handle hTimer, any iPlayer)
 {
 	int iClient = GetClientOfUserId(iPlayer), iColor[4];
 	
 	Cel_GetHudColor(iClient, iColor);
+	
+	//A color chosen with !landcolor replaces the HUD color for the land's border.
+	if (iClient > 0 && g_bLandColor[iClient])
+	{
+		iColor[0] = g_iLandColor[iClient][0];
+		iColor[1] = g_iLandColor[iClient][1];
+		iColor[2] = g_iLandColor[iClient][2];
+	}
 	
 	if(g_liLand[iClient].bLandDrawing)
 	{

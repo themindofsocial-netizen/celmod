@@ -26,7 +26,11 @@ float g_fNextSoundUse[MAXENTITIES + 1];
 
 int g_iMoveToRef[MAXPLAYERS + 1];
 int g_iTrackOwner[MAXENTITIES + 1];
+int g_iTeleportDest[MAXENTITIES + 1];
+int g_iTeleportRef[MAXPLAYERS + 1];
 int g_iWeldRef[MAXPLAYERS + 1];
+
+float g_fNextTeleport[MAXPLAYERS + 1];
 
 public Plugin myinfo =
 {
@@ -46,6 +50,7 @@ public void OnPluginStart()
 	{
 		g_iMoveToRef[i] = INVALID_ENT_REFERENCE;
 		g_iWeldRef[i] = INVALID_ENT_REFERENCE;
+		g_iTeleportRef[i] = INVALID_ENT_REFERENCE;
 		g_alUndo[i] = new ArrayList();
 	}
 	
@@ -53,6 +58,9 @@ public void OnPluginStart()
 	
 	CreateTimer(0.5, Timer_LandBans, _, TIMER_REPEAT);
 	
+	RegConsoleCmd("v_model", Command_Model, "|CelMod| Replaces the model on the entity you are looking at.");
+	RegConsoleCmd("v_palette", Command_Palette, "|CelMod| Colors the prop you are looking at with your own red, green and blue values.");
+	RegConsoleCmd("v_teleport", Command_Teleport, "|CelMod| Spawns a teleport pad. Use it twice: the first pad sends players to the second.");
 	RegConsoleCmd("v_hide", Command_Hide, "|CelMod| Hides another player's entities from your view.");
 	RegConsoleCmd("v_landban", Command_LandBan, "|CelMod| Bans a player from your land.");
 	RegConsoleCmd("v_landunban", Command_LandUnban, "|CelMod| Lets a banned player back into your land.");
@@ -77,7 +85,9 @@ public void OnClientPutInServer(int iClient)
 {
 	g_iMoveToRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
+	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
 	g_fNextBanNotice[iClient] = 0.0;
+	g_fNextTeleport[iClient] = 0.0;
 	
 	g_alUndo[iClient].Clear();
 	
@@ -94,8 +104,11 @@ public void OnClientPutInServer(int iClient)
 
 public void OnMapStart()
 {
+	PrecacheSound("ambient/machines/teleport1.wav", true);
+	
 	for (int i = 0; i <= MAXENTITIES; i++)
 	{
+		g_iTeleportDest[i] = INVALID_ENT_REFERENCE;
 		g_bHideHooked[i] = false;
 		g_iTrackOwner[i] = 0;
 		g_sMessage[i][0] = '\0';
@@ -115,6 +128,7 @@ public void OnEntityCreated(int iEntity, const char[] sClassname)
 	{
 		g_bHideHooked[iEntity] = false;
 		g_iTrackOwner[iEntity] = 0;
+		g_iTeleportDest[iEntity] = INVALID_ENT_REFERENCE;
 		g_sMessage[iEntity][0] = '\0';
 		g_sSound[iEntity][0] = '\0';
 		
@@ -934,4 +948,160 @@ public Action Command_Sound(int iClient, int iArgs)
 	Cel_ReplyToCommand(iClient, "Spawned a {green}%s{default} sound cel. Press {green}E{default} on it to play it. It is not saved with builds.", sName);
 	
 	return Plugin_Handled;
+}
+
+public Action Command_Model(int iClient, int iArgs)
+{
+	char sAlias[64], sCommand[96];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]model{default} <prop name>");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sAlias, sizeof(sAlias));
+	
+	//Quotes and semicolons would let the argument run a second command.
+	ReplaceString(sAlias, sizeof(sAlias), "\"", "");
+	ReplaceString(sAlias, sizeof(sAlias), ";", "");
+	
+	Format(sCommand, sizeof(sCommand), "v_replace \"%s\"", sAlias);
+	
+	RunCelCommand(iClient, sCommand);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_Palette(int iClient, int iArgs)
+{
+	char sValue[3][16];
+	int iColor[3];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 3)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]palette{default} <red> <green> <blue> (each 0 to 255)");
+		return Plugin_Handled;
+	}
+	
+	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (iProp == -1)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckOwner(iClient, iProp))
+	{
+		Cel_NotYours(iClient, iProp);
+		return Plugin_Handled;
+	}
+	
+	for (int i = 0; i < 3; i++)
+	{
+		GetCmdArg(i + 1, sValue[i], sizeof(sValue[]));
+		
+		iColor[i] = StringToInt(sValue[i]);
+		
+		if (iColor[i] < 0) iColor[i] = 0;
+		if (iColor[i] > 255) iColor[i] = 255;
+	}
+	
+	Cel_SetRainbow(iProp, false);
+	Cel_SetColorFade(iProp, false, 0, 0, 0, 0, 0, 0);
+	Cel_SetColor(iProp, iColor[0], iColor[1], iColor[2], -1);
+	
+	Cel_ChangeBeam(iClient, iProp);
+	
+	Cel_ReplyToCommandEntity(iClient, iProp, "Colored your [type] {green}%d %d %d{default}.", iColor[0], iColor[1], iColor[2]);
+	
+	return Plugin_Handled;
+}
+
+//The first pad a player spawns is the entrance, the second is where it leads. Then the pair is complete.
+public Action Command_Teleport(int iClient, int iArgs)
+{
+	float fAngles[3], fOrigin[3];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckPropCount(iClient))
+	{
+		Cel_ReplyToCommand(iClient, "You have reached your prop limit.");
+		return Plugin_Handled;
+	}
+	
+	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+	
+	int iPad = Cel_SpawnProp(iClient, "teleport", "prop_physics_override", "models/props_junk/sawblade001a.mdl", fAngles, fOrigin, 0, 200, 255, 255);
+	
+	if (iPad == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	Cel_FixSpawnPosition(iPad, fOrigin);
+	
+	int iEntrance = EntRefToEntIndex(g_iTeleportRef[iClient]);
+	
+	if (g_iTeleportRef[iClient] == INVALID_ENT_REFERENCE || iEntrance == INVALID_ENT_REFERENCE || !Cel_CheckOwner(iClient, iEntrance))
+	{
+		g_iTeleportRef[iClient] = EntIndexToEntRef(iPad);
+		
+		SDKHook(iPad, SDKHook_StartTouchPost, Hook_TeleportTouch);
+		
+		Cel_ReplyToCommand(iClient, "Spawned the teleport entrance. Type {green}[tag]teleport{default} again where it should lead.");
+		
+		return Plugin_Handled;
+	}
+	
+	g_iTeleportDest[iEntrance] = EntIndexToEntRef(iPad);
+	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
+	
+	Cel_SetColor(iPad, 255, 140, 0, 255);
+	
+	Cel_ReplyToCommand(iClient, "Spawned the teleport exit. Walking onto the blue pad now takes players to the orange one. Teleports are not saved with builds.");
+	
+	return Plugin_Handled;
+}
+
+public void Hook_TeleportTouch(int iEntity, int iOther)
+{
+	float fOrigin[3];
+	
+	if (iOther < 1 || iOther > MaxClients || !IsPlayerAlive(iOther) || GetGameTime() < g_fNextTeleport[iOther] || Cel_IsLocked(iEntity))
+	{
+		return;
+	}
+	
+	int iExit = EntRefToEntIndex(g_iTeleportDest[iEntity]);
+	
+	if (g_iTeleportDest[iEntity] == INVALID_ENT_REFERENCE || iExit == INVALID_ENT_REFERENCE)
+	{
+		return;
+	}
+	
+	g_fNextTeleport[iOther] = GetGameTime() + 1.0;
+	
+	Cel_GetEntityOrigin(iExit, fOrigin);
+	
+	fOrigin[2] += 12.0;
+	
+	TeleportEntity(iOther, fOrigin, NULL_VECTOR, NULL_VECTOR);
+	
+	EmitSoundToAll("ambient/machines/teleport1.wav", iExit);
 }

@@ -61,6 +61,7 @@ v_inventory - Client - Lists the emblems and hats you own.
 v_ladder - Client - Creates a working ladder cel.
 v_land - Client - Creates a building zone.
 v_landban - Client - Bans a player from your land.
+v_landcolor - Client - Changes the color of your land's border.
 v_landcoop - Client - Changes the mode to co-op within the land.
 v_landdeathmatch - Client - Changes the mode to deathmatch within the land.
 v_landgravity - Client - Changes the gravity within the land.
@@ -75,12 +76,14 @@ v_lock - Client - Locks the cel you are looking at.
 v_mark - Client - Creates a marker to the player showing every axis.
 v_marker - Client - Creates a marker to the player showing every axis.
 v_message - Client - Spawns a message cel that shows your text to whoever uses it.
+v_model - Client - Replaces the model on the entity you are looking at.
 v_moveto - Client - Moves one of your entities onto another entity.
 v_noclip - Client - Enables/disables noclip on the player.
 v_nokill - Client - Enables/disables godmode on the player.
 v_owner - Client - Gets the owner of the entity you are looking at.
 v_p - Client - Spawns a prop by name.
 v_paint - Client - Colors the prop you are looking at.
+v_palette - Client - Colors the prop you are looking at with your own red, green and blue values.
 v_paste - Client - Pastes the prop in your copy buffer where you are looking at.
 v_pmove - Client - Moves the prop you are looking at on it's origin.
 v_proplist - Client - Displays the prop list.
@@ -114,6 +117,7 @@ v_straight - Client - Resets the angles on the prop you are looking at.
 v_straighten - Client - Resets the angles on the prop you are looking at.
 v_stuck - Client - Respawns you.
 v_switch - Client - Switches the side the hud is on the screen.
+v_teleport - Client - Spawns a teleport pad. Use it twice: the first pad sends players to the second.
 v_thirdperson - Client - Switches to a third person view so you can see your emblem and hat.
 v_trade - Client - Offers the entity you are looking at in a trade with another player.
 v_turn - Client - Rotates the prop you are looking at.

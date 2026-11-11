@@ -59,6 +59,7 @@ v_internet|Creates a working internet cel.|None|Client|
 v_ladder|Creates a working ladder cel.|None|Client|
 v_land|Creates a building zone.|None|Client|
 v_landban|Bans a player from your land.|None|Client|
+v_landcolor|Changes the color of your land's border.|None|Client|
 v_landkick|Kicks a player out of your land for 10 seconds.|None|Client|
 v_landslay|Slays a player, or everyone, inside your land.|None|Client|
 v_landunban|Lets a banned player back into your land.|None|Client|
@@ -67,9 +68,11 @@ v_link|Creates a link between a trigger bit and an entity.|None|Client|
 v_load|Loads entites from a save file.|None|Client|
 v_lock|Locks the cel you are looking at.|None|Client|
 v_message|Spawns a message cel that shows your text to whoever uses it.|None|Client|
+v_model|Replaces the model on the entity you are looking at.|None|Client|
 v_moveto|Moves one of your entities onto another entity.|None|Client|
 v_noclip|Enables/disables noclip on the player.|None|Client|
 v_nokill|Enables/disables godmode on the player.|None|Client|
+v_palette|Colors the prop you are looking at with your own red, green and blue values.|None|Client|
 v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Client|
 v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://delaware.rockzehh.net/props/index.html)
 v_release|Releases the entity you are looking at from a weld.|None|Client|
@@ -91,6 +94,7 @@ v_stackinfo|Gets the origin difference between props for help stacking.|None|Cli
 v_stand|Resets the angles on the prop you are looking at.|v_straight, v_straighten|Client|
 v_stuck|Respawns you.|None|Client|
 v_switch|Switches the side the hud is on the screen.|None|Client|
+v_teleport|Spawns a teleport pad. Use it twice: the first pad sends players to the second.|None|Client|
 v_thirdperson|Switches to a third person view so you can see your emblem and hat.|None|Client|
 v_trade|Offers the entity you are looking at in a trade with another player.|None|Client|
 v_turn|Rotates the prop you are looking at.|None|Client|

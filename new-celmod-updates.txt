@@ -43,3 +43,6 @@
 		 - Added !undo, !hide, !show, !weld, !release, !landban, !landunban, !message and !sound. !landkick now keeps a player out for 10 seconds.
 		 - Saving and loading builds is more reliable and reports when a build cannot be written.
 		 - Added a standalone emblem editor web page in webapp/emblem-editor.
+	 - 11/14/26: Builds now load into your own land, in the same place they were saved, and only if the whole build fits.
+		 - Saving only includes entities whose origin is inside your land.
+		 - Added !landcolor, !palette, !model and !teleport.

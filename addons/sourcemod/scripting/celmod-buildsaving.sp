@@ -104,6 +104,50 @@ bool Cel_PrepareSaveFolder(int iClient, char[] sAuthID, int iMaxLength)
 	return DirExists(sPath);
 }
 
+//Works out the client's land: the middle of its floor (what saved positions are measured from), half its width
+//and depth, and its height. Returns false if the client has no land.
+bool Cel_GetLandLayout(int iClient, float fMiddle[3], float fHalfSize[2], float &fHeight)
+{
+	float fBottom[3], fCorner[2][3], fTop[3];
+	
+	if (!Cel_IsLandCreated(iClient))
+	{
+		return false;
+	}
+	
+	Cel_GetLandPositions(iClient, 1, fCorner[0]);
+	Cel_GetLandPositions(iClient, 4, fCorner[1]);
+	
+	Cel_GetMiddleOfABox(fCorner[0], fCorner[1], fMiddle);
+	
+	fMiddle[2] = fCorner[0][2];
+	
+	Cel_GetLandPositions(iClient, 2, fBottom);
+	Cel_GetLandPositions(iClient, 3, fTop);
+	
+	fHalfSize[0] = FloatAbs(fTop[0] - fBottom[0]) / 2.0;
+	fHalfSize[1] = FloatAbs(fTop[1] - fBottom[1]) / 2.0;
+	fHeight = FloatAbs(fTop[2] - fBottom[2]);
+	
+	return true;
+}
+
+//An entity belongs to a build when its origin is inside its owner's own land.
+bool Cel_IsEntityInOwnLand(int iClient, int iEntity)
+{
+	float fHalfSize[2], fHeight, fMiddle[3], fOrigin[3];
+	
+	if (!Cel_GetLandLayout(iClient, fMiddle, fHalfSize, fHeight))
+	{
+		return false;
+	}
+	
+	Cel_GetEntityOrigin(iEntity, fOrigin);
+	
+	return (FloatAbs(fOrigin[0] - fMiddle[0]) <= fHalfSize[0] && FloatAbs(fOrigin[1] - fMiddle[1]) <= fHalfSize[1]
+		&& fOrigin[2] >= fMiddle[2] - 64.0 && fOrigin[2] <= fMiddle[2] + fHeight);
+}
+
 public Action Command_LoadBuild(int iClient, int iArgs)
 {
 	char sSaveName[64];
@@ -154,7 +198,15 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		return false;
 	}
 	
-	Cel_GetCrosshairHitOrigin(iClient, g_fCrosshairOrigin[iClient]);
+	//Builds are placed around the middle of the player's own land, exactly as they were saved.
+	float fHalfSize[2], fHeight, fNeeded[3];
+	
+	if (!Cel_GetLandLayout(iClient, g_fCrosshairOrigin[iClient], fHalfSize, fHeight))
+	{
+		Cel_ReplyToCommand(iClient, "You need a land to load a build into. Type {green}[tag]land{default} to create one.");
+		
+		return false;
+	}
 	
 	Format(sRelPath, sizeof(sRelPath), "data/celmod/users/%s/saves/%s.txt", sAuthID, sSaveName);
 	
@@ -164,6 +216,29 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 	
 	if(kvLoadBuild.ImportFromFile(sFile))
 	{
+		//First pass: how much room the build needs. Nothing is spawned unless all of it fits in the land.
+		if (kvLoadBuild.GotoFirstSubKey())
+		{
+			do
+			{
+				if (FloatAbs(kvLoadBuild.GetFloat("o1")) > fNeeded[0]) fNeeded[0] = FloatAbs(kvLoadBuild.GetFloat("o1"));
+				if (FloatAbs(kvLoadBuild.GetFloat("o2")) > fNeeded[1]) fNeeded[1] = FloatAbs(kvLoadBuild.GetFloat("o2"));
+				if (kvLoadBuild.GetFloat("o3") > fNeeded[2]) fNeeded[2] = kvLoadBuild.GetFloat("o3");
+			}
+			while (kvLoadBuild.GotoNextKey());
+			
+			kvLoadBuild.Rewind();
+		}
+		
+		if (fNeeded[0] > fHalfSize[0] + 1.0 || fNeeded[1] > fHalfSize[1] + 1.0 || fNeeded[2] > fHeight + 1.0)
+		{
+			kvLoadBuild.Close();
+			
+			Cel_ReplyToCommand(iClient, "The build {green}%s{default} does not fit in your land. It needs {green}%d x %d{default} units and {green}%d{default} high; your land is {green}%d x %d{default} and {green}%d{default} high.", sSaveName, RoundToCeil(fNeeded[0] * 2.0), RoundToCeil(fNeeded[1] * 2.0), RoundToCeil(fNeeded[2]), RoundToFloor(fHalfSize[0] * 2.0), RoundToFloor(fHalfSize[1] * 2.0), RoundToFloor(fHeight));
+			
+			return false;
+		}
+		
 		if (kvLoadBuild.GotoFirstSubKey())
 		{
 			do
@@ -386,9 +461,9 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 	{
 		if (Cel_CheckOwner(iClient, i))
 		{
-			if(Cel_IsEntityInLand(i))
+			if(Cel_IsEntityInOwnLand(iClient, i))
 			{
-				iLand = Cel_GetLandOwnerFromEntity(i);
+				iLand = iClient;
 				
 				if(iLand == iClient)
 				{
