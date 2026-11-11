@@ -28,6 +28,8 @@ v_blacklist|Adds/removes a prop from the spawn blacklist.|None|Admin|
 v_button|Spawns a button trigger bit.|None|Client|
 v_buy|Purchases the current entity you are looking at or command you specified.|None|Client|
 v_charger|Creates a health/suit charger bit that will give health/suit to the player.|None|Client|
+v_cl|Shows your balance, or drops an amount of cleers for another player to pick up.|None|Client|
+v_clear|Deletes one of your saved builds.|None|Client|
 v_color|Colors the prop you are looking at.|v_paint|Client|
 v_colorlist|Displays the color list.|v_colors|Client|[Color List](https://delaware.rockzehh.net/colors.html)
 v_commandlist|Displays the command list.|v_cmds, v_commands|Client|[Command List](https://delaware.rockzehh.net/cmds.html)
@@ -43,6 +45,8 @@ v_emblem|Spawns an emblem you own, or disables your active emblem (off).|None|Cl
 v_emblemdrop|Starts an emblem drop.|None|Admin|
 v_emblems|Lists the emblems and hats you own.|v_hats, v_inventory|Client|
 v_fadecolor|Fades the prop you are looking at between two colors.|None|Client|
+v_fire|Spawns a fire effect cel.|None|Client|
+v_firstperson|Switches back to the first person view.|None|Client|
 v_fly|Enables/disables nocip on the player.|None|Client|
 v_freeze|Freezes the prop you are looking at.|v_freezeit|Client|
 v_give|Gives the entity you are looking at to another player.|None|Client|
@@ -53,10 +57,14 @@ v_hat|Spawns a hat you own, or takes off your hat (off).|None|Client|
 v_internet|Creates a working internet cel.|None|Client|
 v_ladder|Creates a working ladder cel.|None|Client|
 v_land|Creates a building zone.|None|Client|
+v_landkick|Respawns a player who is inside your land.|None|Client|
+v_landslay|Slays a player, or everyone, inside your land.|None|Client|
 v_light|Creates a working light cel.|None|Client|
 v_link|Creates a link between a trigger bit and an entity.|None|Client|
 v_load|Loads entites from a save file.|None|Client|
 v_lock|Locks the cel you are looking at.|None|Client|
+v_moveto|Moves one of your entities onto another entity.|None|Client|
+v_noclip|Enables/disables noclip on the player.|None|Client|
 v_nokill|Enables/disables godmode on the player.|None|Client|
 v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Client|
 v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://delaware.rockzehh.net/props/index.html)
@@ -74,11 +82,15 @@ v_spawn|Spawns a prop by name.|v_p, v_s|Client|
 v_stack|Stacks props on the x, y and z axis.|None|Client|
 v_stackinfo|Gets the origin difference between props for help stacking.|None|Client|
 v_stand|Resets the angles on the prop you are looking at.|v_straight, v_straighten|Client|
+v_stuck|Respawns you.|None|Client|
 v_switch|Switches the side the hud is on the screen.|None|Client|
+v_thirdperson|Switches to a third person view so you can see your emblem and hat.|None|Client|
 v_trade|Offers the entity you are looking at in a trade with another player.|None|Client|
+v_turn|Rotates the prop you are looking at.|None|Client|
 v_unfreeze|Unfreezes the prop you are looking at.|v_unfreezeit|Client|
 v_unlock|Unlocks the cel you are looking at.|None|Client|
 v_wep|Creates a weapon bit that will give a weapon when the player touches it.|None|Client|
+v_weps|Gives you every weapon.|None|Client|
 
 ## Developer Commands
 Command | Description | Type

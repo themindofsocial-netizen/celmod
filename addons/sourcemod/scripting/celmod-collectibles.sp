@@ -33,6 +33,9 @@
 #define SOUND_UNEQUIP "buttons/button10.wav"
 #define SOUND_DENY "buttons/button8.wav"
 #define SOUND_FIRE "ambient/fire/mtov_flame2.wav"
+#define SOUND_HEAL "items/medshot4.wav"
+#define SOUND_SHOCK "ambient/energy/zap1.wav"
+#define SOUND_BLINK "ambient/machines/teleport1.wav"
 #define SOUND_ICE "physics/glass/glass_impact_bullet4.wav"
 #define SOUND_DROP "ambient/levels/labs/electric_explosion1.wav"
 #define SOUND_REWARD "items/suitchargeok1.wav"
@@ -53,6 +56,10 @@ enum struct Item
 	float fOffset[3];
 	float fAngles[3];
 	float fScale;
+	int iBeamColor[4];
+	int iDamageType;
+	float fIgnite;
+	float fSpeed;
 	int iSkin;
 	float fHandOffset[3];
 	float fHandAngles[3];
@@ -66,7 +73,11 @@ bool g_bFrozenTint[MAXPLAYERS + 1];
 bool g_bHeldShown[MAXPLAYERS + 1];
 bool g_bHoldingGravGun[MAXPLAYERS + 1];
 bool g_bInvFromDisk[MAXPLAYERS + 1];
+bool g_bCloaked[MAXPLAYERS + 1];
+bool g_bGravityManaged[MAXPLAYERS + 1];
+bool g_bPortal[MAXPLAYERS + 1][2];
 bool g_bSpeedManaged[MAXPLAYERS + 1];
+bool g_bThirdPerson[MAXPLAYERS + 1];
 
 char g_sInvPath[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
 char g_sItemDB[PLATFORM_MAX_PATH];
@@ -84,6 +95,10 @@ ConVar g_cvShowSelf;
 
 float g_fFrozenUntil[MAXPLAYERS + 1];
 float g_fNextPower[MAXPLAYERS + 1];
+float g_fNextSecondary[MAXPLAYERS + 1];
+float g_fNextShotSound[MAXPLAYERS + 1];
+float g_fPortal[MAXPLAYERS + 1][2][3];
+float g_fPortalWait[MAXPLAYERS + 1];
 
 int g_iActiveEmblem[MAXPLAYERS + 1];
 int g_iActiveHat[MAXPLAYERS + 1];
@@ -167,6 +182,8 @@ public void OnPluginStart()
 	RegAdminCmd("v_emblemdrop", Command_EmblemDrop, ADMFLAG_SLAY, "|CelMod| Starts an emblem drop.");
 	RegAdminCmd("v_giveitem", Command_GiveItem, ADMFLAG_SLAY, "|CelMod| Gives an emblem or hat to a player.");
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
+	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
+	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
 	RegConsoleCmd("v_emblem", Command_Emblem, "|CelMod| Spawns an emblem you own, or disables your active emblem.");
 	RegConsoleCmd("v_emblems", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
 	RegConsoleCmd("v_hat", Command_Hat, "|CelMod| Spawns a hat you own, or takes off your hat.");
@@ -222,6 +239,9 @@ public void OnMapStart()
 	PrecacheSound(SOUND_DENY, true);
 	PrecacheSound(SOUND_FIRE, true);
 	PrecacheSound(SOUND_ICE, true);
+	PrecacheSound(SOUND_SHOCK, true);
+	PrecacheSound(SOUND_HEAL, true);
+	PrecacheSound(SOUND_BLINK, true);
 	PrecacheSound(SOUND_DROP, true);
 	PrecacheSound(SOUND_REWARD, true);
 
@@ -241,6 +261,10 @@ public void OnMapStart()
 public void OnClientPutInServer(int iClient)
 {
 	ResetClient(iClient);
+
+	g_bThirdPerson[iClient] = false;
+
+	SDKHook(iClient, SDKHook_OnTakeDamage, Hook_PlayerTakeDamage);
 
 	Inv_Close(iClient);
 	Inv_Open(iClient);
@@ -474,6 +498,59 @@ Action HandleItemCommand(int iClient, int iArgs, int iKind)
 	return Plugin_Handled;
 }
 
+public Action Command_ThirdPerson(int iClient, int iArgs)
+{
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	// Typing it again switches back.
+	SetThirdPerson(iClient, !g_bThirdPerson[iClient]);
+
+	Cel_ReplyToCommand(iClient, g_bThirdPerson[iClient] ? "Third person view enabled. Type {green}[tag]firstperson{default} to go back." : "First person view enabled.");
+
+	return Plugin_Handled;
+}
+
+public Action Command_FirstPerson(int iClient, int iArgs)
+{
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	SetThirdPerson(iClient, false);
+
+	Cel_ReplyToCommand(iClient, "First person view enabled.");
+
+	return Plugin_Handled;
+}
+
+// The camera is moved behind the player by putting them in an observer mode with no target.
+void SetThirdPerson(int iClient, bool bEnable)
+{
+	g_bThirdPerson[iClient] = bEnable;
+
+	if (!IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return;
+	}
+
+	if (bEnable)
+	{
+		SetEntPropEnt(iClient, Prop_Send, "m_hObserverTarget", 0);
+		SetEntProp(iClient, Prop_Send, "m_iObserverMode", 1);
+		SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", 0);
+		SetEntProp(iClient, Prop_Send, "m_iFOV", 110);
+	} else {
+		SetEntPropEnt(iClient, Prop_Send, "m_hObserverTarget", -1);
+		SetEntProp(iClient, Prop_Send, "m_iObserverMode", 0);
+		SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", 1);
+		SetEntProp(iClient, Prop_Send, "m_iFOV", 0);
+	}
+}
+
 public Action Command_Inventory(int iClient, int iArgs)
 {
 	if (!IsRealClient(iClient))
@@ -653,6 +730,15 @@ public Action Event_Death(Event eEvent, const char[] sName, bool bDontBroadcast)
 
 		g_bHoldingGravGun[iClient] = false;
 		g_fFrozenUntil[iClient] = 0.0;
+
+		if (g_bCloaked[iClient] || g_bFrozenTint[iClient])
+		{
+			g_bCloaked[iClient] = false;
+			g_bFrozenTint[iClient] = false;
+
+			SetEntityRenderMode(iClient, RENDER_NORMAL);
+			SetEntityRenderColor(iClient, 255, 255, 255, 255);
+		}
 	}
 
 	return Plugin_Continue;
@@ -778,7 +864,7 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 public Action Hook_HatTransmit(int iEntity, int iClient)
 {
 	// The wearer never sees their own hat, it would block their first person view.
-	if (iClient > 0 && iClient <= MaxClients && EntRefToEntIndex(g_iHatEntRef[iClient]) == iEntity)
+	if (iClient > 0 && iClient <= MaxClients && !g_bThirdPerson[iClient] && EntRefToEntIndex(g_iHatEntRef[iClient]) == iEntity)
 	{
 		return Plugin_Handled;
 	}
@@ -805,14 +891,35 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		{
 			RequestFrame(Frame_Jump, GetClientUserId(iClient));
 		}
-	} else if (StrEqual(g_Items[iItem].sPower, "fire") || StrEqual(g_Items[iItem].sPower, "blizzard"))
+	} else if (StrEqual(g_Items[iItem].sPower, "feather"))
 	{
-		if ((iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && GetGameTime() >= g_fNextPower[iClient])
+		float fVelocity[3];
+
+		GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fVelocity);
+
+		// Caps the falling speed, so the player floats down.
+		if (!(GetEntityFlags(iClient) & FL_ONGROUND) && fVelocity[2] < -g_Items[iItem].fValue)
+		{
+			fVelocity[2] = -g_Items[iItem].fValue;
+
+			TeleportEntity(iClient, NULL_VECTOR, NULL_VECTOR, fVelocity);
+		}
+	} else if (IsShotPower(g_Items[iItem].sPower))
+	{
+		// Primary fire can be held down, the emblem's cooldown sets how fast it shoots.
+		if ((iButtons & IN_ATTACK) && GetGameTime() >= g_fNextPower[iClient])
 		{
 			g_fNextPower[iClient] = GetGameTime() + g_Items[iItem].fCooldown;
 
 			FireEmblemShot(iClient, iItem);
 		}
+	}
+
+	if ((iButtons & IN_ATTACK2) && !(iLast & IN_ATTACK2) && GetGameTime() >= g_fNextSecondary[iClient])
+	{
+		g_fNextSecondary[iClient] = GetGameTime() + 0.5;
+
+		SecondaryEmblemPower(iClient, iItem);
 	}
 
 	return Plugin_Continue;
@@ -883,6 +990,12 @@ public Action Timer_ApplyHat(Handle hTimer, any iUserId)
 	if (iClient > 0 && IsClientInGame(iClient))
 	{
 		CreateHatEntity(iClient);
+
+		// The view resets on respawn, so a player who chose third person gets it back.
+		if (g_bThirdPerson[iClient])
+		{
+			SetThirdPerson(iClient, true);
+		}
 	}
 
 	return Plugin_Stop;
@@ -946,13 +1059,15 @@ public Action Timer_Think(Handle hTimer)
 			if (g_bFrozenTint[i])
 			{
 				g_bFrozenTint[i] = false;
+				g_bCloaked[i] = false;
 
 				SetEntityRenderColor(i, 255, 255, 255, 255);
 			}
 
-			if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "speed"))
+			if (g_bHoldingGravGun[i] && iItem != -1)
 			{
-				fSpeed = g_Items[iItem].fValue;
+				// The speed emblem uses its value, any other emblem can carry a "speed" key.
+				fSpeed = StrEqual(g_Items[iItem].sPower, "speed") ? g_Items[iItem].fValue : g_Items[iItem].fSpeed;
 			}
 		}
 
@@ -961,6 +1076,57 @@ public Action Timer_Think(Handle hTimer)
 			SetEntPropFloat(i, Prop_Data, "m_flLaggedMovementValue", fSpeed);
 
 			g_bSpeedManaged[i] = (fSpeed != 1.0);
+		}
+
+		// Cloak: the player is nearly invisible while the emblem is in hand.
+		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "cloak"))
+		{
+			if (!g_bCloaked[i])
+			{
+				g_bCloaked[i] = true;
+
+				SetEntityRenderMode(i, RENDER_TRANSCOLOR);
+				SetEntityRenderColor(i, 255, 255, 255, RoundToFloor(g_Items[iItem].fValue));
+			}
+		} else if (g_bCloaked[i])
+		{
+			g_bCloaked[i] = false;
+
+			SetEntityRenderMode(i, RENDER_NORMAL);
+			SetEntityRenderColor(i, 255, 255, 255, 255);
+		}
+
+		// Gravity: the holder is lighter (or heavier) while the emblem is in hand.
+		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "gravity"))
+		{
+			g_bGravityManaged[i] = true;
+
+			SetEntityGravity(i, g_Items[iItem].fValue);
+		} else if (g_bGravityManaged[i])
+		{
+			g_bGravityManaged[i] = false;
+
+			SetEntityGravity(i, 1.0);
+		}
+
+		// Sprint: the suit's sprint power never runs out.
+		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "sprint"))
+		{
+			SetEntPropFloat(i, Prop_Send, "m_flSuitPower", 100.0);
+		}
+
+		// Drain: the emblem slowly hurts its own holder, once a second.
+		if (g_iTick % 5 == 0 && g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "drain") && !Cel_GetNoKill(i))
+		{
+			SDKHooks_TakeDamage(i, i, i, g_Items[iItem].fValue, DMG_RADIATION);
+		}
+
+		// Suit power regeneration, once a second.
+		if (g_iTick % 5 == 0 && g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "armor"))
+		{
+			int iArmor = GetEntProp(i, Prop_Send, "m_ArmorValue") + RoundToFloor(g_Items[iItem].fValue);
+
+			SetEntProp(i, Prop_Send, "m_ArmorValue", iArmor > 100 ? 100 : iArmor);
 		}
 
 		// Health regeneration, once a second.
@@ -976,6 +1142,8 @@ public Action Timer_Think(Handle hTimer)
 			}
 		}
 	}
+
+	ThinkPortals();
 
 	return Plugin_Continue;
 }
@@ -1233,6 +1401,29 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fScale = kvItems.GetFloat("scale", 1.0);
 	g_Items[iItem].iWeight = kvItems.GetNum("dropweight", 0);
 	g_Items[iItem].iSkin = kvItems.GetNum("skin", 0);
+	g_Items[iItem].fIgnite = kvItems.GetFloat("ignite", 0.0);
+	g_Items[iItem].fSpeed = kvItems.GetFloat("speed", 1.0);
+
+	char sDamageType[24];
+
+	kvItems.GetString("dmgtype", sDamageType, sizeof(sDamageType), "generic");
+
+	if (StrEqual(sDamageType, "burn", false)) g_Items[iItem].iDamageType = DMG_BURN;
+	else if (StrEqual(sDamageType, "drown", false)) g_Items[iItem].iDamageType = DMG_DROWN;
+	else if (StrEqual(sDamageType, "poison", false)) g_Items[iItem].iDamageType = DMG_POISON;
+	else if (StrEqual(sDamageType, "shock", false)) g_Items[iItem].iDamageType = DMG_SHOCK;
+	else if (StrEqual(sDamageType, "dissolve", false)) g_Items[iItem].iDamageType = DMG_DISSOLVE;
+	else if (StrEqual(sDamageType, "energy", false)) g_Items[iItem].iDamageType = DMG_ENERGYBEAM;
+	else g_Items[iItem].iDamageType = DMG_GENERIC;
+
+	kvItems.GetColor4("beamcolor", g_Items[iItem].iBeamColor);
+
+	if (g_Items[iItem].iBeamColor[0] == 0 && g_Items[iItem].iBeamColor[1] == 0 && g_Items[iItem].iBeamColor[2] == 0)
+	{
+		g_Items[iItem].iBeamColor[0] = g_Items[iItem].iColor[0];
+		g_Items[iItem].iBeamColor[1] = g_Items[iItem].iColor[1];
+		g_Items[iItem].iBeamColor[2] = g_Items[iItem].iColor[2];
+	}
 	g_Items[iItem].fHandScale = kvItems.GetFloat("handscale", 1.0);
 
 	kvItems.GetVector("handoffset", g_Items[iItem].fHandOffset);
@@ -1539,6 +1730,9 @@ void SetActiveEmblem(int iClient, int iItem)
 {
 	g_iActiveEmblem[iClient] = iItem;
 
+	g_bPortal[iClient][0] = false;
+	g_bPortal[iClient][1] = false;
+
 	if (iItem == -1)
 	{
 		RestoreWeapon(iClient);
@@ -1605,7 +1799,8 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 public Action Hook_HandTransmit(int iEntity, int iClient)
 {
 	// The holder does not see the attached emblem, it would float in their first person view.
-	if (!g_cvShowSelf.BoolValue && iClient > 0 && iClient <= MaxClients && EntRefToEntIndex(g_iHandEntRef[iClient]) == iEntity)
+	if (!g_cvShowSelf.BoolValue && iClient > 0 && iClient <= MaxClients && !g_bThirdPerson[iClient]
+		&& iClient > 0 && iClient <= MaxClients && EntRefToEntIndex(g_iHandEntRef[iClient]) == iEntity)
 	{
 		return Plugin_Handled;
 	}
@@ -1637,11 +1832,20 @@ void RestoreWeapon(int iClient)
 	g_iModdedWeaponRef[iClient] = INVALID_ENT_REFERENCE;
 }
 
+bool IsShotPower(const char[] sPower)
+{
+	return (StrEqual(sPower, "fire") || StrEqual(sPower, "blizzard") || StrEqual(sPower, "shock") || StrEqual(sPower, "push") || StrEqual(sPower, "blast") || StrEqual(sPower, "blink")
+		|| StrEqual(sPower, "shot") || StrEqual(sPower, "spray") || StrEqual(sPower, "medic") || StrEqual(sPower, "magnitude") || StrEqual(sPower, "chaos") || StrEqual(sPower, "portal") || StrEqual(sPower, "demon"));
+}
+
+// Primary fire with a shot emblem: a beam from the player to whatever they are aiming at.
 void FireEmblemShot(int iClient, int iItem)
 {
-	bool bFire = StrEqual(g_Items[iItem].sPower, "fire");
+	char sPower[24];
 	float fAngles[3], fDirection[3], fEnd[3], fStart[3];
 	int iColor[4], iTarget = -1;
+
+	strcopy(sPower, sizeof(sPower), g_Items[iItem].sPower);
 
 	GetClientEyePosition(iClient, fStart);
 	GetClientEyeAngles(iClient, fAngles);
@@ -1663,20 +1867,127 @@ void FireEmblemShot(int iClient, int iItem)
 
 	CloseHandle(hTrace);
 
-	iColor[0] = g_Items[iItem].iColor[0];
-	iColor[1] = g_Items[iItem].iColor[1];
-	iColor[2] = g_Items[iItem].iColor[2];
+	iColor[0] = g_Items[iItem].iBeamColor[0];
+	iColor[1] = g_Items[iItem].iBeamColor[1];
+	iColor[2] = g_Items[iItem].iBeamColor[2];
 	iColor[3] = 255;
+
+	if (StrEqual(sPower, "blink"))
+	{
+		BlinkPlayer(iClient, fStart, fDirection, fEnd, iColor);
+
+		return;
+	}
+
+	if (StrEqual(sPower, "portal"))
+	{
+		SetPortal(iClient, 0, fEnd, fDirection, iColor);
+
+		return;
+	}
+
+	// Demon: a purple burst where the player aims, nothing more.
+	if (StrEqual(sPower, "demon"))
+	{
+		TE_SetupBeamRingPoint(fEnd, 4.0, 120.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.5, 8.0, 0.0, iColor, 10, 0);
+		TE_SendToAll();
+
+		EmitSoundToAll(SOUND_FIRE, iClient);
+
+		return;
+	}
 
 	fStart[2] -= 12.0;
 
-	TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.3, 6.0, 2.0, 1, bFire ? 3.0 : 0.5, iColor, 20);
+	TE_SetupBeamPoints(fStart, fEnd, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.3, 6.0, 2.0, 1, StrEqual(sPower, "blizzard") ? 0.5 : 3.0, iColor, 20);
 	TE_SendToAll();
 
 	TE_SetupBeamRingPoint(fEnd, 4.0, 60.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.4, 5.0, 0.0, iColor, 10, 0);
 	TE_SendToAll();
 
-	EmitSoundToAll(bFire ? SOUND_FIRE : SOUND_ICE, iClient);
+	// Fast firing emblems would otherwise stack the same sound many times a second.
+	if (GetGameTime() >= g_fNextShotSound[iClient])
+	{
+		g_fNextShotSound[iClient] = GetGameTime() + 0.6;
+
+		EmitSoundToAll(StrEqual(sPower, "blizzard") ? SOUND_ICE : (StrEqual(sPower, "shock") ? SOUND_SHOCK : SOUND_FIRE), iClient);
+	}
+
+	if (StrEqual(sPower, "blast"))
+	{
+		int iExplosion = CreateEntityByName("env_explosion");
+
+		if (iExplosion != -1)
+		{
+			DispatchKeyValueFloat(iExplosion, "iMagnitude", g_Items[iItem].fValue);
+			DispatchKeyValue(iExplosion, "spawnflags", "0");
+
+			SetEntPropEnt(iExplosion, Prop_Data, "m_hOwnerEntity", iClient);
+
+			DispatchSpawn(iExplosion);
+
+			TeleportEntity(iExplosion, fEnd, NULL_VECTOR, NULL_VECTOR);
+
+			AcceptEntityInput(iExplosion, "Explode");
+			AcceptEntityInput(iExplosion, "kill");
+		}
+
+		return;
+	}
+
+	// Pink: heals the player being aimed at.
+	if (StrEqual(sPower, "medic"))
+	{
+		if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && IsPlayerAlive(iTarget) && GetClientHealth(iTarget) < 100)
+		{
+			int iHealth = GetClientHealth(iTarget) + RoundToFloor(g_Items[iItem].fValue);
+
+			SetEntityHealth(iTarget, iHealth > 100 ? 100 : iHealth);
+
+			EmitSoundToAll(SOUND_HEAL, iTarget);
+		}
+
+		return;
+	}
+
+	// Magnitude: throws what the player aims at. Only loose physics objects and players who can be hurt.
+	if (StrEqual(sPower, "magnitude"))
+	{
+		ThrowTarget(iClient, iTarget, fDirection, g_Items[iItem].fValue);
+
+		return;
+	}
+
+	// Chaos: an eruption that sets fire to everyone standing near where the player aims.
+	if (StrEqual(sPower, "chaos"))
+	{
+		float fVictim[3];
+
+		TE_SetupBeamRingPoint(fEnd, 10.0, g_Items[iItem].fValue * 2.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 1.0, 12.0, 0.0, iColor, 10, 0);
+		TE_SendToAll();
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i) || Cel_GetNoKill(i))
+			{
+				continue;
+			}
+
+			GetClientAbsOrigin(i, fVictim);
+
+			if (GetVectorDistance(fVictim, fEnd) <= g_Items[iItem].fValue)
+			{
+				IgniteEntity(i, g_Items[iItem].fDuration);
+			}
+		}
+
+		return;
+	}
+
+	if (StrEqual(sPower, "spray"))
+	{
+		return;
+	}
 
 	// Only players who can be hurt are affected, so players with !nokill enabled are left alone.
 	if (iTarget < 1 || iTarget > MaxClients || !IsClientInGame(iTarget) || !IsPlayerAlive(iTarget) || Cel_GetNoKill(iTarget))
@@ -1684,15 +1995,285 @@ void FireEmblemShot(int iClient, int iItem)
 		return;
 	}
 
-	if (bFire)
+	if (StrEqual(sPower, "shot"))
+	{
+		if (g_Items[iItem].fValue > 0.0)
+		{
+			SDKHooks_TakeDamage(iTarget, iClient, iClient, g_Items[iItem].fValue, g_Items[iItem].iDamageType);
+		}
+
+		if (g_Items[iItem].fIgnite > 0.0)
+		{
+			IgniteEntity(iTarget, g_Items[iItem].fIgnite);
+		}
+	} else if (StrEqual(sPower, "fire"))
 	{
 		IgniteEntity(iTarget, g_Items[iItem].fDuration);
-	} else {
+	} else if (StrEqual(sPower, "blizzard"))
+	{
 		g_fFrozenUntil[iTarget] = GetGameTime() + g_Items[iItem].fDuration;
 		g_bFrozenTint[iTarget] = true;
 
 		SetEntityRenderColor(iTarget, 90, 160, 255, 255);
+	} else if (StrEqual(sPower, "shock"))
+	{
+		SDKHooks_TakeDamage(iTarget, iClient, iClient, g_Items[iItem].fValue, DMG_SHOCK);
+	} else if (StrEqual(sPower, "push"))
+	{
+		float fPush[3];
+
+		fPush[0] = fDirection[0] * g_Items[iItem].fValue;
+		fPush[1] = fDirection[1] * g_Items[iItem].fValue;
+		fPush[2] = fDirection[2] * g_Items[iItem].fValue + 250.0;
+
+		TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fPush);
 	}
+}
+
+// Right click with the emblem in hand.
+void SecondaryEmblemPower(int iClient, int iItem)
+{
+	char sPower[24];
+	float fAngles[3], fDirection[3], fEnd[3], fStart[3], fVelocity[3];
+	int iColor[4], iTarget = -1;
+
+	strcopy(sPower, sizeof(sPower), g_Items[iItem].sPower);
+
+	// Pink: heals the holder.
+	if (StrEqual(sPower, "medic"))
+	{
+		if (GetClientHealth(iClient) < 100)
+		{
+			int iHealth = GetClientHealth(iClient) + RoundToFloor(g_Items[iItem].fValue * 2.0);
+
+			SetEntityHealth(iClient, iHealth > 100 ? 100 : iHealth);
+
+			EmitSoundToAll(SOUND_HEAL, iClient);
+		}
+
+		return;
+	}
+
+	// Demon: slams the holder straight down.
+	if (StrEqual(sPower, "demon"))
+	{
+		if (!(GetEntityFlags(iClient) & FL_ONGROUND))
+		{
+			GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fVelocity);
+
+			fVelocity[2] = -1000.0;
+
+			TeleportEntity(iClient, NULL_VECTOR, NULL_VECTOR, fVelocity);
+		}
+
+		return;
+	}
+
+	if (!StrEqual(sPower, "magnitude") && !StrEqual(sPower, "portal"))
+	{
+		return;
+	}
+
+	GetClientEyePosition(iClient, fStart);
+	GetClientEyeAngles(iClient, fAngles);
+
+	GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+	fEnd[0] = fStart[0] + fDirection[0] * g_Items[iItem].fRange;
+	fEnd[1] = fStart[1] + fDirection[1] * g_Items[iItem].fRange;
+	fEnd[2] = fStart[2] + fDirection[2] * g_Items[iItem].fRange;
+
+	Handle hTrace = TR_TraceRayFilterEx(fStart, fEnd, MASK_SHOT, RayType_EndPoint, Filter_NotSelf, iClient);
+
+	if (TR_DidHit(hTrace))
+	{
+		TR_GetEndPosition(fEnd, hTrace);
+
+		iTarget = TR_GetEntityIndex(hTrace);
+	}
+
+	CloseHandle(hTrace);
+
+	if (StrEqual(sPower, "portal"))
+	{
+		// The second portal is drawn in the opposite color of the first.
+		iColor[0] = 255 - g_Items[iItem].iBeamColor[0];
+		iColor[1] = 255 - g_Items[iItem].iBeamColor[1];
+		iColor[2] = 255 - g_Items[iItem].iBeamColor[2];
+		iColor[3] = 255;
+
+		SetPortal(iClient, 1, fEnd, fDirection, iColor);
+
+		return;
+	}
+
+	// Magnitude: pulls the target towards the holder.
+	ThrowTarget(iClient, iTarget, fDirection, -200.0);
+}
+
+void ThrowTarget(int iClient, int iTarget, float fDirection[3], float fForce)
+{
+	float fVelocity[3];
+
+	if (iTarget < 1 || !IsValidEntity(iTarget))
+	{
+		return;
+	}
+
+	if (iTarget <= MaxClients)
+	{
+		if (!IsPlayerAlive(iTarget) || Cel_GetNoKill(iTarget))
+		{
+			return;
+		}
+
+		fVelocity[2] = 150.0;
+	} else {
+		// Another player's build is never touched, and frozen props do not move anyway.
+		if (GetEntityMoveType(iTarget) != MOVETYPE_VPHYSICS || (Cel_IsEntity(iTarget) && !Cel_CheckOwner(iClient, iTarget)))
+		{
+			return;
+		}
+	}
+
+	fVelocity[0] += fDirection[0] * fForce;
+	fVelocity[1] += fDirection[1] * fForce;
+	fVelocity[2] += fDirection[2] * fForce;
+
+	TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fVelocity);
+}
+
+// Abyss: places one of the holder's two portals. Walking into one comes out of the other.
+void SetPortal(int iClient, int iPortal, float fEnd[3], float fDirection[3], int iColor[4])
+{
+	g_fPortal[iClient][iPortal][0] = fEnd[0] - fDirection[0] * 40.0;
+	g_fPortal[iClient][iPortal][1] = fEnd[1] - fDirection[1] * 40.0;
+	g_fPortal[iClient][iPortal][2] = fEnd[2] - fDirection[2] * 40.0;
+
+	g_bPortal[iClient][iPortal] = true;
+
+	TE_SetupBeamRingPoint(g_fPortal[iClient][iPortal], 4.0, 90.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.6, 8.0, 0.0, iColor, 10, 0);
+	TE_SendToAll();
+
+	EmitSoundToAll(SOUND_BLINK, iClient);
+}
+
+// Moves anyone standing in a portal to its other end, and keeps both ends visible.
+void ThinkPortals()
+{
+	float fOrigin[3], fDest[3];
+	int iBlue[4] = { 60, 160, 255, 255 }, iPurple[4] = { 170, 60, 255, 255 };
+
+	for (int iOwner = 1; iOwner <= MaxClients; iOwner++)
+	{
+		if (!g_bPortal[iOwner][0] || !g_bPortal[iOwner][1])
+		{
+			continue;
+		}
+
+		if (g_iTick % 5 == 0)
+		{
+			TE_SetupBeamRingPoint(g_fPortal[iOwner][0], 70.0, 72.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 1.05, 6.0, 0.0, iBlue, 10, 0);
+			TE_SendToAll();
+
+			TE_SetupBeamRingPoint(g_fPortal[iOwner][1], 70.0, 72.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 1.05, 6.0, 0.0, iPurple, 10, 0);
+			TE_SendToAll();
+		}
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (!IsClientInGame(i) || !IsPlayerAlive(i) || GetGameTime() < g_fPortalWait[i])
+			{
+				continue;
+			}
+
+			GetClientAbsOrigin(i, fOrigin);
+
+			fOrigin[2] += 36.0;
+
+			for (int iPortal = 0; iPortal < 2; iPortal++)
+			{
+				if (GetVectorDistance(fOrigin, g_fPortal[iOwner][iPortal]) > 48.0)
+				{
+					continue;
+				}
+
+				fDest[0] = g_fPortal[iOwner][1 - iPortal][0];
+				fDest[1] = g_fPortal[iOwner][1 - iPortal][1];
+				fDest[2] = g_fPortal[iOwner][1 - iPortal][2] - 30.0;
+
+				// A short wait stops the player bouncing straight back through.
+				g_fPortalWait[i] = GetGameTime() + 2.0;
+
+				TeleportEntity(i, fDest, NULL_VECTOR, NULL_VECTOR);
+
+				EmitSoundToAll(SOUND_BLINK, i);
+
+				break;
+			}
+		}
+	}
+}
+
+// Teleports the player to where they are aiming, if they fit there.
+void BlinkPlayer(int iClient, float fStart[3], float fDirection[3], float fEnd[3], int iColor[4])
+{
+	float fDest[3], fMaxs[3], fMins[3], fOrigin[3];
+
+	GetClientAbsOrigin(iClient, fOrigin);
+	GetClientMins(iClient, fMins);
+	GetClientMaxs(iClient, fMaxs);
+
+	// Step back from the surface that was hit and stand on the eye line.
+	fDest[0] = fEnd[0] - fDirection[0] * 40.0;
+	fDest[1] = fEnd[1] - fDirection[1] * 40.0;
+	fDest[2] = fEnd[2] - fDirection[2] * 40.0 - (fStart[2] - fOrigin[2]) + 8.0;
+
+	Handle hTrace = TR_TraceHullFilterEx(fDest, fDest, fMins, fMaxs, MASK_PLAYERSOLID, Filter_NotSelf, iClient);
+
+	bool bBlocked = TR_DidHit(hTrace);
+
+	CloseHandle(hTrace);
+
+	if (bBlocked || TR_PointOutsideWorld(fDest))
+	{
+		EmitSoundToClient(iClient, SOUND_DENY);
+
+		// The cooldown is given back when the blink fails.
+		g_fNextPower[iClient] = 0.0;
+
+		return;
+	}
+
+	TE_SetupBeamRingPoint(fOrigin, 60.0, 4.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.4, 5.0, 0.0, iColor, 10, 0);
+	TE_SendToAll();
+
+	TeleportEntity(iClient, fDest, NULL_VECTOR, NULL_VECTOR);
+
+	TE_SetupBeamRingPoint(fDest, 4.0, 60.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.4, 5.0, 0.0, iColor, 10, 0);
+	TE_SendToAll();
+
+	EmitSoundToAll(SOUND_BLINK, iClient);
+}
+
+// Resist emblem: the holder takes less damage.
+public Action Hook_PlayerTakeDamage(int iVictim, int &iAttacker, int &iInflictor, float &fDamage, int &iDamageType)
+{
+	if (iVictim < 1 || iVictim > MaxClients || !g_bHoldingGravGun[iVictim])
+	{
+		return Plugin_Continue;
+	}
+
+	int iItem = g_iActiveEmblem[iVictim];
+
+	if (iItem == -1 || !StrEqual(g_Items[iItem].sPower, "resist"))
+	{
+		return Plugin_Continue;
+	}
+
+	fDamage *= g_Items[iItem].fValue;
+
+	return Plugin_Changed;
 }
 
 public bool Filter_NotSelf(int iEntity, int iContentsMask, any aData)
@@ -1755,6 +2336,11 @@ void CreateHatEntity(int iClient)
 
 	DispatchKeyValue(iHat, "model", g_Items[iItem].sModel);
 	DispatchKeyValue(iHat, "solid", "0");
+	char sSkin[16];
+
+	IntToString(g_Items[iItem].iSkin, sSkin, sizeof(sSkin));
+
+	DispatchKeyValue(iHat, "skin", sSkin);
 	DispatchKeyValue(iHat, "classname", "cel_hat_worn");
 	DispatchKeyValueFloat(iHat, "modelscale", g_Items[iItem].fScale);
 
@@ -2043,6 +2629,12 @@ bool IsRealClient(int iClient)
 
 void ResetClient(int iClient)
 {
+	g_bCloaked[iClient] = false;
+	g_bGravityManaged[iClient] = false;
+	g_bPortal[iClient][0] = false;
+	g_bPortal[iClient][1] = false;
+	g_fNextSecondary[iClient] = 0.0;
+	g_fPortalWait[iClient] = 0.0;
 	g_bFrozenTint[iClient] = false;
 	g_bHoldingGravGun[iClient] = false;
 	g_bSpeedManaged[iClient] = false;

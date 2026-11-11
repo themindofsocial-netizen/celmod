@@ -15,16 +15,36 @@
 //   handscale   Size of the copy other players see in the owner's right hand.
 //   handoffset  "forward left up" from the right hand, to line the copy up with the hand.
 //   handangles  "pitch yaw roll" of the copy relative to the hand.
-//   power       fire      Primary fire shoots a flame that ignites a player.  (cooldown, duration, range)
-//               blizzard  Primary fire shoots ice that slows a player.        (cooldown, duration, range)
+//   power       Used with primary fire, which can be held down (cooldown and range apply to all):
+//               shot      Hurts a player. value = damage, dmgtype = burn/drown/poison/shock/dissolve/
+//                         energy/generic, ignite = seconds the player is set on fire (optional).
+//               spray     A harmless beam.
+//               medic     Heals the player you aim at by "value". Right click heals you.
+//               magnitude Throws loose physics props and players. value = force. Right click pulls.
+//               portal    Places a portal. Right click places the other one; walk in to cross.
+//               chaos     Sets fire to players within "value" units of where you aim for "duration".
+//               blast     Explosion where you aim. value = magnitude.
+//               demon     Purple burst where you aim. Right click in the air slams you down.
+//               blink     Teleports you to where you aim.
+//               Passive powers:
 //               speed     Run faster. value = speed multiplier.
+//               sprint    Sprint never runs out.
+//               gravity   Changes your gravity. value = multiplier (0.5 = half).
 //               jump      Jump higher. value = upward jump speed (a normal jump is about 200).
+//               feather   Fall slowly. value = fastest falling speed.
 //               heal      Regenerate health. value = health per second.
+//               armor     Regenerate suit power. value = suit power per second.
+//               resist    Take less damage. value = damage multiplier (0.5 = half).
+//               cloak     Turn translucent. value = how visible you stay (0 to 255).
+//               drain     Hurts its own holder. value = damage per second.
 //               gold      Earn money. value = CL per minute while enabled.
 //               none      Cosmetic only.
+//   speed       Any emblem can also carry a speed multiplier, on top of its power.
+//   beamcolor   "R G B A" color of a shot power's beam. Defaults to "color".
 //   Powers only work while the emblem is enabled and the gravity gun is the weapon in hand.
 //
 // Hat keys:
+//   skin        Skin number of the model.
 //   offset      "forward left up" from the player's eyes.
 //   angles      "pitch yaw roll" relative to the player's head.
 //   scale       Model scale.
@@ -36,42 +56,18 @@
 		{
 			"name"			"Fire"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"3"
-			"color"			"255 255 255 255"
+			"skin"			"0"
+			"color"			"255 0 0 255"
 			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
-			"power"			"fire"
-			"cooldown"		"2.0"
-			"duration"		"5.0"
+			"power"			"shot"
+			"value"			"3"
+			"cooldown"		"0.15"
 			"range"			"900"
-			"dropweight"	"20"
-		}
-		"speed"
-		{
-			"name"			"Speed"
-			"model"			"models/celmod/phys8.mdl"
-			"skin"			"4"
-			"color"			"255 255 255 255"
-			"handscale"		"1.0"
-			"handoffset"	"0 0 0"
-			"handangles"	"0 0 0"
-			"power"			"speed"
-			"value"			"1.6"
-			"dropweight"	"25"
-		}
-		"jump"
-		{
-			"name"			"Jump"
-			"model"			"models/celmod/phys8.mdl"
-			"skin"			"7"
-			"color"			"255 255 255 255"
-			"handscale"		"1.0"
-			"handoffset"	"0 0 0"
-			"handangles"	"0 0 0"
-			"power"			"jump"
-			"value"			"520"
-			"dropweight"	"25"
+			"dmgtype"		"burn"
+			"ignite"		"1.0"
+			"dropweight"	"15"
 		}
 		"blizzard"
 		{
@@ -82,31 +78,356 @@
 			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
-			"power"			"blizzard"
-			"cooldown"		"4.0"
-			"duration"		"4.0"
+			"power"			"shot"
+			"value"			"3"
+			"cooldown"		"0.15"
 			"range"			"900"
-			"dropweight"	"10"
+			"dmgtype"		"drown"
+			"beamcolor"		"180 220 255 255"
+			"dropweight"	"12"
 		}
-		"health"
+		"water"
 		{
-			"name"			"Health"
+			"name"			"Water"
 			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
+			"color"			"0 0 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"3"
+			"cooldown"		"0.15"
+			"range"			"700"
+			"dmgtype"		"drown"
+			"dropweight"	"12"
+		}
+		"energy"
+		{
+			"name"			"Energy"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"5"
+			"color"			"0 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"5"
+			"cooldown"		"0.15"
+			"range"			"1200"
+			"dmgtype"		"dissolve"
+			"dropweight"	"8"
+		}
+		"laser"
+		{
+			"name"			"Lazer"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"7"
+			"color"			"255 30 30 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"4"
+			"cooldown"		"0.1"
+			"range"			"2000"
+			"dmgtype"		"energy"
+			"ignite"		"1.0"
+			"dropweight"	"6"
+		}
+		"plasma"
+		{
+			"name"			"Plasma"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"10"
+			"color"			"200 200 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"5"
+			"cooldown"		"0.1"
+			"range"			"2000"
+			"dmgtype"		"energy"
+			"dropweight"	"6"
+		}
+		"prism"
+		{
+			"name"			"Prism"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"13"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
-			"power"			"heal"
-			"value"			"2"
+			"power"			"shot"
+			"value"			"4"
+			"cooldown"		"0.1"
+			"range"			"2000"
+			"dmgtype"		"energy"
+			"beamcolor"		"255 0 255 255"
+			"dropweight"	"5"
+		}
+		"rainbow"
+		{
+			"name"			"Rainbow"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"3"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"spray"
+			"cooldown"		"0.1"
+			"range"			"2000"
+			"beamcolor"		"255 255 0 255"
+			"dropweight"	"6"
+		}
+		"smog"
+		{
+			"name"			"Smog"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"5"
+			"color"			"50 50 50 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"3"
+			"cooldown"		"0.5"
+			"range"			"500"
+			"dmgtype"		"poison"
+			"beamcolor"		"150 150 150 255"
+			"dropweight"	"10"
+		}
+		"grey"
+		{
+			"name"			"Grey"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"170 170 170 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"spray"
+			"cooldown"		"0.15"
+			"range"			"700"
+			"beamcolor"		"70 70 70 255"
+			"dropweight"	"10"
+		}
+		"error_red"
+		{
+			"name"			"Error (Red)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"4"
+			"color"			"255 50 50 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"25"
+			"cooldown"		"1.5"
+			"range"			"3000"
+			"dropweight"	"4"
+		}
+		"error_blue"
+		{
+			"name"			"Error (Blue)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"4"
+			"color"			"0 0 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"50"
+			"cooldown"		"1.5"
+			"range"			"3000"
+			"dropweight"	"3"
+		}
+		"error_green"
+		{
+			"name"			"Error (Green)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"4"
+			"color"			"0 255 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"shot"
+			"value"			"75"
+			"cooldown"		"1.5"
+			"range"			"3000"
+			"dropweight"	"2"
+		}
+		"speed"
+		{
+			"name"			"Speed"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"127 0 127 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"speed"
+			"value"			"1.4"
 			"dropweight"	"15"
+		}
+		"peach"
+		{
+			"name"			"Peach"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 200 150 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"sprint"
+			"dropweight"	"12"
+		}
+		"cloud"
+		{
+			"name"			"Cloud"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"8"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"gravity"
+			"value"			"0.536"
+			"dropweight"	"12"
+		}
+		"magnitude"
+		{
+			"name"			"Magnitude"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"4"
+			"color"			"0 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"magnitude"
+			"value"			"1000"
+			"cooldown"		"0.3"
+			"range"			"2000"
+			"speed"			"1.5"
+			"dropweight"	"6"
+		}
+		"demon"
+		{
+			"name"			"Demon"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"5"
+			"color"			"30 0 30 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"demon"
+			"cooldown"		"0.5"
+			"range"			"1000"
+			"speed"			"1.2"
+			"beamcolor"		"200 0 255 255"
+			"dropweight"	"6"
+		}
+		"spooky"
+		{
+			"name"			"Spooky"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"8"
+			"color"			"100 255 100 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"cloak"
+			"value"			"100"
+			"speed"			"1.5"
+			"dropweight"	"6"
+		}
+		"pink"
+		{
+			"name"			"Pink"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 100 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"medic"
+			"value"			"5"
+			"cooldown"		"0.25"
+			"range"			"1500"
+			"dropweight"	"10"
+		}
+		"abyss"
+		{
+			"name"			"Abyss"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"3"
+			"color"			"0 30 30 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"portal"
+			"cooldown"		"1.0"
+			"range"			"10000"
+			"beamcolor"		"0 100 0 255"
+			"dropweight"	"4"
+		}
+		"chaos"
+		{
+			"name"			"Chaos"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"6"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"chaos"
+			"value"			"200"
+			"duration"		"5.0"
+			"cooldown"		"15.0"
+			"range"			"600"
+			"beamcolor"		"255 120 0 255"
+			"dropweight"	"3"
+		}
+		"solar"
+		{
+			"name"			"Solar"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 255 200 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"blast"
+			"value"			"80"
+			"cooldown"		"4.0"
+			"range"			"1500"
+			"dropweight"	"3"
+		}
+		"nuke"
+		{
+			"name"			"Nuke"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"0 0 80 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"blast"
+			"value"			"200"
+			"cooldown"		"10.0"
+			"range"			"3000"
+			"beamcolor"		"80 80 255 255"
+			"dropweight"	"0"
 		}
 		"gold"
 		{
 			"name"			"Gold"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"1"
-			"color"			"255 255 255 255"
+			"skin"			"16"
+			"color"			"255 200 52 255"
 			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
@@ -114,14 +435,142 @@
 			"value"			"250"
 			"dropweight"	"0"
 		}
+		"corruption"
+		{
+			"name"			"Corruption"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"90 90 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"drain"
+			"value"			"1"
+			"dropweight"	"2"
+		}
+		"phazon"
+		{
+			"name"			"Phazon"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"5"
+			"color"			"70 70 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"none"
+			"dropweight"	"0"
+		}
+		"420"
+		{
+			"name"			"420"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"13"
+			"color"			"255 255 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"none"
+			"dropweight"	"3"
+		}
+		"black"
+		{
+			"name"			"Black"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"0 0 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"none"
+			"dropweight"	"8"
+		}
+		"white"
+		{
+			"name"			"White"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"power"			"none"
+			"dropweight"	"8"
+		}
 	}
-	
+
 	"Hats"
 	{
+		"yearhat2009"
+		{
+			"name"			"2009 Hat"
+			"model"			"models/celmod/yearhat.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 255"
+			"offset"		"-4 0.5 6.5"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"2"
+		}
+		"yearhat2010"
+		{
+			"name"			"2010 Hat"
+			"model"			"models/celmod/yearhat.mdl"
+			"skin"			"1"
+			"color"			"255 255 255 255"
+			"offset"		"-4 0.5 6.5"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"2"
+		}
+		"yearhat2011"
+		{
+			"name"			"2011 Hat"
+			"model"			"models/celmod/yearhat.mdl"
+			"skin"			"2"
+			"color"			"255 255 255 255"
+			"offset"		"-4 0.5 6.5"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"2"
+		}
+		"delaware"
+		{
+			"name"			"Delaware"
+			"model"			"models/celmod/delaware.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 255"
+			"offset"		"-1 0 6"
+			"angles"		"0 0 0"
+			"scale"			"0.6"
+			"dropweight"	"1"
+		}
+		"partyhat"
+		{
+			"name"			"Party Hat"
+			"model"			"models/celmod/partyhat.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 255"
+			"offset"		"-3 0 4"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"3"
+		}
+		"santahat"
+		{
+			"name"			"Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"2"
+		}
 		"cone"
 		{
 			"name"			"Traffic Cone"
 			"model"			"models/props_junk/trafficcone001a.mdl"
+			"skin"			"0"
 			"color"			"255 255 255 255"
 			"offset"		"-3 0 14"
 			"angles"		"0 0 0"
@@ -132,16 +581,18 @@
 		{
 			"name"			"Cooking Pot"
 			"model"			"models/props_c17/metalpot001a.mdl"
+			"skin"			"0"
 			"color"			"255 255 255 255"
 			"offset"		"-3 0 7"
 			"angles"		"180 0 0"
-			"scale"			"1.0"
+			"scale"			"1"
 			"dropweight"	"4"
 		}
 		"melon"
 		{
 			"name"			"Melon"
 			"model"			"models/props_junk/watermelon01.mdl"
+			"skin"			"0"
 			"color"			"255 255 255 255"
 			"offset"		"-3 0 9"
 			"angles"		"0 0 0"

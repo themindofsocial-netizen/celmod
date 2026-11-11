@@ -34,3 +34,8 @@
 		 - A free emblem can appear in your build when you load it, once you have been building for a few days.
 		 - Fixed !buy and !sell. The price and owner now show on the HUD when looking at something for sale.
 		 - Added !give to give an entity to another player and !trade to swap entities with another player.
+	 - 11/12/26: Emblems now match the original set: 30 emblems using the emblem model, each with its own color, skin and power.
+		 - Added !thirdperson and !firstperson so you can see your own emblem and hat.
+		 - Added the yearhat, delaware, partyhat and santahat hats.
+		 - Added !cl to drop money, !moveto, !turn, !noclip, !fire, !weps, !stuck, !clear, !landslay and !landkick.
+		 - Added fire, cland and landskin to the shop.
