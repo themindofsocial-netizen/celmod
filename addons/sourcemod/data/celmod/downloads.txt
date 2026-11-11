@@ -1,11 +1,11 @@
 materials\celmod\cm_overlay2.vmt
 materials\celmod\cm_overlay2.vtf
-models/celmod/bhys8.dx80.vtx
-models/celmod/bhys8.dx90.vtx
-models/celmod/bhys8.mdl
-models/celmod/bhys8.phy
-models/celmod/bhys8.sw.vtx
-models/celmod/bhys8.vvd
+models/celmod/phys8.dx80.vtx
+models/celmod/phys8.dx90.vtx
+models/celmod/phys8.mdl
+models/celmod/phys8.phy
+models/celmod/phys8.sw.vtx
+models/celmod/phys8.vvd
 materials/models/celmod/emblem3/s1.vmt
 materials/models/celmod/emblem3/s10.vmt
 materials/models/celmod/emblem3/s11.vmt

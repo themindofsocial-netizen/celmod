@@ -10,7 +10,7 @@
 //   dropweight  Chance weight in emblem drops and "random" rewards. 0 = never drops.
 //
 // Emblem keys:
-//   skin        Skin number of the model. models/celmod/bhys8.mdl has 15 (0 to 14, materials s1 to s15).
+//   skin        Skin number of the model. models/celmod/phys8.mdl has 15 (0 to 14, materials s1 to s15).
 //   scale       Size of the emblem cel in the world. The collision box does not scale with it.
 //   handscale   Size of the copy other players see in the owner's right hand.
 //   handoffset  "forward left up" from the right hand, to line the copy up with the hand.
@@ -35,10 +35,10 @@
 		"fire"
 		{
 			"name"			"Fire"
-			"model"			"models/celmod/bhys8.mdl"
+			"model"			"models/celmod/phys8.mdl"
 			"skin"			"3"
 			"color"			"255 255 255 255"
-			"handscale"		"0.12"
+			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"power"			"fire"
@@ -50,10 +50,10 @@
 		"speed"
 		{
 			"name"			"Speed"
-			"model"			"models/celmod/bhys8.mdl"
+			"model"			"models/celmod/phys8.mdl"
 			"skin"			"4"
 			"color"			"255 255 255 255"
-			"handscale"		"0.12"
+			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"power"			"speed"
@@ -63,10 +63,10 @@
 		"jump"
 		{
 			"name"			"Jump"
-			"model"			"models/celmod/bhys8.mdl"
+			"model"			"models/celmod/phys8.mdl"
 			"skin"			"7"
 			"color"			"255 255 255 255"
-			"handscale"		"0.12"
+			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"power"			"jump"
@@ -76,10 +76,10 @@
 		"blizzard"
 		{
 			"name"			"Blizzard"
-			"model"			"models/celmod/bhys8.mdl"
+			"model"			"models/celmod/phys8.mdl"
 			"skin"			"2"
 			"color"			"255 255 255 255"
-			"handscale"		"0.12"
+			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"power"			"blizzard"
@@ -91,10 +91,10 @@
 		"health"
 		{
 			"name"			"Health"
-			"model"			"models/celmod/bhys8.mdl"
+			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
 			"color"			"255 255 255 255"
-			"handscale"		"0.12"
+			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"power"			"heal"
@@ -104,10 +104,10 @@
 		"gold"
 		{
 			"name"			"Gold"
-			"model"			"models/celmod/bhys8.mdl"
+			"model"			"models/celmod/phys8.mdl"
 			"skin"			"1"
 			"color"			"255 255 255 255"
-			"handscale"		"0.12"
+			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"power"			"gold"
