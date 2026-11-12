@@ -131,6 +131,7 @@ int g_iBoothRef = INVALID_ENT_REFERENCE;
 char g_sBoothModel[PLATFORM_MAX_PATH];
 char g_sCanisterModel[PLATFORM_MAX_PATH];
 int g_iCelWepItem[MAXPLAYERS + 1];
+int g_iShownGunRef[MAXPLAYERS + 1];
 int g_iFireballItem[MAXENTITIES + 1];
 int g_iFireballOwner[MAXENTITIES + 1];
 int g_iMoneyBox[MAXENTITIES + 1];
@@ -311,7 +312,8 @@ public void OnPluginStart()
 	RegAdminCmd("v_delreward", Command_DelReward, ADMFLAG_SLAY, "|CelMod| Removes the reward pickup you are looking at.");
 	RegAdminCmd("v_emblemdrop", Command_EmblemDrop, ADMFLAG_SLAY, "|CelMod| Starts an emblem drop.");
 	RegAdminCmd("v_giveitem", Command_GiveItem, ADMFLAG_SLAY, "|CelMod| Gives an emblem or hat to a player.");
-	RegAdminCmd("v_tune", Command_Tune, ADMFLAG_SLAY, "|CelMod| Adjusts where your held emblem or worn hat sits, live, and prints the values for collectibles.txt.");
+	RegAdminCmd("v_tune", Command_Tune, ADMFLAG_SLAY, "|CelMod| Sets where held emblems, celweps or your hat sit, and saves it.");
+	RegAdminCmd("v_nudge", Command_Nudge, ADMFLAG_SLAY, "|CelMod| Moves where held emblems, celweps or your hat sit a little, and saves it.");
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
 	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
 	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
@@ -798,12 +800,172 @@ public Action Command_Inventory(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
-// Moves the held emblem or the worn hat while you watch, so the right values can be found without editing
-// the file and changing map each time. Nothing is saved: the printed lines go into collectibles.txt.
+// Where held models and hats sit is tuned in game and saved to data/celmod/tuning.txt, which overrides
+// collectibles.txt. Held models are tuned per model (every emblem with the same model is held the same way),
+// hats per hat.
+void TuningPath(char[] sPath, int iMaxLength)
+{
+	BuildPath(Path_SM, sPath, iMaxLength, "data/celmod/tuning.txt");
+}
+
+void ApplyTuning()
+{
+	char sKey[PLATFORM_MAX_PATH], sPath[PLATFORM_MAX_PATH];
+
+	TuningPath(sPath, sizeof(sPath));
+
+	KeyValues kvTuning = new KeyValues("Tuning");
+
+	if (!kvTuning.ImportFromFile(sPath))
+	{
+		delete kvTuning;
+
+		return;
+	}
+
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (g_Items[i].iKind == KIND_HAT)
+		{
+			Format(sKey, sizeof(sKey), "hat %s", g_Items[i].sId);
+
+			if (kvTuning.JumpToKey(sKey, false))
+			{
+				kvTuning.GetVector("offset", g_Items[i].fOffset, g_Items[i].fOffset);
+				kvTuning.GetVector("angles", g_Items[i].fAngles, g_Items[i].fAngles);
+				kvTuning.Rewind();
+			}
+
+			continue;
+		}
+
+		HeldModel(i, sKey, sizeof(sKey));
+
+		if (kvTuning.JumpToKey(sKey, false))
+		{
+			kvTuning.GetVector("offset", g_Items[i].fHandOffset, g_Items[i].fHandOffset);
+			kvTuning.GetVector("angles", g_Items[i].fHandAngles, g_Items[i].fHandAngles);
+			kvTuning.Rewind();
+		}
+	}
+
+	delete kvTuning;
+}
+
+// The model an item is shown with in the hand.
+void HeldModel(int iItem, char[] sModel, int iMaxLength)
+{
+	strcopy(sModel, iMaxLength, g_Items[iItem].sHandModel[0] != '\0' ? g_Items[iItem].sHandModel : g_Items[iItem].sModel);
+}
+
+// Sets the position and angles of what the player holds (bHat false) or wears, saves them, and shows the change.
+void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
+{
+	char sKey[PLATFORM_MAX_PATH], sModel[PLATFORM_MAX_PATH], sPath[PLATFORM_MAX_PATH];
+
+	int iItem = bHat ? g_iActiveHat[iClient] : g_iHandItem[iClient];
+
+	if (bHat)
+	{
+		g_Items[iItem].fOffset = fOffset;
+		g_Items[iItem].fAngles = fAngles;
+
+		Format(sKey, sizeof(sKey), "hat %s", g_Items[iItem].sId);
+	} else {
+		HeldModel(iItem, sModel, sizeof(sModel));
+
+		for (int i = 0; i < g_iItemCount; i++)
+		{
+			char sOther[PLATFORM_MAX_PATH];
+
+			if (g_Items[i].iKind == KIND_HAT)
+			{
+				continue;
+			}
+
+			HeldModel(i, sOther, sizeof(sOther));
+
+			if (StrEqual(sOther, sModel, false))
+			{
+				g_Items[i].fHandOffset = fOffset;
+				g_Items[i].fHandAngles = fAngles;
+			}
+		}
+
+		strcopy(sKey, sizeof(sKey), sModel);
+	}
+
+	TuningPath(sPath, sizeof(sPath));
+
+	KeyValues kvTuning = new KeyValues("Tuning");
+
+	kvTuning.ImportFromFile(sPath);
+	kvTuning.JumpToKey(sKey, true);
+	kvTuning.SetVector("offset", fOffset);
+	kvTuning.SetVector("angles", fAngles);
+	kvTuning.Rewind();
+
+	if (!kvTuning.ExportToFile(sPath))
+	{
+		LogError("|CelMod| Could not write '%s'.", sPath);
+	}
+
+	delete kvTuning;
+
+	// Everyone holding or wearing it sees the change straight away.
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i))
+		{
+			continue;
+		}
+
+		if (bHat && g_iActiveHat[i] == iItem)
+		{
+			CreateHatEntity(i);
+		} else if (!bHat && g_bHeldShown[i])
+		{
+			RestoreWeapon(i);
+		}
+	}
+
+	Cel_ReplyToCommand(iClient, "Saved: offset {green}%.1f %.1f %.1f{default}  angles {green}%.0f %.0f %.0f{default}", fOffset[0], fOffset[1], fOffset[2], fAngles[0], fAngles[1], fAngles[2]);
+}
+
+// Checks there is something to tune and fills in its current values. Returns false with a message otherwise.
+bool GetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
+{
+	if (bHat)
+	{
+		if (g_iActiveHat[iClient] == -1)
+		{
+			Cel_ReplyToCommand(iClient, "Put a hat on first.");
+			return false;
+		}
+
+		fOffset = g_Items[g_iActiveHat[iClient]].fOffset;
+		fAngles = g_Items[g_iActiveHat[iClient]].fAngles;
+
+		return true;
+	}
+
+	if (!g_bHeldShown[iClient] || g_iHandItem[iClient] == -1)
+	{
+		Cel_ReplyToCommand(iClient, "Hold your gravity gun with an emblem enabled, or a celwep, first.");
+		return false;
+	}
+
+	fOffset = g_Items[g_iHandItem[iClient]].fHandOffset;
+	fAngles = g_Items[g_iHandItem[iClient]].fHandAngles;
+
+	return true;
+}
+
+// !tune <hand/hat> <forward> <left> <up> <pitch> <yaw> <roll>: sets every value at once.
 public Action Command_Tune(int iClient, int iArgs)
 {
-	char sArg[8][24];
-	float fValues[7];
+	char sArg[16];
+	float fAngles[3], fOffset[3];
 
 	if (!IsRealClient(iClient))
 	{
@@ -812,91 +974,85 @@ public Action Command_Tune(int iClient, int iArgs)
 
 	if (iArgs < 7)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]tune{default} <hand/hat> <forward> <left> <up> <pitch> <yaw> <roll> [scale]");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]tune{default} <hand/hat> <forward> <left> <up> <pitch> <yaw> <roll>. To move a little at a time: {green}[tag]nudge{default} <hand/hat> <forward/left/up/pitch/yaw/roll> <amount>");
 		return Plugin_Handled;
 	}
 
-	for (int i = 0; i < 8 && i < iArgs; i++)
-	{
-		GetCmdArg(i + 1, sArg[i], sizeof(sArg[]));
+	GetCmdArg(1, sArg, sizeof(sArg));
 
-		if (i > 0)
+	bool bHat = StrEqual(sArg, "hat", false);
+
+	if (!GetTuning(iClient, bHat, fOffset, fAngles))
+	{
+		return Plugin_Handled;
+	}
+
+	for (int i = 0; i < 6; i++)
+	{
+		GetCmdArg(i + 2, sArg, sizeof(sArg));
+
+		if (i < 3)
 		{
-			fValues[i - 1] = StringToFloat(sArg[i]);
+			fOffset[i] = StringToFloat(sArg);
+		} else {
+			fAngles[i - 3] = StringToFloat(sArg);
 		}
 	}
 
-	if (StrEqual(sArg[0], "hand", false))
+	SetTuning(iClient, bHat, fOffset, fAngles);
+
+	return Plugin_Handled;
+}
+
+// !nudge <hand/hat> <forward/left/up/pitch/yaw/roll> <amount>: moves one value by an amount.
+public Action Command_Nudge(int iClient, int iArgs)
+{
+	static const char sAxes[][] = { "forward", "left", "up", "pitch", "yaw", "roll" };
+	char sAmount[16], sAxis[16], sWhat[16];
+	float fAngles[3], fOffset[3];
+
+	if (!IsRealClient(iClient))
 	{
-		int iItem = g_iActiveEmblem[iClient];
-
-		if (iItem == -1)
-		{
-			Cel_ReplyToCommand(iClient, "Enable an emblem first.");
-			return Plugin_Handled;
-		}
-
-		// Every emblem that uses the same model is held the same way.
-		for (int i = 0; i < g_iItemCount; i++)
-		{
-			if (g_Items[i].iKind != KIND_EMBLEM || !StrEqual(g_Items[i].sModel, g_Items[iItem].sModel))
-			{
-				continue;
-			}
-
-			g_Items[i].fHandOffset[0] = fValues[0];
-			g_Items[i].fHandOffset[1] = fValues[1];
-			g_Items[i].fHandOffset[2] = fValues[2];
-			g_Items[i].fHandAngles[0] = fValues[3];
-			g_Items[i].fHandAngles[1] = fValues[4];
-			g_Items[i].fHandAngles[2] = fValues[5];
-
-			if (iArgs >= 8)
-			{
-				g_Items[i].fHandScale = fValues[6];
-			}
-		}
-
-		for (int i = 1; i <= MaxClients; i++)
-		{
-			if (IsClientInGame(i))
-			{
-				RestoreWeapon(i);
-			}
-		}
-
-		Cel_ReplyToCommand(iClient, "\"handoffset\" \"%.1f %.1f %.1f\"  \"handangles\" \"%.1f %.1f %.1f\"  \"handscale\" \"%.2f\"", fValues[0], fValues[1], fValues[2], fValues[3], fValues[4], fValues[5], g_Items[iItem].fHandScale);
-	} else {
-		int iItem = g_iActiveHat[iClient];
-
-		if (iItem == -1)
-		{
-			Cel_ReplyToCommand(iClient, "Put a hat on first.");
-			return Plugin_Handled;
-		}
-
-		g_Items[iItem].fOffset[0] = fValues[0];
-		g_Items[iItem].fOffset[1] = fValues[1];
-		g_Items[iItem].fOffset[2] = fValues[2];
-		g_Items[iItem].fAngles[0] = fValues[3];
-		g_Items[iItem].fAngles[1] = fValues[4];
-		g_Items[iItem].fAngles[2] = fValues[5];
-
-		if (iArgs >= 8)
-		{
-			g_Items[iItem].fScale = fValues[6];
-		}
-
-		for (int i = 1; i <= MaxClients; i++)
-		{
-			if (IsClientInGame(i) && g_iActiveHat[i] == iItem)
-			{
-				CreateHatEntity(i);
-			}
-		}
-
-		Cel_ReplyToCommand(iClient, "\"offset\" \"%.1f %.1f %.1f\"  \"angles\" \"%.1f %.1f %.1f\"  \"scale\" \"%.2f\"", fValues[0], fValues[1], fValues[2], fValues[3], fValues[4], fValues[5], g_Items[iItem].fScale);
+		return Plugin_Handled;
 	}
+
+	if (iArgs < 3)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]nudge{default} <hand/hat> <forward/left/up/pitch/yaw/roll> <amount>, e.g. {green}[tag]nudge hand up 2{default} or {green}[tag]nudge hand yaw -10{default}. Use {green}[tag]thirdperson{default} to watch.");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sWhat, sizeof(sWhat));
+	GetCmdArg(2, sAxis, sizeof(sAxis));
+	GetCmdArg(3, sAmount, sizeof(sAmount));
+
+	bool bHat = StrEqual(sWhat, "hat", false);
+
+	if (!GetTuning(iClient, bHat, fOffset, fAngles))
+	{
+		return Plugin_Handled;
+	}
+
+	for (int i = 0; i < sizeof(sAxes); i++)
+	{
+		if (!StrEqual(sAxis, sAxes[i], false))
+		{
+			continue;
+		}
+
+		if (i < 3)
+		{
+			fOffset[i] += StringToFloat(sAmount);
+		} else {
+			fAngles[i - 3] += StringToFloat(sAmount);
+		}
+
+		SetTuning(iClient, bHat, fOffset, fAngles);
+
+		return Plugin_Handled;
+	}
+
+	Cel_ReplyToCommand(iClient, "Choose one of: forward, left, up, pitch, yaw, roll.");
 
 	return Plugin_Handled;
 }
@@ -1517,6 +1673,34 @@ public Action Timer_Think(Handle hTimer)
 			iShow = g_iCelWepItem[i];
 		}
 
+		// Custom Guns celweps: their own world models are not made to sit in a hand, so the celwep model is put
+		// there instead. Its name is shown when it is switched to, as the weapon menu only says "cubemap".
+		int iGun = -1;
+
+		if (iWeapon > MaxClients)
+		{
+			GetEntityClassname(iWeapon, sClassname, sizeof(sClassname));
+
+			iGun = FindCustomGunItem(sClassname);
+		}
+
+		if (iGun != -1)
+		{
+			if (iShow == -1)
+			{
+				iShow = iGun;
+			}
+
+			if (g_iShownGunRef[i] != EntIndexToEntRef(iWeapon))
+			{
+				g_iShownGunRef[i] = EntIndexToEntRef(iWeapon);
+
+				Cel_SendHudMessage(i, 5, -1.0, 0.82, 255, 220, 0, 255, 0, 0.1, 0.4, 2.0, 0.0, g_Items[iGun].sName);
+			}
+		} else {
+			g_iShownGunRef[i] = INVALID_ENT_REFERENCE;
+		}
+
 		if (iShow != -1)
 		{
 			if (!g_bHeldShown[i] || g_iHandItem[i] != iShow || g_iModdedWeaponRef[i] != EntIndexToEntRef(iWeapon))
@@ -1969,6 +2153,9 @@ void LoadItems()
 	}
 
 	delete kvItems;
+
+	// Hand and hat positions saved in game with !tune and !nudge.
+	ApplyTuning();
 
 	// Players keep their active items across map changes, but item indexes can move if the file was edited.
 	for (int i = 1; i <= MaxClients; i++)
@@ -4665,6 +4852,7 @@ void ResetClient(int iClient)
 	g_iActiveHat[iClient] = -1;
 	g_iHatEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iLastButtons[iClient] = 0;
+	g_iShownGunRef[iClient] = INVALID_ENT_REFERENCE;
 
 	for (int i = 0; i < 3; i++)
 	{

@@ -81,3 +81,4 @@
 	 - 11/23/26: The Guess Booth shows three props again, is bigger, and Kleiner has his cone. The Power Booth hides as far from spawns and the Guess Booth as it can.
 	 - 11/24/26: Guess Booth props, Kleiner's cone and hats show again (they were scaled, and scaled models do not show). The Guess Booth is a little smaller.
 		 - The Power Booth hides in tucked away spots out of sight of spawns and the Guess Booth.
+	 - 11/25/26: Celweps are shown in your hand and their name appears when you switch to one. Admins can line up held emblems, celweps and hats in game with !nudge and !tune; it is saved.
