@@ -334,7 +334,7 @@ public int Native_CheckClientBalance(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1), iPrice = GetNativeCell(2);
 	
-	return (Cel_GetClientBalance(iClient) <= iPrice) ? false : true;
+	return (Cel_GetClientBalance(iClient) >= iPrice);
 }
 
 public int Native_CheckShopDB(Handle hPlugin, int iNumParams)
@@ -429,7 +429,7 @@ public int Native_IsEntityForSale(Handle hPlugin, int iNumParams)
 {
 	int iEntity = GetNativeCell(1);
 	
-	return (g_iEntityPrice[iEntity] > 1) ? false : true;
+	return (g_iEntityPrice[iEntity] > 0);
 }
 
 public int Native_SetClientBalance(Handle hPlugin, int iNumParams)

@@ -80,6 +80,22 @@ cm_exportproplist|Exports the prop list into a text or html file in 'data/celmod
 
 For the most current command list, [click here](https://raw.githubusercontent.com/rockzehh/celmod/beta/addons/sourcemod/data/celmod/exports/commandlist_export.txt).
 
+## Website Database (celmod-database)
+`celmod-database` shares live server data with the [|CelMod| website](https://github.com/rockzehh/celmod-website) through a MySQL/MariaDB database: who is online, playtime, balances, unlocks, props/cels spawned, map history and daily stats. It also delivers orders placed in the website shop - the server re-checks the price and balance in-game before charging, so balances stay server-side.
+
+Add a `"celmod"` entry to `addons/sourcemod/configs/databases.cfg` (MySQL driver) pointing at the same database the website uses. Tables are created automatically.
+
+ConVar | Default | Description
+--- | --- | ---
+cm_db_config|celmod|databases.cfg entry to use.
+cm_db_server_id|1|Unique ID for this server (match `server.id` in the website config).
+cm_db_address||Public ip:port shown on the website (auto-detected if empty).
+cm_db_heartbeat|15.0|Seconds between live status updates.
+cm_db_order_poll|5.0|Seconds between checks for web shop orders.
+cm_db_sample|300.0|Seconds between player count samples for the activity chart.
+
+`cm_db_status` (root admin) shows whether the database is connected.
+
 ## Additional Information
 This plugin is designed with Half-Life 2: Deathmatch in mind. This may work on other source games, but it is not officially tested. All of the plugins functions are open to other plugins using natives, thus making multiple plugins a breeze.
 

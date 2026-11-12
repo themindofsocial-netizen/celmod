@@ -290,7 +290,7 @@ native bool Cel_CheckPropCount(int iClient);
  */
 native bool Cel_CheckRenderFX(const int iEntity, const char[] sType);
 
-native bool Cel_CheckShopDB(char[] sCommand, int iPrice, char[] sDisplayText, int iMaxLength);
+native bool Cel_CheckShopDB(char[] sCommand, int &iPrice, char[] sDisplayText, int iMaxLength);
 
 /**
  * Validates an alias against the internal spawn database.
