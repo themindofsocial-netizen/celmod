@@ -1285,14 +1285,10 @@ public Action Timer_RestoreClient(Handle hTimer, any iUserId)
 		return Plugin_Stop;
 	}
 
-	Inv_GetString(iClient, "active_emblem", sId, sizeof(sId));
+	// Emblems start switched off on every join: the player presses E on one again to use it.
+	Inv_SetString(iClient, "active_emblem", "none");
 
-	int iItem = FindItem(KIND_EMBLEM, sId);
-
-	if (iItem != -1 && GetOwned(iClient, iItem) > 0)
-	{
-		g_iActiveEmblem[iClient] = iItem;
-	}
+	int iItem;
 
 	// Custom Guns celweps the player had taken.
 	for (int i = 0; i < g_iItemCount; i++)
@@ -4647,6 +4643,20 @@ public Action Command_PlayerModel(int iClient, int iArgs)
 // copies of one emblem into a single big emblem.
 public Action Timer_SpawnBooth(Handle hTimer)
 {
+	float fSpot[3];
+
+	// Anywhere in the map, floating in the air, as it was on the original server.
+	if (Cel_FindRandomMapSpot(false, 24.0, 64.0, fSpot))
+	{
+		fSpot[2] += 32.0;
+
+		SpawnPowerBooth(fSpot);
+
+		return Plugin_Stop;
+	}
+
+	LogError("|CelMod| No open spot was found for the Power Booth on this map. It is placed near a spawn point instead.");
+
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
 	float fOrigin[3];
 	int iPoints[128], iCount = 0, iEntity;

@@ -66,3 +66,5 @@
 		 - The Power Booth shows a menu: 2 Errors make a Blue Error, 2 Blue make a Green, and 5 of any emblem make a big one.
 		 - Player models can be admin only, and admins can give them with !givemodel.
 	 - 11/18/26: 58 new emblems have been added to the emblem pool, from Magma and Glacier to Rocket, Ghost, Vampire and Diamond.
+	 - 11/19/26: The Power Booth now appears floating somewhere random in the map, and the Guess Booth on open ground somewhere random, instead of in the spawn rooms.
+		 - Emblems are switched off when you join the server.

@@ -1386,6 +1386,228 @@ stock void Cel_ActivateEffect(int iEntity)
 	Cel_SetEffectActive(iEntity, !Cel_IsEffectActive(iEntity));
 }
 
+public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)
+{
+	return (iEntity == 0);
+}
+
+/**
+ * Finds a random open spot somewhere in the playable part of the map.
+ *
+ * The search covers the area around the map's spawn points (widened a long way, so it reaches the whole map but
+ * not the 3D skybox), and keeps the space a box of the given size needs clear of walls, props and water.
+ *
+ * @param bOnFloor    True: standing on flat ground. False: floating in the air somewhere above the ground.
+ * @param fHalfWidth  Half the width of the box that must fit.
+ * @param fHeight     Height of the box that must fit.
+ * @param fSpot       The spot found: the middle of the box's floor.
+ * @return            True if a spot was found.
+ */
+stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3])
+{
+	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
+	float fCamera[3], fGround[3], fMax[3], fMin[3], fOrigin[3], fTry[3];
+	bool bAny = false, bCamera = false;
+	int iEntity;
+
+	for (int i = 0; i < sizeof(sSpawns); i++)
+	{
+		iEntity = -1;
+
+		while ((iEntity = FindEntityByClassname(iEntity, sSpawns[i])) != -1)
+		{
+			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+			for (int k = 0; k < 3; k++)
+			{
+				if (!bAny || fOrigin[k] < fMin[k]) fMin[k] = fOrigin[k];
+				if (!bAny || fOrigin[k] > fMax[k]) fMax[k] = fOrigin[k];
+			}
+
+			bAny = true;
+		}
+	}
+
+	if (!bAny)
+	{
+		return false;
+	}
+
+	//The whole map, as far as it reaches from where players play, but kept inside the world.
+	float fWorldMin[3], fWorldMax[3];
+
+	GetEntPropVector(0, Prop_Data, "m_WorldMins", fWorldMin);
+	GetEntPropVector(0, Prop_Data, "m_WorldMaxs", fWorldMax);
+
+	for (int k = 0; k < 2; k++)
+	{
+		fMin[k] -= 4000.0;
+		fMax[k] += 4000.0;
+	}
+
+	fMin[2] -= 768.0;
+	fMax[2] += 2048.0;
+
+	for (int k = 0; k < 3; k++)
+	{
+		if (fMin[k] < fWorldMin[k]) fMin[k] = fWorldMin[k];
+		if (fMax[k] > fWorldMax[k]) fMax[k] = fWorldMax[k];
+	}
+
+	//The 3D skybox is a small room of real map somewhere off to the side; nothing goes in it.
+	iEntity = FindEntityByClassname(-1, "sky_camera");
+
+	if (iEntity != -1)
+	{
+		GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fCamera);
+
+		bCamera = true;
+	}
+
+	float fBoxMin[3], fBoxMax[3];
+
+	fBoxMin[0] = -fHalfWidth;
+	fBoxMin[1] = -fHalfWidth;
+	fBoxMin[2] = 4.0;
+	fBoxMax[0] = fHalfWidth;
+	fBoxMax[1] = fHalfWidth;
+	fBoxMax[2] = fHeight;
+
+	for (int iTry = 0; iTry < 400; iTry++)
+	{
+		for (int k = 0; k < 3; k++)
+		{
+			fTry[k] = GetRandomFloat(fMin[k], fMax[k]);
+		}
+
+		if (bCamera && GetVectorDistance(fTry, fCamera) < 2500.0)
+		{
+			continue;
+		}
+
+		if (TR_PointOutsideWorld(fTry) || (TR_GetPointContents(fTry) & (MASK_SOLID | MASK_WATER)))
+		{
+			continue;
+		}
+
+		//Drop straight down to the ground; the ground has to be the map itself, not a prop or the sky.
+		float fDown[3];
+
+		fDown = fTry;
+		fDown[2] -= 4096.0;
+
+		Handle hTrace = TR_TraceRayFilterEx(fTry, fDown, MASK_PLAYERSOLID, RayType_EndPoint, Cel_FilterWorldOnly, 0);
+
+		if (!TR_DidHit(hTrace) || (TR_GetSurfaceFlags(hTrace) & (SURF_SKY | SURF_SKY2D)))
+		{
+			CloseHandle(hTrace);
+			continue;
+		}
+
+		float fNormal[3];
+
+		TR_GetEndPosition(fGround, hTrace);
+		TR_GetPlaneNormal(hTrace, fNormal);
+
+		CloseHandle(hTrace);
+
+		if (fNormal[2] < 0.7)
+		{
+			continue;
+		}
+
+		fSpot = fGround;
+
+		if (!bOnFloor)
+		{
+			//Somewhere in the air above that ground, under whatever is overhead.
+			float fUp[3], fCeiling[3];
+
+			fUp = fGround;
+			fUp[2] += 4096.0;
+
+			hTrace = TR_TraceRayFilterEx(fGround, fUp, MASK_PLAYERSOLID, RayType_EndPoint, Cel_FilterWorldOnly, 0);
+
+			fCeiling = fUp;
+
+			if (TR_DidHit(hTrace))
+			{
+				TR_GetEndPosition(fCeiling, hTrace);
+			}
+
+			CloseHandle(hTrace);
+
+			float fRoom = fCeiling[2] - fGround[2] - fHeight - 16.0;
+
+			if (fRoom < 64.0)
+			{
+				continue;
+			}
+
+			fSpot[2] = fGround[2] + GetRandomFloat(64.0, (fRoom < 480.0) ? fRoom : 480.0);
+		} else {
+			//A flat floor: the ground under every corner is about as high as the middle.
+			bool bFlat = true;
+
+			for (int c = 0; c < 4 && bFlat; c++)
+			{
+				float fCorner[3], fCornerDown[3];
+
+				fCorner[0] = fGround[0] + ((c & 1) ? fHalfWidth : -fHalfWidth);
+				fCorner[1] = fGround[1] + ((c & 2) ? fHalfWidth : -fHalfWidth);
+				fCorner[2] = fGround[2] + 32.0;
+
+				fCornerDown = fCorner;
+				fCornerDown[2] -= 64.0;
+
+				hTrace = TR_TraceRayFilterEx(fCorner, fCornerDown, MASK_PLAYERSOLID, RayType_EndPoint, Cel_FilterWorldOnly, 0);
+
+				if (!TR_DidHit(hTrace))
+				{
+					bFlat = false;
+				} else {
+					float fHit[3];
+
+					TR_GetEndPosition(fHit, hTrace);
+
+					bFlat = (FloatAbs(fHit[2] - fGround[2]) <= 24.0);
+				}
+
+				CloseHandle(hTrace);
+			}
+
+			if (!bFlat)
+			{
+				continue;
+			}
+
+			float fAbove[3];
+
+			fAbove = fGround;
+			fAbove[2] += 16.0;
+
+			if (TR_GetPointContents(fAbove) & MASK_WATER)
+			{
+				continue;
+			}
+		}
+
+		//The box has to fit there without touching anything, the map or props.
+		hTrace = TR_TraceHullEx(fSpot, fSpot, fBoxMin, fBoxMax, MASK_PLAYERSOLID);
+
+		bool bBlocked = TR_DidHit(hTrace);
+
+		CloseHandle(hTrace);
+
+		if (!bBlocked)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 public bool Cel_FilterPlayer(int iEntity, int iContentsMask, any aData)
 {
 	return (iEntity != aData && iEntity > MaxClients);

@@ -92,6 +92,18 @@ public void OnMapStart()
 
 public Action Timer_PlaceBooth(Handle hTimer)
 {
+	float fSpot[3];
+	
+	//Somewhere random in the map, on clear flat ground big enough for the square.
+	if (Cel_FindRandomMapSpot(true, BOOTH_HALF, 96.0, fSpot))
+	{
+		PlaceBooth(fSpot);
+		
+		return Plugin_Stop;
+	}
+	
+	LogError("|CelMod| No flat open spot was found for the Guess Booth on this map. It is placed near a spawn point instead.");
+	
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
 	float fOrigin[3];
 	int iPoints[128], iCount = 0, iEntity;
