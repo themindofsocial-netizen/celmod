@@ -35,6 +35,8 @@
 #define SOUND_FIRE "ambient/fire/mtov_flame2.wav"
 #define SOUND_WATER "ambient/water/water_splash1.wav"
 #define SOUND_STEAM "ambient/gas/steam2.wav"
+#define SOUND_FLAME "ambient/fire/fire_med_loop1.wav"
+#define SOUND_FIREBALL "ambient/fire/gascan_ignite1.wav"
 #define SOUND_HEAL "items/medshot4.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
 #define SOUND_BLINK "ambient/machines/teleport1.wav"
@@ -61,6 +63,9 @@ enum struct Item
 	int iBeamColor[4];
 	int iDamageType;
 	char sFx[16];
+	char sSecondary[16];
+	float fSecondaryValue;
+	float fSecondaryCooldown;
 	char sSprite[PLATFORM_MAX_PATH];
 	int iSpriteIndex;
 	float fSlow;
@@ -189,6 +194,7 @@ public void OnPluginStart()
 	RegAdminCmd("v_delreward", Command_DelReward, ADMFLAG_SLAY, "|CelMod| Removes the reward pickup you are looking at.");
 	RegAdminCmd("v_emblemdrop", Command_EmblemDrop, ADMFLAG_SLAY, "|CelMod| Starts an emblem drop.");
 	RegAdminCmd("v_giveitem", Command_GiveItem, ADMFLAG_SLAY, "|CelMod| Gives an emblem or hat to a player.");
+	RegAdminCmd("v_tune", Command_Tune, ADMFLAG_SLAY, "|CelMod| Adjusts where your held emblem or worn hat sits, live, and prints the values for collectibles.txt.");
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
 	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
 	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
@@ -249,6 +255,8 @@ public void OnMapStart()
 	PrecacheSound(SOUND_ICE, true);
 	PrecacheSound(SOUND_SHOCK, true);
 	PrecacheSound(SOUND_HEAL, true);
+	PrecacheSound(SOUND_FLAME, true);
+	PrecacheSound(SOUND_FIREBALL, true);
 	PrecacheSound(SOUND_WATER, true);
 	PrecacheSound(SOUND_STEAM, true);
 	PrecacheSound(SOUND_BLINK, true);
@@ -574,6 +582,109 @@ public Action Command_Inventory(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+// Moves the held emblem or the worn hat while you watch, so the right values can be found without editing
+// the file and changing map each time. Nothing is saved: the printed lines go into collectibles.txt.
+public Action Command_Tune(int iClient, int iArgs)
+{
+	char sArg[8][24];
+	float fValues[7];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 7)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]tune{default} <hand/hat> <forward> <left> <up> <pitch> <yaw> <roll> [scale]");
+		return Plugin_Handled;
+	}
+
+	for (int i = 0; i < 8 && i < iArgs; i++)
+	{
+		GetCmdArg(i + 1, sArg[i], sizeof(sArg[]));
+
+		if (i > 0)
+		{
+			fValues[i - 1] = StringToFloat(sArg[i]);
+		}
+	}
+
+	if (StrEqual(sArg[0], "hand", false))
+	{
+		int iItem = g_iActiveEmblem[iClient];
+
+		if (iItem == -1)
+		{
+			Cel_ReplyToCommand(iClient, "Enable an emblem first.");
+			return Plugin_Handled;
+		}
+
+		// Every emblem that uses the same model is held the same way.
+		for (int i = 0; i < g_iItemCount; i++)
+		{
+			if (g_Items[i].iKind != KIND_EMBLEM || !StrEqual(g_Items[i].sModel, g_Items[iItem].sModel))
+			{
+				continue;
+			}
+
+			g_Items[i].fHandOffset[0] = fValues[0];
+			g_Items[i].fHandOffset[1] = fValues[1];
+			g_Items[i].fHandOffset[2] = fValues[2];
+			g_Items[i].fHandAngles[0] = fValues[3];
+			g_Items[i].fHandAngles[1] = fValues[4];
+			g_Items[i].fHandAngles[2] = fValues[5];
+
+			if (iArgs >= 8)
+			{
+				g_Items[i].fHandScale = fValues[6];
+			}
+		}
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsClientInGame(i))
+			{
+				RestoreWeapon(i);
+			}
+		}
+
+		Cel_ReplyToCommand(iClient, "\"handoffset\" \"%.1f %.1f %.1f\"  \"handangles\" \"%.1f %.1f %.1f\"  \"handscale\" \"%.2f\"", fValues[0], fValues[1], fValues[2], fValues[3], fValues[4], fValues[5], g_Items[iItem].fHandScale);
+	} else {
+		int iItem = g_iActiveHat[iClient];
+
+		if (iItem == -1)
+		{
+			Cel_ReplyToCommand(iClient, "Put a hat on first.");
+			return Plugin_Handled;
+		}
+
+		g_Items[iItem].fOffset[0] = fValues[0];
+		g_Items[iItem].fOffset[1] = fValues[1];
+		g_Items[iItem].fOffset[2] = fValues[2];
+		g_Items[iItem].fAngles[0] = fValues[3];
+		g_Items[iItem].fAngles[1] = fValues[4];
+		g_Items[iItem].fAngles[2] = fValues[5];
+
+		if (iArgs >= 8)
+		{
+			g_Items[iItem].fScale = fValues[6];
+		}
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsClientInGame(i) && g_iActiveHat[i] == iItem)
+			{
+				CreateHatEntity(i);
+			}
+		}
+
+		Cel_ReplyToCommand(iClient, "\"offset\" \"%.1f %.1f %.1f\"  \"angles\" \"%.1f %.1f %.1f\"  \"scale\" \"%.2f\"", fValues[0], fValues[1], fValues[2], fValues[3], fValues[4], fValues[5], g_Items[iItem].fScale);
+	}
+
+	return Plugin_Handled;
+}
+
 public Action Command_GiveItem(int iClient, int iArgs)
 {
 	char sId[64], sKind[32], sTarget[MAX_NAME_LENGTH];
@@ -874,7 +985,7 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 public Action Hook_HatTransmit(int iEntity, int iClient)
 {
 	// The wearer never sees their own hat, it would block their first person view.
-	if (iClient > 0 && iClient <= MaxClients && !g_bThirdPerson[iClient] && EntRefToEntIndex(g_iHatEntRef[iClient]) == iEntity)
+	if (!g_cvShowSelf.BoolValue && iClient > 0 && iClient <= MaxClients && !g_bThirdPerson[iClient] && EntRefToEntIndex(g_iHatEntRef[iClient]) == iEntity)
 	{
 		return Plugin_Handled;
 	}
@@ -1416,6 +1527,10 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fKnockback = kvItems.GetFloat("knockback", 0.0);
 
 	kvItems.GetString("fx", g_Items[iItem].sFx, sizeof(Item::sFx), "beam");
+	kvItems.GetString("secondary", g_Items[iItem].sSecondary, sizeof(Item::sSecondary), "none");
+
+	g_Items[iItem].fSecondaryValue = kvItems.GetFloat("secondaryvalue", 50.0);
+	g_Items[iItem].fSecondaryCooldown = kvItems.GetFloat("secondarycooldown", 3.0);
 	kvItems.GetString("sprite", g_Items[iItem].sSprite, sizeof(Item::sSprite), "sprites/glow04_noz.vmt");
 
 	g_Items[iItem].iSpriteIndex = PrecacheModel(g_Items[iItem].sSprite, true);
@@ -1661,9 +1776,10 @@ void GiveItem(int iClient, int iItem)
 
 void PrintInventory(int iClient, int iKind)
 {
-	bool bAny = false;
-	int iOwned;
+	char sEntry[96], sList[192];
+	int iCount = 0, iOwned;
 
+	// Everything goes into one list. It is only split when it would not fit in a single chat message.
 	for (int i = 0; i < g_iItemCount; i++)
 	{
 		if (g_Items[i].iKind != iKind)
@@ -1678,14 +1794,35 @@ void PrintInventory(int iClient, int iKind)
 			continue;
 		}
 
-		bAny = true;
+		iCount++;
 
-		Cel_ReplyToCommand(iClient, "%s: {green}%s{default} x%d (%d spawned)%s", iKind == KIND_EMBLEM ? "Emblem" : "Hat", g_Items[i].sName, iOwned, CountSpawned(iClient, i), (g_iActiveEmblem[iClient] == i || g_iActiveHat[iClient] == i) ? " {green}[active]{default}" : "");
+		Format(sEntry, sizeof(sEntry), "%s%s", g_Items[i].sName, (g_iActiveEmblem[iClient] == i || g_iActiveHat[iClient] == i) ? " {green}[on]{default}" : "");
+
+		if (iOwned > 1)
+		{
+			Format(sEntry, sizeof(sEntry), "%s x%d", sEntry, iOwned);
+		}
+
+		if (strlen(sList) + strlen(sEntry) + 2 >= sizeof(sList) - 1)
+		{
+			Cel_ReplyToCommand(iClient, "%s,", sList);
+
+			sList[0] = '\0';
+		}
+
+		if (sList[0] == '\0')
+		{
+			Format(sList, sizeof(sList), "{green}%s:{default} %s", iKind == KIND_EMBLEM ? "Emblems" : "Hats", sEntry);
+		} else {
+			Format(sList, sizeof(sList), "%s, %s", sList, sEntry);
+		}
 	}
 
-	if (!bAny)
+	if (iCount == 0)
 	{
 		Cel_ReplyToCommand(iClient, "You do not own any %s.", iKind == KIND_EMBLEM ? "emblems" : "hats");
+	} else {
+		Cel_ReplyToCommand(iClient, "%s", sList);
 	}
 }
 
@@ -1852,7 +1989,7 @@ void RestoreWeapon(int iClient)
 bool IsShotPower(const char[] sPower)
 {
 	return (StrEqual(sPower, "fire") || StrEqual(sPower, "blizzard") || StrEqual(sPower, "shock") || StrEqual(sPower, "push") || StrEqual(sPower, "blast") || StrEqual(sPower, "blink")
-		|| StrEqual(sPower, "shot") || StrEqual(sPower, "spray") || StrEqual(sPower, "medic") || StrEqual(sPower, "magnitude") || StrEqual(sPower, "chaos") || StrEqual(sPower, "portal") || StrEqual(sPower, "demon"));
+		|| StrEqual(sPower, "flamethrower") || StrEqual(sPower, "shot") || StrEqual(sPower, "spray") || StrEqual(sPower, "medic") || StrEqual(sPower, "magnitude") || StrEqual(sPower, "chaos") || StrEqual(sPower, "portal") || StrEqual(sPower, "demon"));
 }
 
 // Primary fire with a shot emblem: a beam from the player to whatever they are aiming at.
@@ -1888,6 +2025,13 @@ void FireEmblemShot(int iClient, int iItem)
 	iColor[1] = g_Items[iItem].iBeamColor[1];
 	iColor[2] = g_Items[iItem].iBeamColor[2];
 	iColor[3] = 255;
+
+	if (StrEqual(sPower, "flamethrower"))
+	{
+		Flamethrower(iClient, iItem, fStart, fDirection);
+
+		return;
+	}
 
 	if (StrEqual(sPower, "blink"))
 	{
@@ -2260,6 +2404,263 @@ void SpriteSpray(float fOrigin[3], float fDirection[3], int iModelIndex, int iSp
 	TE_SendToAll();
 }
 
+// Where the player is aiming, up to a range. Returns what was hit, or -1.
+int TraceEmblemAim(int iClient, float fRange, float fStart[3], float fDirection[3], float fEnd[3])
+{
+	float fAngles[3];
+	int iTarget = -1;
+
+	GetClientEyePosition(iClient, fStart);
+	GetClientEyeAngles(iClient, fAngles);
+
+	GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+	fEnd[0] = fStart[0] + fDirection[0] * fRange;
+	fEnd[1] = fStart[1] + fDirection[1] * fRange;
+	fEnd[2] = fStart[2] + fDirection[2] * fRange;
+
+	Handle hTrace = TR_TraceRayFilterEx(fStart, fEnd, MASK_SHOT, RayType_EndPoint, Filter_NotSelf, iClient);
+
+	if (TR_DidHit(hTrace))
+	{
+		TR_GetEndPosition(fEnd, hTrace);
+
+		iTarget = TR_GetEntityIndex(hTrace);
+	}
+
+	CloseHandle(hTrace);
+
+	return iTarget;
+}
+
+bool CanBeHurt(int iAttacker, int iVictim)
+{
+	return (iVictim > 0 && iVictim <= MaxClients && iVictim != iAttacker && IsClientInGame(iVictim) && IsPlayerAlive(iVictim) && !Cel_GetNoKill(iVictim));
+}
+
+void CreateExplosion(int iClient, float fOrigin[3], float fMagnitude)
+{
+	int iExplosion = CreateEntityByName("env_explosion");
+
+	if (iExplosion == -1)
+	{
+		return;
+	}
+
+	DispatchKeyValueFloat(iExplosion, "iMagnitude", fMagnitude);
+	DispatchKeyValue(iExplosion, "spawnflags", "0");
+
+	SetEntPropEnt(iExplosion, Prop_Data, "m_hOwnerEntity", iClient);
+
+	DispatchSpawn(iExplosion);
+
+	TeleportEntity(iExplosion, fOrigin, NULL_VECTOR, NULL_VECTOR);
+
+	AcceptEntityInput(iExplosion, "Explode");
+	AcceptEntityInput(iExplosion, "kill");
+}
+
+// Fire: a short stream of flames from the emblem that burns everyone caught in it.
+void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
+{
+	float fMuzzle[3], fToVictim[3], fVictim[3];
+
+	fMuzzle[0] = fStart[0] + fDirection[0] * 30.0;
+	fMuzzle[1] = fStart[1] + fDirection[1] * 30.0;
+	fMuzzle[2] = fStart[2] + fDirection[2] * 30.0 - 12.0;
+
+	SpriteSpray(fMuzzle, fDirection, g_Items[iItem].iSpriteIndex, RoundToFloor(g_Items[iItem].fRange * 1.6), 0.12, 4);
+
+	PlayShotSound(iClient, SOUND_FLAME);
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!CanBeHurt(iClient, i))
+		{
+			continue;
+		}
+
+		GetClientAbsOrigin(i, fVictim);
+
+		fVictim[2] += 40.0;
+
+		MakeVectorFromPoints(fStart, fVictim, fToVictim);
+
+		float fDistance = NormalizeVector(fToVictim, fToVictim);
+
+		// Inside the range and inside a cone of about 25 degrees around the aim.
+		if (fDistance > g_Items[iItem].fRange || GetVectorDotProduct(fToVictim, fDirection) < 0.9)
+		{
+			continue;
+		}
+
+		// Walls block the flames.
+		Handle hTrace = TR_TraceRayFilterEx(fStart, fVictim, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+		bool bBlocked = TR_DidHit(hTrace);
+
+		CloseHandle(hTrace);
+
+		if (bBlocked)
+		{
+			continue;
+		}
+
+		SDKHooks_TakeDamage(i, iClient, iClient, g_Items[iItem].fValue, DMG_BURN);
+
+		if (g_Items[iItem].fIgnite > 0.0)
+		{
+			IgniteEntity(i, g_Items[iItem].fIgnite);
+		}
+	}
+}
+
+// Right click attacks chosen with the "secondary" key.
+void SecondaryAttack(int iClient, int iItem)
+{
+	float fDirection[3], fEnd[3], fStart[3], fVictim[3];
+	int iColor[4];
+
+	iColor[0] = g_Items[iItem].iBeamColor[0];
+	iColor[1] = g_Items[iItem].iBeamColor[1];
+	iColor[2] = g_Items[iItem].iBeamColor[2];
+	iColor[3] = 255;
+
+	// Fireball: a big ball of fire that explodes where it lands.
+	if (StrEqual(g_Items[iItem].sSecondary, "fireball"))
+	{
+		TraceEmblemAim(iClient, 3000.0, fStart, fDirection, fEnd);
+
+		fStart[2] -= 12.0;
+
+		float fLife = GetVectorDistance(fStart, fEnd) / 900.0;
+
+		LaunchSprite(iItem, fStart, fEnd, iColor, 900.0, 2.5, false);
+
+		EmitSoundToAll(SOUND_FIREBALL, iClient);
+
+		DataPack dpFireball;
+
+		CreateDataTimer(fLife < 0.1 ? 0.1 : fLife, Timer_Fireball, dpFireball, TIMER_FLAG_NO_MAPCHANGE);
+
+		dpFireball.WriteCell(GetClientUserId(iClient));
+		dpFireball.WriteCell(iItem);
+		dpFireball.WriteFloat(fEnd[0] - fDirection[0] * 8.0);
+		dpFireball.WriteFloat(fEnd[1] - fDirection[1] * 8.0);
+		dpFireball.WriteFloat(fEnd[2] - fDirection[2] * 8.0);
+
+		return;
+	}
+
+	// Ice storm: a burst of ice where the player aims that hurts and slows everyone near it.
+	if (StrEqual(g_Items[iItem].sSecondary, "icestorm"))
+	{
+		TraceEmblemAim(iClient, 800.0, fStart, fDirection, fEnd);
+
+		TE_SetupBeamRingPoint(fEnd, 10.0, 320.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 10.0, 0.0, iColor, 10, 0);
+		TE_SendToAll();
+
+		SpriteSpray(fEnd, g_fSkyward, g_Items[iItem].iSpriteIndex, 350, 0.9, 30);
+
+		EmitSoundToAll(SOUND_ICE, iClient);
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (!CanBeHurt(iClient, i))
+			{
+				continue;
+			}
+
+			GetClientAbsOrigin(i, fVictim);
+
+			if (GetVectorDistance(fVictim, fEnd) > 160.0)
+			{
+				continue;
+			}
+
+			SDKHooks_TakeDamage(i, iClient, iClient, g_Items[iItem].fSecondaryValue, DMG_DROWN);
+
+			g_fFrozenUntil[i] = GetGameTime() + 3.0;
+			g_bFrozenTint[i] = true;
+
+			SetEntityRenderColor(i, 90, 160, 255, 255);
+		}
+
+		return;
+	}
+
+	// Big shot: one heavy bolt that kicks the holder backwards.
+	if (StrEqual(g_Items[iItem].sSecondary, "bigshot"))
+	{
+		float fRecoil[3];
+
+		int iTarget = TraceEmblemAim(iClient, 3000.0, fStart, fDirection, fEnd);
+
+		fStart[2] -= 12.0;
+
+		LaunchSprite(iItem, fStart, fEnd, iColor, 2200.0, 2.0, false);
+
+		TE_SetupEnergySplash(fEnd, g_fSkyward, true);
+		TE_SendToAll();
+
+		EmitSoundToAll(SOUND_SHOCK, iClient);
+
+		if (CanBeHurt(iClient, iTarget))
+		{
+			SDKHooks_TakeDamage(iTarget, iClient, iClient, g_Items[iItem].fSecondaryValue, g_Items[iItem].iDamageType);
+		}
+
+		GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fRecoil);
+
+		fRecoil[0] -= fDirection[0] * 450.0;
+		fRecoil[1] -= fDirection[1] * 450.0;
+		fRecoil[2] -= fDirection[2] * 450.0;
+
+		TeleportEntity(iClient, NULL_VECTOR, NULL_VECTOR, fRecoil);
+	}
+}
+
+public Action Timer_Fireball(Handle hTimer, DataPack dpFireball)
+{
+	float fOrigin[3], fVictim[3];
+
+	dpFireball.Reset();
+
+	int iClient = GetClientOfUserId(dpFireball.ReadCell());
+	int iItem = dpFireball.ReadCell();
+
+	fOrigin[0] = dpFireball.ReadFloat();
+	fOrigin[1] = dpFireball.ReadFloat();
+	fOrigin[2] = dpFireball.ReadFloat();
+
+	if (iClient < 1 || !IsClientInGame(iClient) || iItem < 0 || iItem >= g_iItemCount)
+	{
+		return Plugin_Stop;
+	}
+
+	CreateExplosion(iClient, fOrigin, g_Items[iItem].fSecondaryValue);
+
+	SpriteSpray(fOrigin, g_fSkyward, g_Items[iItem].iSpriteIndex, 300, 0.9, 20);
+
+	// Whoever is caught in the blast is left burning.
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!CanBeHurt(iClient, i))
+		{
+			continue;
+		}
+
+		GetClientAbsOrigin(i, fVictim);
+
+		if (GetVectorDistance(fVictim, fOrigin) <= 150.0)
+		{
+			IgniteEntity(i, 4.0);
+		}
+	}
+
+	return Plugin_Stop;
+}
+
 // Right click with the emblem in hand.
 void SecondaryEmblemPower(int iClient, int iItem)
 {
@@ -2268,6 +2669,16 @@ void SecondaryEmblemPower(int iClient, int iItem)
 	int iColor[4], iTarget = -1;
 
 	strcopy(sPower, sizeof(sPower), g_Items[iItem].sPower);
+
+	// An emblem's own right click attack, set with its "secondary" key.
+	if (!StrEqual(g_Items[iItem].sSecondary, "none"))
+	{
+		g_fNextSecondary[iClient] = GetGameTime() + g_Items[iItem].fSecondaryCooldown;
+
+		SecondaryAttack(iClient, iItem);
+
+		return;
+	}
 
 	// Pink: heals the holder.
 	if (StrEqual(sPower, "medic"))
@@ -2581,11 +2992,38 @@ void CreateHatEntity(int iClient)
 	SetVariantString("!activator");
 	AcceptEntityInput(iHat, "SetParent", iClient, iHat);
 
-	SetVariantString("eyes");
-	AcceptEntityInput(iHat, "SetParentAttachment", iHat, iHat);
+	// Not every player model has the same attachments, so the first one that exists is used.
+	static const char sAttachments[][] = { "eyes", "head", "anim_attachment_head", "forward" };
 
-	// Once parented to the attachment these are relative to the player's head.
-	TeleportEntity(iHat, g_Items[iItem].fOffset, g_Items[iItem].fAngles, NULL_VECTOR);
+	bool bAttached = false;
+
+	for (int i = 0; i < sizeof(sAttachments); i++)
+	{
+		if (LookupEntityAttachment(iClient, sAttachments[i]) > 0)
+		{
+			SetVariantString(sAttachments[i]);
+			AcceptEntityInput(iHat, "SetParentAttachment", iHat, iHat);
+
+			bAttached = true;
+
+			break;
+		}
+	}
+
+	if (bAttached)
+	{
+		// Once parented to the attachment these are relative to the player's head.
+		TeleportEntity(iHat, g_Items[iItem].fOffset, g_Items[iItem].fAngles, NULL_VECTOR);
+	} else {
+		// No head attachment at all: the hat sits at standing head height above the player's feet.
+		float fFallback[3];
+
+		fFallback[0] = g_Items[iItem].fOffset[0];
+		fFallback[1] = g_Items[iItem].fOffset[1];
+		fFallback[2] = g_Items[iItem].fOffset[2] + 64.0;
+
+		TeleportEntity(iHat, fFallback, g_Items[iItem].fAngles, NULL_VECTOR);
+	}
 
 	g_iHatEntRef[iClient] = EntIndexToEntRef(iHat);
 

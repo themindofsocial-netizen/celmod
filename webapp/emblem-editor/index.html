@@ -67,7 +67,7 @@ textarea { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--c
 	<section>
 		<h2>Preview</h2>
 		<canvas id="stage"></canvas>
-		<p class="hint">Drag to rotate, scroll to zoom. Skins that use stock Half-Life 2 textures are shown as a flat stand-in color.</p>
+		<p class="hint">Drag to rotate, scroll to zoom. The selected skin plays its animation. Skins that use stock Half-Life 2 textures are shown as a flat stand-in color.</p>
 		<h2 style="margin-top:14px">Skin</h2>
 		<div class="skins" id="skins"></div>
 	</section>
@@ -89,6 +89,9 @@ textarea { font: 12px/1.4 ui-monospace, Consolas, monospace; background: var(--c
 			<label data-f="slow">Slow target (seconds)<input name="slow" type="number" min="0" step="any"></label>
 			<label data-f="knockback">Knockback force<input name="knockback" type="number" min="0" step="any"></label>
 			<label>Speed multiplier while held<input name="speed" type="number" min="0.1" step="any"></label>
+			<label class="wide">Right click attack<select name="secondary"><option value="none">None</option><option value="fireball">Fireball: flies and explodes</option><option value="icestorm">Ice storm: burst that hurts and slows</option><option value="bigshot">Big shot: heavy bolt with recoil</option></select></label>
+			<label data-f="secondaryvalue">Right click damage / blast size<input name="secondaryvalue" type="number" min="0" step="any"></label>
+			<label data-f="secondarycooldown">Right click cooldown (seconds)<input name="secondarycooldown" type="number" min="0.1" step="any"></label>
 			<label data-f="fx">Shot effect<select name="fx"></select></label>
 			<label data-f="sprite" class="wide">Effect sprite<input name="sprite" list="sprites"></label>
 			<label data-f="beamcolor">Effect color<input name="beamcolor" type="color"></label>
@@ -128,6 +131,7 @@ import * as THREE from './three.module.min.js';
 const POWERS = [
 	['none', 'None (cosmetic)', [], ''],
 	['shot', 'Shot: hurts a player', ['value', 'cooldown', 'range', 'dmgtype', 'ignite', 'slow', 'knockback', 'fx'], 'Damage per hit'],
+	['flamethrower', 'Flamethrower: short stream of flames', ['value', 'cooldown', 'range', 'ignite', 'sprite'], 'Damage per hit'],
 	['spray', 'Spray: harmless effect', ['cooldown', 'range', 'fx'], ''],
 	['medic', 'Medic: heals target, right click heals you', ['value', 'cooldown', 'range', 'fx'], 'Health per hit'],
 	['magnitude', 'Magnitude: throw and pull', ['value', 'cooldown', 'range', 'fx'], 'Throw force'],
@@ -155,19 +159,22 @@ const FX = [
 	['plasma', 'Plasma beam', false], ['rainbow', 'Rainbow beam', false], ['none', 'Nothing', false],
 ];
 // Skins of the emblem model. Skins without a texture here use stock game textures in game.
+// scroll = [texture widths per second, angle in degrees], frames = [count, per second], pulse = seconds per cycle;
+// these come from the skins' materials.
 const SKINS = [
 	{ c: '#a9c0cb', note: 'glass' }, { t: 's2', c: '#30343a', note: 'chrome' }, { c: '#eef3f7', note: 'snow' },
-	{ t: 's4' }, { c: '#ff5a48', note: 'pulsing light' }, { t: 's6' }, { t: 's7' },
-	{ c: '#3fd0ff', note: 'combine shield' }, { t: 's9' }, { c: '#cfd6dd', wire: true, note: 'wireframe' },
-	{ t: 's11_3' }, { c: '#6b6f73', note: 'tram metal' }, { c: '#2b3440', note: 'citadel metal' },
-	{ t: 's14' }, { t: 's15' }, { c: '#808080', note: 'no preview' }, { c: '#808080', note: 'no preview' },
+	{ t: 's4', frames: [66, 20], scroll: [1.0, 0] }, { c: '#ff5a48', note: 'pulsing light', pulse: 0.5 },
+	{ t: 's6', scroll: [0.1, -45] }, { t: 's7', frames: [121, 30] },
+	{ c: '#3fd0ff', note: 'combine shield' }, { t: 's9', scroll: [0.01, 0] }, { c: '#cfd6dd', wire: true, note: 'wireframe' },
+	{ t: 's11_3', scroll: [0.5, 270] }, { c: '#6b6f73', note: 'tram metal' }, { c: '#2b3440', note: 'citadel metal' },
+	{ t: 's14', scroll: [0.1, -45] }, { t: 's15' }, { c: '#808080', note: 'no preview' }, { c: '#808080', note: 'no preview' },
 ];
 const DEFAULTS = {
 	name: 'New Emblem', model: 'models/celmod/phys8.mdl', skin: '0', color: '255 255 255 255', handscale: '1.0',
 	handoffset: '0 0 0', handangles: '0 0 0', power: 'none', dropweight: '10',
 };
 const ORDER = ['name', 'model', 'skin', 'color', 'scale', 'handscale', 'handoffset', 'handangles', 'power', 'value', 'cooldown',
-	'duration', 'range', 'dmgtype', 'ignite', 'slow', 'knockback', 'speed', 'fx', 'sprite', 'beamcolor', 'dropweight'];
+	'duration', 'range', 'dmgtype', 'ignite', 'slow', 'knockback', 'speed', 'fx', 'sprite', 'secondary', 'secondaryvalue', 'secondarycooldown', 'beamcolor', 'dropweight'];
 
 // ---- State ---------------------------------------------------------------------------------
 let emblems = [{ id: 'new_emblem', kv: { ...DEFAULTS } }];
@@ -226,10 +233,12 @@ const canvas = $('stage');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 4 / 3, 0.1, 50);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
-const sun = new THREE.DirectionalLight(0xffffff, 1.8); sun.position.set(2, 3, 2); scene.add(sun);
 const pivot = new THREE.Group(); scene.add(pivot);
-const material = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.15 });
+// Unlit: the emblem is shown at full brightness from every side, as its self-lit materials are in game.
+const material = new THREE.MeshBasicMaterial();
+const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 });
+const animated = {};
+let activeSkin = SKINS[0], tintColor = new THREE.Color(1, 1, 1), clock = performance.now();
 const loader = new THREE.TextureLoader();
 const textures = {};
 let mesh = null, yaw = 0.7, pitch = 0.25, dist = 4.2;
@@ -243,29 +252,63 @@ fetch('model.json').then((r) => r.json()).then((d) => {
 	mesh = new THREE.Mesh(g, material);
 	material.side = THREE.DoubleSide;
 	pivot.add(mesh);
+	// Thin outlines keep the shape readable now that nothing is shaded.
+	pivot.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMaterial));
 	applyLook();
 }).catch(() => { $('status').textContent = 'The 3D model could not be loaded (model.json).'; });
 
+function wrap(tex) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; return tex; }
+// Animated skins are stored as a vertical strip of frames and drawn one frame at a time onto a small canvas.
+function animatedTexture(name, count) {
+	if (animated[name]) return animated[name];
+	const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+	const a = { canvas: cv, ctx: cv.getContext('2d'), img: new Image(), count, frame: -1, tex: wrap(new THREE.CanvasTexture(cv)) };
+	a.img.onload = () => { cv.width = a.img.width; cv.height = a.img.height / count; a.frame = -1; };
+	a.img.src = 'textures/' + name + '_frames.png';
+	return (animated[name] = a);
+}
 function applyLook() {
 	const e = emblems[current];
 	const skin = SKINS[+e.kv.skin] || SKINS[15];
-	const tint = new THREE.Color(toHex(e.kv.color));
+	activeSkin = skin;
+	tintColor = new THREE.Color(toHex(e.kv.color));
 	material.wireframe = !!skin.wire;
 	if (skin.t) {
-		if (!textures[skin.t]) {
-			textures[skin.t] = loader.load('textures/' + skin.t + '.png');
-			textures[skin.t].wrapS = textures[skin.t].wrapT = THREE.RepeatWrapping;
-			textures[skin.t].colorSpace = THREE.SRGBColorSpace;
+		if (skin.frames) {
+			material.map = animatedTexture(skin.t, skin.frames[0]).tex;
+		} else {
+			if (!textures[skin.t]) textures[skin.t] = wrap(loader.load('textures/' + skin.t + '.png'));
+			material.map = textures[skin.t];
 		}
-		material.map = textures[skin.t];
-		material.color.copy(tint);
+		material.color.copy(tintColor);
 	} else {
 		material.map = null;
-		material.color.set(skin.c).multiply(tint);
+		material.color.set(skin.c).multiply(tintColor);
 	}
-	material.metalness = skin.note === 'chrome' ? 0.9 : 0.15;
-	material.roughness = skin.note === 'chrome' || skin.note === 'glass' ? 0.2 : 0.55;
+	if (material.map) material.map.offset.set(0, 0);
 	material.needsUpdate = true;
+}
+// Plays the selected skin's animation: frame flipping, scrolling and pulsing.
+function animate(now) {
+	const dt = Math.min(0.1, (now - clock) / 1000); clock = now;
+	const skin = activeSkin, t = now / 1000;
+	if (skin.frames && material.map) {
+		const a = animated[skin.t], f = Math.floor(t * skin.frames[1]) % skin.frames[0];
+		if (a && a.img.complete && a.img.naturalWidth && f !== a.frame) {
+			a.frame = f;
+			a.ctx.drawImage(a.img, 0, f * a.canvas.height, a.canvas.width, a.canvas.height, 0, 0, a.canvas.width, a.canvas.height);
+			a.tex.needsUpdate = true;
+		}
+	}
+	if (skin.scroll && material.map) {
+		const ang = skin.scroll[1] * Math.PI / 180;
+		material.map.offset.x = (material.map.offset.x + Math.cos(ang) * skin.scroll[0] * dt) % 1;
+		material.map.offset.y = (material.map.offset.y + Math.sin(ang) * skin.scroll[0] * dt) % 1;
+	}
+	if (skin.pulse) {
+		const k = 0.55 + 0.45 * Math.sin(t * 2 * Math.PI / skin.pulse);
+		material.color.set(skin.c).multiply(tintColor).multiplyScalar(k);
+	}
 }
 function frame() {
 	const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -276,6 +319,7 @@ function frame() {
 	camera.position.set(Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, Math.cos(yaw) * Math.cos(pitch) * dist);
 	camera.lookAt(0, 0, 0);
 	if (!dragging) yaw += 0.003;
+	animate(performance.now());
 	renderer.render(scene, camera);
 	requestAnimationFrame(frame);
 }
@@ -303,7 +347,8 @@ const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt
 function fillForm() {
 	const e = emblems[current], kv = e.kv;
 	form.id.value = e.id;
-	for (const k of ['name', 'dropweight', 'value', 'cooldown', 'range', 'duration', 'ignite', 'slow', 'knockback', 'speed', 'sprite', 'model', 'handscale', 'scale', 'handoffset', 'handangles']) {
+	form.secondary.value = ['fireball', 'icestorm', 'bigshot'].includes(kv.secondary) ? kv.secondary : 'none';
+	for (const k of ['name', 'dropweight', 'value', 'cooldown', 'range', 'duration', 'ignite', 'slow', 'knockback', 'speed', 'sprite', 'model', 'handscale', 'scale', 'handoffset', 'handangles', 'secondaryvalue', 'secondarycooldown']) {
 		form[k].value = kv[k] ?? '';
 	}
 	form.color.value = toHex(kv.color);
@@ -322,6 +367,7 @@ function showFields() {
 	const shown = new Set(power[2]);
 	if (shown.has('fx')) { shown.add('beamcolor'); if (fxInfo[2]) shown.add('sprite'); }
 	if (shown.has('sprite') || power[0] === 'portal') shown.add('beamcolor');
+	if (form.secondary.value !== 'none') { shown.add('secondaryvalue'); shown.add('secondarycooldown'); shown.add('sprite'); shown.add('beamcolor'); }
 	document.querySelectorAll('label[data-f]').forEach((l) => { l.hidden = !shown.has(l.dataset.f); });
 	$('valueLabel').textContent = power[3] || 'Value';
 	return shown;
@@ -332,7 +378,8 @@ function readForm() {
 	e.id = (form.id.value || 'emblem').toLowerCase().replace(/[^a-z0-9_]/g, '_');
 	kv.name = form.name.value; kv.model = form.model.value; kv.color = toRGBA(form.color.value);
 	kv.power = form.power.value; kv.dropweight = form.dropweight.value || '0';
-	for (const k of ['value', 'cooldown', 'range', 'duration', 'ignite', 'slow', 'knockback', 'sprite']) {
+	if (form.secondary.value !== 'none') kv.secondary = form.secondary.value; else delete kv.secondary;
+	for (const k of ['value', 'cooldown', 'range', 'duration', 'ignite', 'slow', 'knockback', 'sprite', 'secondaryvalue', 'secondarycooldown']) {
 		if (shown.has(k) && form[k].value !== '' && !(['ignite', 'slow', 'knockback'].includes(k) && +form[k].value === 0)) kv[k] = form[k].value; else delete kv[k];
 	}
 	if (shown.has('dmgtype') && form.dmgtype.value !== 'generic') kv.dmgtype = form.dmgtype.value; else delete kv.dmgtype;

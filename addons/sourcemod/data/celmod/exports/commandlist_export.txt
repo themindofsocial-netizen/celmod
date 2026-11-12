@@ -120,6 +120,7 @@ v_switch - Client - Switches the side the hud is on the screen.
 v_teleport - Client - Spawns a teleport pad. Use it twice: the first pad sends players to the second.
 v_thirdperson - Client - Switches to a third person view so you can see your emblem and hat.
 v_trade - Client - Offers the entity you are looking at in a trade with another player.
+v_tune - Admin - Adjusts where your held emblem or worn hat sits, live, and prints the values for collectibles.txt.
 v_turn - Client - Rotates the prop you are looking at.
 v_undo - Client - Removes the last entity you spawned.
 v_unfreeze - Client - Unfreezes the prop you are looking at.

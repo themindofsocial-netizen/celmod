@@ -46,3 +46,8 @@
 	 - 11/14/26: Builds now load into your own land, in the same place they were saved, and only if the whole build fits.
 		 - Saving only includes entities whose origin is inside your land.
 		 - Added !landcolor, !palette, !model and !teleport.
+	 - 11/15/26: The fire emblem is now a flamethrower, and right click throws a fireball that explodes on impact.
+		 - Blizzard and Energy also have right click attacks (ice storm, big shot).
+		 - Held emblems now point forwards. Hats find the head on more player models.
+		 - !emblems, !hats and !inventory show everything you own in one list.
+		 - Added !tune for admins to line up held emblems and hats while in game.
