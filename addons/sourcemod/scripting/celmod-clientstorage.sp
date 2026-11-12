@@ -90,7 +90,7 @@ public any Native_CheckClientPurchase(Handle hPlugin, int iNumParams)
 	
 	g_kvClientPurchases[iClient].JumpToKey("Purchases");
 	
-	bool bHasPurchase = view_as<bool>(g_kvClientPurchases[iClient].GetNum(sPurchase, -1));
+	bool bHasPurchase = (g_kvClientPurchases[iClient].GetNum(sPurchase, 0) == 1);
 	
 	g_kvClientPurchases[iClient].Rewind();
 	
@@ -248,6 +248,8 @@ public void Native_SaveClientPurchase(Handle hPlugin, int iNumParams)
 	char sPurchase[64];
 	int iClient = GetNativeCell(1);
 	
+	GetNativeString(2, sPurchase, sizeof(sPurchase));
+	
 	g_kvClientPurchases[iClient] = new KeyValues("Vault");
 	
 	g_kvClientPurchases[iClient].ImportFromFile(g_sClientPurchases[iClient]);
@@ -313,6 +315,7 @@ public void Native_SetClientSettingString(Handle hPlugin, int iNumParams)
 	int iClient = GetNativeCell(1);
 	
 	GetNativeString(2, sSetting, sizeof(sSetting));
+	GetNativeString(3, sValue, sizeof(sValue));
 	
 	g_kvClientSettings[iClient] = new KeyValues("Vault");
 	
