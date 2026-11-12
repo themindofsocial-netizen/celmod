@@ -104,6 +104,7 @@ enum struct Item
 	float fHitRange;
 	float fRefire;
 	char sDigs[64];
+	char sHandModel[PLATFORM_MAX_PATH];
 	char sAttack[16];
 	char sBase[32];
 	float fDamage;
@@ -1870,11 +1871,12 @@ void LoadItems()
 		{
 			strcopy(g_Items[iBig].sModel, sizeof(Item::sModel), BIG_EMBLEM_MODEL);
 
-			// The large model is about eight times the size, in the hand it is shown a little bigger than normal.
-			g_Items[iBig].fHandScale = g_Items[i].fHandScale * 0.18;
+			// The large model is far too big for a hand, and scaled models do not show; it is held as the normal one.
+			strcopy(g_Items[iBig].sHandModel, sizeof(Item::sHandModel), g_Items[i].sModel);
+
+			g_Items[iBig].fHandScale = g_Items[i].fHandScale;
 		} else {
 			g_Items[iBig].fScale = g_Items[i].fScale * 2.0;
-			g_Items[iBig].fHandScale = g_Items[i].fHandScale * 1.4;
 		}
 
 		g_Items[iBig].iModelIndex = PrecacheModel(g_Items[iBig].sModel, true);
@@ -1988,6 +1990,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 	int iItem = g_iItemCount;
 
 	g_Items[iItem].iKind = iKind;
+	g_Items[iItem].sHandModel[0] = '\0';
 	g_Items[iItem].iBig = -1;
 	g_Items[iItem].bIsBig = false;
 
@@ -2453,11 +2456,14 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 	IntToString(g_Items[iItem].iSkin, sSkin, sizeof(sSkin));
 
-	DispatchKeyValue(iHand, "model", g_Items[iItem].sModel);
+	DispatchKeyValue(iHand, "model", g_Items[iItem].sHandModel[0] != '\0' ? g_Items[iItem].sHandModel : g_Items[iItem].sModel);
 	DispatchKeyValue(iHand, "solid", "0");
 	DispatchKeyValue(iHand, "skin", sSkin);
 	DispatchKeyValue(iHand, "classname", "cel_emblem_held");
-	DispatchKeyValueFloat(iHand, "modelscale", g_Items[iItem].fHandScale);
+	if (g_Items[iItem].fHandScale != 1.0)
+	{
+		DispatchKeyValueFloat(iHand, "modelscale", g_Items[iItem].fHandScale);
+	}
 
 	DispatchSpawn(iHand);
 
@@ -3435,14 +3441,13 @@ void ChaosHill(int iClient, int iItem, float fEnd[3])
 	DispatchKeyValue(iHill, "model", "models/props_wasteland/antlionhill.mdl");
 	DispatchKeyValue(iHill, "solid", "0");
 	DispatchKeyValue(iHill, "classname", "cel_chaoshill");
-	DispatchKeyValueFloat(iHill, "modelscale", 0.6);
 
 	DispatchSpawn(iHill);
 
 	float fStart[3];
 
 	fStart = fGround;
-	fStart[2] -= 120.0;
+	fStart[2] -= 220.0;
 
 	TeleportEntity(iHill, fStart, NULL_VECTOR, NULL_VECTOR);
 
@@ -3517,7 +3522,7 @@ public Action Timer_ChaosHill(Handle hTimer, DataPack dpHill)
 
 	GetEntPropVector(iHill, Prop_Data, "m_vecAbsOrigin", fOrigin);
 
-	fOrigin[2] = fGround - 120.0 + 120.0 * fRise;
+	fOrigin[2] = fGround - 220.0 + 160.0 * fRise;
 
 	TeleportEntity(iHill, fOrigin, NULL_VECTOR, NULL_VECTOR);
 
@@ -4318,7 +4323,11 @@ void CreateHatEntity(int iClient)
 
 	DispatchKeyValue(iHat, "skin", sSkin);
 	DispatchKeyValue(iHat, "classname", "cel_hat_worn");
-	DispatchKeyValueFloat(iHat, "modelscale", g_Items[iItem].fScale);
+	// Scaled models do not show in this game, so a scale is only applied when one is set.
+	if (g_Items[iItem].fScale != 1.0)
+	{
+		DispatchKeyValueFloat(iHat, "modelscale", g_Items[iItem].fScale);
+	}
 
 	DispatchSpawn(iHat);
 
@@ -4983,10 +4992,68 @@ public Action Timer_SpawnBooth(Handle hTimer)
 	return Plugin_Stop;
 }
 
+// How open a spot is: the average distance a look in 26 directions travels before hitting something (up to 2000).
+float SpotOpenness(float fSpot[3])
+{
+	float fAngles[3], fDirection[3], fEnd[3], fHit[3], fTotal = 0.0;
+	int iRays = 0;
+
+	for (int iPitch = -60; iPitch <= 60; iPitch += 60)
+	{
+		for (int iYaw = 0; iYaw < 360; iYaw += 45)
+		{
+			fAngles[0] = float(iPitch);
+			fAngles[1] = float(iYaw);
+
+			GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+			fEnd[0] = fSpot[0] + fDirection[0] * 2000.0;
+			fEnd[1] = fSpot[1] + fDirection[1] * 2000.0;
+			fEnd[2] = fSpot[2] + fDirection[2] * 2000.0;
+
+			Handle hTrace = TR_TraceRayFilterEx(fSpot, fEnd, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+			fHit = fEnd;
+
+			if (TR_DidHit(hTrace))
+			{
+				TR_GetEndPosition(fHit, hTrace);
+			}
+
+			CloseHandle(hTrace);
+
+			fTotal += GetVectorDistance(fSpot, fHit);
+
+			iRays++;
+		}
+	}
+
+	return fTotal / iRays;
+}
+
+// True when a player standing at the point could see the spot.
+bool CanSeeSpot(float fFrom[3], float fSpot[3])
+{
+	float fEyes[3];
+
+	fEyes = fFrom;
+	fEyes[2] += 64.0;
+
+	Handle hTrace = TR_TraceRayFilterEx(fEyes, fSpot, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+	bool bSeen = !TR_DidHit(hTrace);
+
+	CloseHandle(hTrace);
+
+	return bSeen;
+}
+
+// Of many open spots in the air, the best hidden one: tucked away (little open space around it), out of sight of
+// every spawn point and the Guess Booth, and far from them.
 bool FindHiddenBoothSpot(float fBest[3])
 {
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
-	float fCandidate[3], fGuess[3], fPoint[3], fSpawn[64][3];
+	float fCandidate[3], fGuess[3], fSpawn[64][3];
 	bool bFound = false, bGuess = false;
 	float fBestScore = -1.0;
 	int iSpawns = 0, iEntity;
@@ -5010,9 +5077,8 @@ bool FindHiddenBoothSpot(float fBest[3])
 		bGuess = true;
 	}
 
-	for (int iTry = 0; iTry < 40; iTry++)
+	for (int iTry = 0; iTry < 60; iTry++)
 	{
-		// Up to 900 units in the air, so it is often high up out of the way.
 		if (!Cel_FindRandomMapSpot(false, 24.0, 64.0, fCandidate, NULL_VECTOR, 0.0, 900.0))
 		{
 			continue;
@@ -5020,24 +5086,33 @@ bool FindHiddenBoothSpot(float fBest[3])
 
 		fCandidate[2] += 32.0;
 
-		// Its distance to the nearest spawn point and to the Guess Booth, whichever is closer.
-		float fScore = 999999.0;
+		float fNearest = 999999.0;
+		int iSeenBy = 0;
 
 		for (int i = 0; i < iSpawns; i++)
 		{
+			float fPoint[3];
+
 			fPoint = fSpawn[i];
 
 			float fDistance = GetVectorDistance(fCandidate, fPoint);
 
-			if (fDistance < fScore) fScore = fDistance;
+			if (fDistance < fNearest) fNearest = fDistance;
+
+			if (CanSeeSpot(fPoint, fCandidate)) iSeenBy++;
 		}
 
 		if (bGuess)
 		{
 			float fDistance = GetVectorDistance(fCandidate, fGuess);
 
-			if (fDistance < fScore) fScore = fDistance;
+			if (fDistance < fNearest) fNearest = fDistance;
+
+			if (CanSeeSpot(fGuess, fCandidate)) iSeenBy += 3;
 		}
+
+		// Far away is good, enclosed is better, and every spawn point that can see it counts heavily against it.
+		float fScore = fNearest / (SpotOpenness(fCandidate) + 150.0) / (1.0 + iSeenBy * 2.0);
 
 		if (fScore > fBestScore)
 		{

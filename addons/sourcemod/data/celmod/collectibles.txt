@@ -68,7 +68,7 @@
 //   skin        Skin number of the model.
 //   offset      "forward left up" from the player's eyes.
 //   angles      "pitch yaw roll" relative to the player's head.
-//   scale       Model scale.
+//   scale       Model scale. Leave it at 1.0: scaled models do not show in HL2DM.
 //
 // Big emblems: every emblem automatically has a big version ("<id>_big", e.g. fire_big) made at the Power Booth
 // from several copies. It uses models/celmod/bhys8.mdl and is about half again as strong.
@@ -1735,7 +1735,7 @@
 			"color"			"255 255 255 255"
 			"offset"		"-1 0 6"
 			"angles"		"0 0 0"
-			"scale"			"0.6"
+			"scale"			"1.0"
 			"dropweight"	"1"
 		}
 		"partyhat"
@@ -1768,7 +1768,7 @@
 			"color"			"255 255 255 255"
 			"offset"		"-3 0 14"
 			"angles"		"0 0 0"
-			"scale"			"0.7"
+			"scale"			"1.0"
 			"dropweight"	"4"
 		}
 		"pot"
@@ -1790,7 +1790,7 @@
 			"color"			"255 255 255 255"
 			"offset"		"-3 0 9"
 			"angles"		"0 0 0"
-			"scale"			"0.8"
+			"scale"			"1.0"
 			"dropweight"	"2"
 		}
 	}

@@ -1,7 +1,6 @@
 #pragma semicolon 1
 
 #include <celmod>
-#include <studio_hdr>
 
 #pragma newdecls required
 
@@ -14,7 +13,7 @@
  * Admins can hang an item above the booth and auction it: players bid with !bid, the highest bidder gets it.
  */
 
-#define BOOTH_HALF 160.0
+#define BOOTH_HALF 136.0
 #define DISPLAY_SIZE 40.0
 #define KLEINER_MODEL "models/kleiner.mdl"
 #define CONE_MODEL "models/props_junk/trafficcone001a.mdl"
@@ -167,61 +166,14 @@ public Action Timer_PlaceBooth(Handle hTimer)
 	return Plugin_Stop;
 }
 
-//Scales a display model so its longest side is the display size, whatever the prop is, and moves it so the
-//middle of the model sits on the display point (some props have their origin at a corner or far below).
-void FitDisplay(int iEntity, float fCenter[3])
+//Shows a model at its normal size with its middle on the given point (some props have their origin at a corner
+//or far below). Models are never scaled: scaled models do not show in this game.
+//With bCheckSize, models the server does not have (no size) or that are too big or too small to display are
+//refused and -1 is returned.
+int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false)
 {
-	float fMaxs[3], fMins[3];
+	float fMaxs[3], fMins[3], fOrigin[3];
 	
-	//The model's own size, from the model file; the entity's collision box is empty when it is not solid.
-	StudioHdr hdr = StudioHdr.FromEntity(iEntity);
-	
-	hdr.get_hull_min(fMins);
-	hdr.get_hull_max(fMaxs);
-	
-	if (fMaxs[0] - fMins[0] < 1.0 && fMaxs[1] - fMins[1] < 1.0 && fMaxs[2] - fMins[2] < 1.0)
-	{
-		hdr.get_view_bbmin(fMins);
-		hdr.get_view_bbmax(fMaxs);
-	}
-	
-	float fLongest = 1.0;
-	
-	for (int i = 0; i < 3; i++)
-	{
-		if (fMaxs[i] - fMins[i] > fLongest)
-		{
-			fLongest = fMaxs[i] - fMins[i];
-		}
-	}
-	
-	float fScale = DISPLAY_SIZE / fLongest;
-	
-	//A model with no size information would otherwise be blown up to an enormous size.
-	if (fLongest <= 1.0 || fScale > 4.0)
-	{
-		fScale = 1.0;
-		fMins[0] = 0.0; fMins[1] = 0.0; fMins[2] = 0.0;
-		fMaxs[0] = 0.0; fMaxs[1] = 0.0; fMaxs[2] = 0.0;
-	} else if (fScale < 0.05)
-	{
-		fScale = 0.05;
-	}
-	
-	SetEntPropFloat(iEntity, Prop_Send, "m_flModelScale", fScale);
-	
-	float fOrigin[3];
-	
-	for (int i = 0; i < 3; i++)
-	{
-		fOrigin[i] = fCenter[i] - (fMins[i] + fMaxs[i]) * 0.5 * fScale;
-	}
-	
-	TeleportEntity(iEntity, fOrigin, NULL_VECTOR, NULL_VECTOR);
-}
-
-int SpawnDisplay(const char[] sModel, float fOrigin[3])
-{
 	int iEntity = CreateEntityByName("prop_dynamic_override");
 	
 	if (iEntity == -1)
@@ -237,7 +189,35 @@ int SpawnDisplay(const char[] sModel, float fOrigin[3])
 	
 	DispatchSpawn(iEntity);
 	
-	FitDisplay(iEntity, fOrigin);
+	GetEntPropVector(iEntity, Prop_Send, "m_vecMins", fMins);
+	GetEntPropVector(iEntity, Prop_Send, "m_vecMaxs", fMaxs);
+	
+	if (bCheckSize)
+	{
+		float fLongest = 0.0;
+		
+		for (int i = 0; i < 3; i++)
+		{
+			if (fMaxs[i] - fMins[i] > fLongest)
+			{
+				fLongest = fMaxs[i] - fMins[i];
+			}
+		}
+		
+		if (fLongest < 8.0 || fLongest > 72.0)
+		{
+			AcceptEntityInput(iEntity, "kill");
+			
+			return -1;
+		}
+	}
+	
+	for (int i = 0; i < 3; i++)
+	{
+		fOrigin[i] = fCenter[i] - (fMins[i] + fMaxs[i]) * 0.5;
+	}
+	
+	TeleportEntity(iEntity, fOrigin, NULL_VECTOR, NULL_VECTOR);
 	
 	return iEntity;
 }
@@ -272,8 +252,7 @@ void PlaceBooth(float fOrigin[3])
 			kvProps.GetSectionName(sAlias, sizeof(sAlias));
 			kvProps.GetString(NULL_STRING, sValue, sizeof(sValue), "");
 			
-			//Only props the server really has: custom CelMod models that are not installed would show nothing.
-			if (ExplodeString(sValue, "|", sBuffer, 2, sizeof(sBuffer[])) == 2 && StrEqual(sBuffer[0], "prop_physics_override") && FileExists(sBuffer[1], true))
+			if (ExplodeString(sValue, "|", sBuffer, 2, sizeof(sBuffer[])) == 2 && StrEqual(sBuffer[0], "prop_physics_override"))
 			{
 				alAliases.PushString(sAlias);
 				alModels.PushString(sBuffer[1]);
@@ -296,24 +275,44 @@ void PlaceBooth(float fOrigin[3])
 	
 	if (g_bBooth)
 	{
-		for (int i = 0; i < 3; i++)
+		int iShown = 0;
+		
+		//Random props until three can be shown: a prop the server does not have, or one too big or too small to
+		//float in the booth, is skipped.
+		while (iShown < 3 && alAliases.Length > 0)
 		{
 			int iPick = GetRandomInt(0, alAliases.Length - 1);
 			
-			alAliases.GetString(iPick, g_sPropAlias[i], sizeof(g_sPropAlias[]));
+			alAliases.GetString(iPick, g_sPropAlias[iShown], sizeof(g_sPropAlias[]));
 			alModels.GetString(iPick, sValue, sizeof(sValue));
 			
-			//Taken out of the list so the same prop is not shown twice.
+			//Taken out of the list so the same prop is not tried twice.
 			alAliases.Erase(iPick);
 			alModels.Erase(iPick);
 			
-			fPos[0] = fOrigin[0] + (i - 1) * 80.0;
+			fPos[0] = fOrigin[0] + (iShown - 1) * 72.0;
 			fPos[1] = fOrigin[1];
 			fPos[2] = fOrigin[2] + 72.0;
 			
-			int iEntity = SpawnDisplay(sValue, fPos);
+			int iEntity = SpawnDisplay(sValue, fPos, true);
 			
-			g_iPropRef[i] = (iEntity == -1) ? INVALID_ENT_REFERENCE : EntIndexToEntRef(iEntity);
+			if (iEntity == -1)
+			{
+				continue;
+			}
+			
+			g_iPropRef[iShown] = EntIndexToEntRef(iEntity);
+			
+			iShown++;
+		}
+		
+		g_bBooth = (iShown == 3);
+		
+		if (g_bBooth)
+		{
+			PrintToServer("|CelMod| Guess Booth props: %s, %s, %s.", g_sPropAlias[0], g_sPropAlias[1], g_sPropAlias[2]);
+		} else {
+			LogError("|CelMod| The Guess Booth could not find three props of a usable size that the server has.");
 		}
 		
 		g_iAnswer = GetRandomInt(0, 2);
@@ -380,9 +379,14 @@ void PlaceKleiner(float fCenter[3])
 		DispatchKeyValue(iCone, "model", CONE_MODEL);
 		DispatchKeyValue(iCone, "solid", "0");
 		DispatchKeyValue(iCone, "classname", "cel_booth_cone");
-		DispatchKeyValueFloat(iCone, "modelscale", 0.6);
 		
 		DispatchSpawn(iCone);
+		
+		float fConeMins[3];
+		
+		GetEntPropVector(iCone, Prop_Send, "m_vecMins", fConeMins);
+		
+		fConePos[2] -= fConeMins[2] + 6.0;
 		
 		TeleportEntity(iCone, fConePos, fAngles, NULL_VECTOR);
 		
