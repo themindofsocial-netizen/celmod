@@ -165,7 +165,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_spawn", Command_Spawn, "|CelMod| Spawns a prop by name.");
 	
 	CreateConVar("celmod", "1", "Notifies the server that the plugin is running.");
-	g_cvBetaBranchUpdates = CreateConVar("cm_use_beta_branch", "1", "Chooses which branch to use for updates. Only changed at startup.");
+	g_cvBetaBranchUpdates = CreateConVar("cm_use_beta_branch", "0", "1 updates from the beta branch instead of main. Only changed at startup.");
 	g_cvCelLimit = CreateConVar("cm_max_player_cels", "20", "Maxiumum number of cel entities a client is allowed.");
 	g_cvDownloadPath = CreateConVar("cm_download_list_path", "data/celmod/downloads.txt", "Path for the download list for clients.");
 	g_cvPropLimit = CreateConVar("cm_max_player_props", "160", "Maxiumum number of props a player is allowed to spawn.");

@@ -1,4 +1,4 @@
-![alt text](https://raw.githubusercontent.com/rockzehh/celmod/refs/heads/main/images/gh-logo.png "CelMod Logo")
+![alt text](https://raw.githubusercontent.com/themindofsocial-netizen/celmod/refs/heads/main/images/gh-logo.png "CelMod Logo")
 
 **|CelMod|** is a fully customized building experience, and extra features to enhance the standard gameplay.
 
@@ -128,7 +128,7 @@ cm_exportcolorlist|Exports the color list into a text or html file in 'data/celm
 cm_exportcommandlist|Exports the command list into a text or html file in 'data/celmod/exports'.|Server
 cm_exportproplist|Exports the prop list into a text or html file in 'data/celmod/exports'.|Server
 
-For the most current command list, [click here](https://raw.githubusercontent.com/rockzehh/celmod/beta/addons/sourcemod/data/celmod/exports/commandlist_export.txt).
+For the most current command list, [click here](https://raw.githubusercontent.com/themindofsocial-netizen/celmod/main/addons/sourcemod/data/celmod/exports/commandlist_export.txt).
 
 ## Additional Information
 This plugin is designed with Half-Life 2: Deathmatch in mind. This may work on other source games, but it is not officially tested. All of the plugins functions are open to other plugins using natives, thus making multiple plugins a breeze.

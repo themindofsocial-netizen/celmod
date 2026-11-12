@@ -107,10 +107,10 @@ enum ControlTriggerType
 };
 
 #define CEL_AUTHOR "rockzehh"
-#define CEL_URL "https://github.com/rockzehh/celmod"
+#define CEL_URL "https://github.com/themindofsocial-netizen/celmod"
 #define CEL_VERSION "3.0.0"
-#define UPDATE_URL "https://raw.githubusercontent.com/rockzehh/celmod/main/addons/sourcemod/celmod_update.upd"
-#define UPDATE_BETA_URL "https://raw.githubusercontent.com/rockzehh/celmod/beta/addons/sourcemod/celmod_update.upd"
+#define UPDATE_URL "https://raw.githubusercontent.com/themindofsocial-netizen/celmod/main/addons/sourcemod/celmod_update.upd"
+#define UPDATE_BETA_URL "https://raw.githubusercontent.com/themindofsocial-netizen/celmod/beta/addons/sourcemod/celmod_update.upd"
 
 #define MAXENTITIES 2048
 #define PLAYER_CROWBAR_ATTACK_RADIUS 2.0
