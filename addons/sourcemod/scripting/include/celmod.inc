@@ -1401,9 +1401,10 @@ public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)
  * @param fHalfWidth  Half the width of the box that must fit.
  * @param fHeight     Height of the box that must fit.
  * @param fSpot       The spot found: the middle of the box's floor.
+ * @param fAvoid      A place the spot must stay away from (another booth), with fAvoidRadius.
  * @return            True if a spot was found.
  */
-stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3])
+stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3], const float fAvoid[3] = NULL_VECTOR, float fAvoidRadius = 0.0)
 {
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
 	float fCamera[3], fGround[3], fMax[3], fMin[3], fOrigin[3], fTry[3];
@@ -1481,6 +1482,11 @@ stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight,
 		}
 
 		if (bCamera && GetVectorDistance(fTry, fCamera) < 2500.0)
+		{
+			continue;
+		}
+		
+		if (fAvoidRadius > 0.0 && GetVectorDistance(fTry, fAvoid) < fAvoidRadius)
 		{
 			continue;
 		}

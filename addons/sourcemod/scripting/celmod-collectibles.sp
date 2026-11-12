@@ -104,6 +104,7 @@ enum struct Item
 	float fHitRange;
 	float fRefire;
 	char sDigs[64];
+	char sAttack[16];
 	char sBase[32];
 	float fDamage;
 }
@@ -225,6 +226,7 @@ native float CG_PlayActivity(int iWeapon, int iActivity);
 native void CG_SetPlayerAnimation(int iClient, int iPlayerAnim);
 native void CG_GetShootPosition(int iClient, float fPos[3], float fForwardOffset = 0.0, float fRightOffset = 0.0, float fUpOffset = 0.0);
 
+#define CG_ACT_VM_PRIMARYATTACK 180
 #define CG_ACT_VM_HITCENTER 190
 #define CG_ACT_VM_MISSCENTER 196
 #define CG_PLAYER_ATTACK1 5
@@ -1992,6 +1994,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 	kvItems.GetString("upgradesto", g_Items[iItem].sUpgradeTo, sizeof(Item::sUpgradeTo), "");
 	kvItems.GetString("customgun", g_Items[iItem].sCustomGun, sizeof(Item::sCustomGun), "");
 	kvItems.GetString("digs", g_Items[iItem].sDigs, sizeof(Item::sDigs), "");
+	kvItems.GetString("attack", g_Items[iItem].sAttack, sizeof(Item::sAttack), "melee");
 
 	g_Items[iItem].iUpgradeTo = -1;
 	g_Items[iItem].iUpgradeCost = kvItems.GetNum("upgradecost", 2);
@@ -4937,8 +4940,20 @@ public Action Timer_SpawnBooth(Handle hTimer)
 {
 	float fSpot[3];
 
-	// Anywhere in the map, floating in the air, as it was on the original server.
-	if (Cel_FindRandomMapSpot(false, 24.0, 64.0, fSpot))
+	// Anywhere in the map, floating in the air, as it was on the original server, away from the Guess Booth.
+	float fGuessBooth[3];
+	float fAvoid = 0.0;
+
+	int iKleiner = FindEntityByClassname(-1, "cel_booth_kleiner");
+
+	if (iKleiner != -1)
+	{
+		GetEntPropVector(iKleiner, Prop_Data, "m_vecAbsOrigin", fGuessBooth);
+
+		fAvoid = 2000.0;
+	}
+
+	if (Cel_FindRandomMapSpot(false, 24.0, 64.0, fSpot, fGuessBooth, fAvoid))
 	{
 		fSpot[2] += 32.0;
 
@@ -5167,6 +5182,39 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 
 		EmitSoundToClient(iActivator, SOUND_DENY);
 
+		// Say what was brought and how many more are needed.
+		bool bTold = false;
+
+		for (int i = 0; i < g_iItemCount; i++)
+		{
+			if (g_Items[i].iKind != KIND_EMBLEM || g_Items[i].bIsBig)
+			{
+				continue;
+			}
+
+			int iHere = CountAtBooth(iActivator, i, fBooth);
+
+			if (iHere < 1)
+			{
+				continue;
+			}
+
+			bTold = true;
+
+			if (g_Items[i].iUpgradeTo != -1)
+			{
+				Cel_PrintToChat(iActivator, "{green}Power Booth:{default} you brought {green}%d %s{default}. A {green}%s{default} needs {green}%d{default}, a {green}%s{default} needs {green}%d{default}.", iHere, g_Items[i].sName, g_Items[g_Items[i].iUpgradeTo].sName, g_Items[i].iUpgradeCost, g_Items[g_Items[i].iBig].sName, iCost);
+			} else if (g_Items[i].iBig != -1)
+			{
+				Cel_PrintToChat(iActivator, "{green}Power Booth:{default} you brought {green}%d %s{default}. A {green}%s{default} needs {green}%d{default}.", iHere, g_Items[i].sName, g_Items[g_Items[i].iBig].sName, iCost);
+			}
+		}
+
+		if (bTold)
+		{
+			return;
+		}
+
 		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} spawn your emblems and bring them to me, then press {green}E{default} on me. {green}%d{default} of the same emblem make a big one; two {green}Errors{default} make a {green}Blue Error{default}, two Blue make a {green}Green Error{default}.", iCost);
 
 		return;
@@ -5288,21 +5336,30 @@ void UpgradeAtBooth(int iClient, int iBooth, int iFrom, int iTo)
 	// The new emblem appears beside the booth, already the player's.
 	SetOwned(iClient, iTo, GetOwned(iClient, iTo) + 1);
 
+	// The new emblem lands on the ground under the booth, where it can be reached.
+	float fDown[3];
+
 	fSpot = fBooth;
-	fSpot[2] += 16.0;
+	fDown = fBooth;
+	fDown[2] -= 4096.0;
 
-	float fAngles[3];
+	Handle hGround = TR_TraceRayFilterEx(fBooth, fDown, MASK_PLAYERSOLID, RayType_EndPoint, Filter_WorldOnly, 0);
 
-	GetEntPropVector(iBooth, Prop_Data, "m_angAbsRotation", fAngles);
+	if (TR_DidHit(hGround))
+	{
+		TR_GetEndPosition(fSpot, hGround);
+	}
 
-	float fForward[3];
+	CloseHandle(hGround);
 
-	GetAngleVectors(fAngles, fForward, NULL_VECTOR, NULL_VECTOR);
+	fSpot[2] += 8.0;
 
-	fSpot[0] += fForward[0] * 48.0;
-	fSpot[1] += fForward[1] * 48.0;
+	int iNew = SpawnItemEntity(iClient, iTo, fSpot, g_fZero);
 
-	SpawnItemEntity(iClient, iTo, fSpot, g_fZero);
+	if (iNew != -1)
+	{
+		Cel_FixSpawnPosition(iNew, fSpot);
+	}
 
 	TE_SetupBeamRingPoint(fBooth, 10.0, 220.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 10.0, 0.0, g_iGreen, 10, 0);
 	TE_SendToAll();
@@ -5428,6 +5485,16 @@ public void CG_OnPrimaryAttack(int iClient, int iWeapon)
 	SetEntPropFloat(iWeapon, Prop_Send, "m_flNextSecondaryAttack", fNext);
 
 	CG_SetPlayerAnimation(iClient, CG_PLAYER_ATTACK1);
+
+	// Guns and launchers instead of a swing.
+	if (StrEqual(g_Items[iItem].sAttack, "ranged") || StrEqual(g_Items[iItem].sAttack, "melon"))
+	{
+		CG_PlayActivity(iWeapon, CG_ACT_VM_PRIMARYATTACK);
+
+		CelWepShoot(iClient, iItem);
+
+		return;
+	}
 
 	CG_GetShootPosition(iClient, fStart);
 	GetClientEyeAngles(iClient, fAngles);
@@ -5763,4 +5830,104 @@ public Action Command_GiveModel(int iClient, int iArgs)
 public Action Command_TakeModel(int iClient, int iArgs)
 {
 	return SetModelGiven(iClient, iArgs, false);
+}
+
+// A celwep shot: "ranged" hits whatever is aimed at, using the item's fx for the look; "melon" throws a watermelon.
+void CelWepShoot(int iClient, int iItem)
+{
+	float fAngles[3], fDirection[3], fEnd[3], fStart[3];
+	int iColor[4];
+
+	CG_GetShootPosition(iClient, fStart);
+	GetClientEyeAngles(iClient, fAngles);
+	GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+	if (StrEqual(g_Items[iItem].sAttack, "melon"))
+	{
+		if (GetEntityCount() > GetMaxEntities() - 200)
+		{
+			return;
+		}
+
+		int iMelon = CreateEntityByName("prop_physics_override");
+
+		if (iMelon == -1)
+		{
+			return;
+		}
+
+		float fOrigin[3], fVelocity[3];
+
+		fOrigin[0] = fStart[0] + fDirection[0] * 40.0;
+		fOrigin[1] = fStart[1] + fDirection[1] * 40.0;
+		fOrigin[2] = fStart[2] + fDirection[2] * 40.0;
+
+		DispatchKeyValue(iMelon, "model", "models/props_junk/watermelon01.mdl");
+		DispatchKeyValue(iMelon, "classname", "cel_melon");
+
+		DispatchSpawn(iMelon);
+
+		// Kills by the melon count as the shooter's.
+		if (HasEntProp(iMelon, Prop_Data, "m_hPhysicsAttacker"))
+		{
+			SetEntPropEnt(iMelon, Prop_Data, "m_hPhysicsAttacker", iClient);
+			SetEntPropFloat(iMelon, Prop_Data, "m_flLastPhysicsAttackerTime", GetGameTime() + 10.0);
+		}
+
+		fVelocity[0] = fDirection[0] * g_Items[iItem].fRange;
+		fVelocity[1] = fDirection[1] * g_Items[iItem].fRange;
+		fVelocity[2] = fDirection[2] * g_Items[iItem].fRange;
+
+		TeleportEntity(iMelon, fOrigin, fAngles, fVelocity);
+
+		KillAfter(iMelon, 8.0);
+
+		EmitGameSoundToAll("Weapon_RPG.Single", iClient);
+
+		return;
+	}
+
+	fEnd[0] = fStart[0] + fDirection[0] * g_Items[iItem].fRange;
+	fEnd[1] = fStart[1] + fDirection[1] * g_Items[iItem].fRange;
+	fEnd[2] = fStart[2] + fDirection[2] * g_Items[iItem].fRange;
+
+	Handle hTrace = TR_TraceRayFilterEx(fStart, fEnd, MASK_SHOT, RayType_EndPoint, Filter_NotSelf, iClient);
+
+	int iHit = -1;
+
+	if (TR_DidHit(hTrace))
+	{
+		TR_GetEndPosition(fEnd, hTrace);
+
+		iHit = TR_GetEntityIndex(hTrace);
+	}
+
+	CloseHandle(hTrace);
+
+	iColor[0] = g_Items[iItem].iBeamColor[0];
+	iColor[1] = g_Items[iItem].iBeamColor[1];
+	iColor[2] = g_Items[iItem].iBeamColor[2];
+	iColor[3] = 255;
+
+	fStart[2] -= 6.0;
+
+	DrawShotEffect(iClient, iItem, fStart, fEnd, fDirection, iColor);
+
+	if (CanBeHurt(iClient, iHit))
+	{
+		SDKHooks_TakeDamage(iHit, iClient, iClient, g_Items[iItem].fHitDamage, DMG_BULLET);
+
+		if (g_Items[iItem].fIgnite > 0.0)
+		{
+			IgniteEntity(iHit, g_Items[iItem].fIgnite);
+		}
+
+		if (g_Items[iItem].fSlow > 0.0)
+		{
+			g_fFrozenUntil[iHit] = GetGameTime() + g_Items[iItem].fSlow;
+			g_bFrozenTint[iHit] = true;
+
+			SetEntityRenderColor(iHit, 90, 160, 255, 255);
+		}
+	}
 }

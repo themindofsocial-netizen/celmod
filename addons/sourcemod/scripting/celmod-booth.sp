@@ -17,6 +17,7 @@
 #define BOOTH_HALF 112.0
 #define DISPLAY_SIZE 40.0
 #define KLEINER_MODEL "models/kleiner.mdl"
+#define CONE_MODEL "models/props_junk/trafficcone001a.mdl"
 #define KLEINER_HELLO "vo/k_lab/kl_ahhhh.wav"
 
 bool g_bAuction;
@@ -81,6 +82,7 @@ public void OnMapStart()
 	g_iBeam = PrecacheModel("materials/sprites/laserbeam.vmt", true);
 	
 	PrecacheModel(KLEINER_MODEL, true);
+	PrecacheModel(CONE_MODEL, true);
 	PrecacheSound(KLEINER_HELLO, true);
 	
 	g_iKleinerRef = INVALID_ENT_REFERENCE;
@@ -111,8 +113,20 @@ public Action Timer_PlaceBooth(Handle hTimer)
 {
 	float fSpot[3];
 	
-	//Somewhere random in the map, on clear flat ground big enough for the square.
-	if (Cel_FindRandomMapSpot(true, BOOTH_HALF, 96.0, fSpot))
+	//Somewhere random in the map, on clear flat ground big enough for the square, well away from the Power Booth.
+	float fPowerBooth[3];
+	float fAvoid = 0.0;
+	
+	int iPowerBooth = FindEntityByClassname(-1, "cel_powerbooth");
+	
+	if (iPowerBooth != -1)
+	{
+		GetEntPropVector(iPowerBooth, Prop_Data, "m_vecAbsOrigin", fPowerBooth);
+		
+		fAvoid = 2000.0;
+	}
+	
+	if (Cel_FindRandomMapSpot(true, BOOTH_HALF, 96.0, fSpot, fPowerBooth, fAvoid) || (fAvoid > 0.0 && Cel_FindRandomMapSpot(true, BOOTH_HALF, 96.0, fSpot, fPowerBooth, 800.0)))
 	{
 		PlaceBooth(fSpot);
 		
@@ -333,6 +347,29 @@ void PlaceKleiner(float fCenter[3])
 	SetEntPropFloat(iKleiner, Prop_Send, "m_flPlaybackRate", 0.0);
 	
 	g_iKleinerRef = EntIndexToEntRef(iKleiner);
+	
+	//A traffic cone on his head.
+	int iCone = CreateEntityByName("prop_dynamic_override");
+	
+	if (iCone != -1)
+	{
+		float fConeAngles[3], fConeOffset[3] = { -2.0, 0.0, 9.0 };
+		
+		DispatchKeyValue(iCone, "model", CONE_MODEL);
+		DispatchKeyValue(iCone, "solid", "0");
+		DispatchKeyValue(iCone, "classname", "cel_booth_cone");
+		DispatchKeyValueFloat(iCone, "modelscale", 0.6);
+		
+		DispatchSpawn(iCone);
+		
+		SetVariantString("!activator");
+		AcceptEntityInput(iCone, "SetParent", iKleiner, iCone);
+		
+		SetVariantString("eyes");
+		AcceptEntityInput(iCone, "SetParentAttachment", iCone, iCone);
+		
+		TeleportEntity(iCone, fConeOffset, fConeAngles, NULL_VECTOR);
+	}
 }
 
 public void OnClientPutInServer(int iClient)
@@ -352,6 +389,7 @@ bool IsInBooth(int iClient)
 //Draws the yellow square, tells players near the booth what it is, and ends the auction on time.
 public Action Timer_Booth(Handle hTimer)
 {
+	char sText[192];
 	float fA[3], fB[3], fOrigin[3];
 	int iYellow[4] = { 255, 220, 0, 255 };
 	
@@ -408,13 +446,16 @@ public Action Timer_Booth(Handle hTimer)
 		{
 			if (g_iTopBidder > 0 && GetClientOfUserId(g_iTopBidder) > 0)
 			{
-				PrintHintText(i, "Auction: %s\nTop bid: %d CL by %N\n%d:%02d left - !bid <amount>", g_sAuctionName, g_iTopBid, GetClientOfUserId(g_iTopBidder), iLeft / 60, iLeft % 60);
+				Format(sText, sizeof(sText), "Auction: %s\nTop bid: %d CL by %N\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_iTopBid, GetClientOfUserId(g_iTopBidder), iLeft / 60, iLeft % 60);
 			} else {
-				PrintHintText(i, "Auction: %s\nStarting bid: %d CL\n%d:%02d left - !bid <amount>", g_sAuctionName, g_iTopBid, iLeft / 60, iLeft % 60);
+				Format(sText, sizeof(sText), "Auction: %s\nStarting bid: %d CL\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_iTopBid, iLeft / 60, iLeft % 60);
 			}
 		} else {
-			PrintHintText(i, "Guess Booth\nOne of these three props is the winner.\nStand in the square and type !guess <1/2/3 or the prop's name>");
+			Format(sText, sizeof(sText), "Guess Booth\nOne of the three props is the winner.\nStand in the square and type !guess 1, 2 or 3");
 		}
+		
+		//A quiet message at the top of the screen; hint text beeps every time it is shown.
+		Cel_SendHudMessage(i, 4, -1.0, 0.12, 255, 220, 0, 255, 0, 0.0, 0.2, 1.1, 0.0, sText);
 	}
 	
 	if (g_bAuction && iLeft <= 0)

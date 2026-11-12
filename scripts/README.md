@@ -5,8 +5,10 @@ These make CelMod's celweps real, separate weapons. They need the
 
 1. Install Custom Guns as its readme says (configs, gamedata and plugins into `addons/sourcemod`).
 2. Copy these `weapon_cm_*.txt` files into `hl2mp/scripts/` (or `hl2mp/custom/<folder>/scripts/`).
-3. Put the models they name on the server: `models/celweps/a1, a2, a5, a8` (and their `_v` view models) and
-   `models/weapons/hl2meleepack/v_shovel.mdl`, with their materials. Missing models show as errors.
+3. Put the models on the server: this repository's `models/celweps/` folder (axe, swords, pickaxe, sunflower,
+   saw gun, melon launcher, blade bow), plus `models/weapons/hl2meleepack/v_shovel.mdl` for the shovel.
+   Their textures go in `materials/celweps/a1/`, `a2/`, `a5/`, `a6/`, `a8/`, `a9/`, `a10/` and `a11/`
+   (for example `materials/celweps/a2/axe.vmt`); without them the weapons show a purple and black checkerboard.
 4. Optional: set `customguns_default ""` so Custom Guns does not hand everyone its default weapon.
 
 Players get a celwep by pressing E on a weapon cel they own (`!weapon <name>` spawns one). It goes into their

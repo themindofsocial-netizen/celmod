@@ -81,6 +81,8 @@
 //   customgun   With the Custom Guns plugin installed: the Custom Guns weapon this celwep is, e.g. weapon_cm_axe
 //               (scripts/weapon_cm_axe.txt). It is then a separate weapon with its own view model, several can be
 //               carried at once, and base/damage/hand keys are not used. Without Custom Guns, base is used instead.
+//   attack      melee (default): a swing. ranged: a shot at whatever is aimed at, looking like its "fx" (range,
+//               fx, sprite, beamcolor). melon: throws a watermelon ("range" is how fast).
 //   hitdamage   Damage of one hit (Custom Guns celweps). hitrange = reach, refire = seconds between swings.
 //   ignite, slow  Seconds a hit sets a player on fire, or slows them.
 //   digs        Emblem ids a hit on the ground can dig up. Most digs find junk; see cm_dig_chance,
@@ -1612,10 +1614,65 @@
 		"sunflower"
 		{
 			"name"			"Sunflower"
-			"model"			"models/props_lab/cactus.mdl"
+			"model"			"models/celweps/a11.mdl"
+			"customgun"		"weapon_cm_sunflower"
+			"hitdamage"		"15"
+			"refire"		"0.4"
 			"base"			"weapon_stunstick"
-			"damage"		"1.5"
-			"color"			"255 230 60 255"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"sawgun"
+		{
+			"name"			"Saw Gun"
+			"model"			"models/celweps/a10.mdl"
+			"customgun"		"weapon_cm_sawgun"
+			"attack"		"ranged"
+			"hitdamage"		"4"
+			"refire"		"0.08"
+			"range"			"1500"
+			"fx"			"laser"
+			"beamcolor"		"255 200 0 255"
+			"base"			"weapon_smg1"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"meloncannon"
+		{
+			"name"			"Melon Launcher"
+			"model"			"models/celweps/a9.mdl"
+			"customgun"		"weapon_cm_meloncannon"
+			"attack"		"melon"
+			"refire"		"0.4"
+			"range"			"1600"
+			"base"			"weapon_rpg"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"bladebow"
+		{
+			"name"			"Blade Bow"
+			"model"			"models/celweps/a6.mdl"
+			"customgun"		"weapon_cm_bladebow"
+			"attack"		"ranged"
+			"hitdamage"		"40"
+			"refire"		"1.2"
+			"range"			"3000"
+			"fx"			"ice"
+			"sprite"		"sprites/blueglow2.vmt"
+			"slow"			"1.0"
+			"beamcolor"		"140 200 255 255"
+			"base"			"weapon_crossbow"
+			"color"			"255 255 255 255"
 			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"

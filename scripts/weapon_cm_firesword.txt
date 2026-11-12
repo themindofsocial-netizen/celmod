@@ -46,7 +46,6 @@ WeaponData
 		{
 			"item"	"models/celweps/a5_v.mdl"
 			"item"	"models/celweps/a5_v.vvd"
-			"item"	"models/celweps/a5_v.phy"
 			"item"	"models/celweps/a5_v.dx80.vtx"
 			"item"	"models/celweps/a5_v.dx90.vtx"
 			"item"	"models/celweps/a5_v.sw.vtx"

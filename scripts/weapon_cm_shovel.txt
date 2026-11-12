@@ -44,12 +44,6 @@ WeaponData
 
 		"download"
 		{
-			"item"	"models/weapons/hl2meleepack/v_shovel.mdl"
-			"item"	"models/weapons/hl2meleepack/v_shovel.vvd"
-			"item"	"models/weapons/hl2meleepack/v_shovel.phy"
-			"item"	"models/weapons/hl2meleepack/v_shovel.dx80.vtx"
-			"item"	"models/weapons/hl2meleepack/v_shovel.dx90.vtx"
-			"item"	"models/weapons/hl2meleepack/v_shovel.sw.vtx"
 		}
 	}
 }

@@ -1,0 +1,55 @@
+// |CelMod| celwep "Melon Launcher" for the Custom Guns plugin (github.com/Alienmario/customguns-hl2dm).
+// Players get it by pressing E on a Melon Launcher weapon cel they own. Its damage and effects are set in
+// addons/sourcemod/data/celmod/collectibles.txt under "Weapons" -> "meloncannon".
+WeaponData
+{
+	"viewmodel"			"models/weapons/v_rpg.mdl"
+	"playermodel"		"models/celweps/a9.mdl"
+	"anim_prefix"		"rpg"
+
+	"clip_size"			"-1"
+	"primary_ammo"		"None"
+	"secondary_ammo"	"None"
+
+	"autoswitchto"		"0"
+	"autoswitchfrom"	"0"
+
+	SoundData
+	{
+		"single_shot"		"Weapon_SMG1.Single"
+		"melee_hit"			"Weapon_Crowbar.Melee_Hit"
+		"melee_hit_world"	"Weapon_Crowbar.Melee_HitWorld"
+	}
+
+	"CustomGunsPluginData"
+	{
+		"name"				"Melon Launcher"
+		"model"				"models/celweps/a9.mdl"
+
+		// Everyone may hold it: CelMod decides who gets it.
+		"admin_level"		"-1"
+
+		// Never handed out by Custom Guns itself, only by CelMod.
+		"give_on_spawn"		"0"
+		"give_with_weapon"	""
+		"bind_to_weapon"	""
+		"persistent"		"1"
+
+		"weapon_type"		"custom"
+
+		"custom_settings"
+		{
+			"uses_game_ammo"	"0"
+		}
+
+		"download"
+		{
+			"item"	"models/celweps/a9.mdl"
+			"item"	"models/celweps/a9.vvd"
+			"item"	"models/celweps/a9.phy"
+			"item"	"models/celweps/a9.dx80.vtx"
+			"item"	"models/celweps/a9.dx90.vtx"
+			"item"	"models/celweps/a9.sw.vtx"
+		}
+	}
+}

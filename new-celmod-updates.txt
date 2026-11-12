@@ -74,3 +74,7 @@
 		 - The shovel digs up junk, money boxes, and now and then a Black or White emblem.
 	 - 11/21/26: The Power Booth now works with the emblems you bring to it: spawn them, carry them up to the booth, then press E on it.
 	 - 11/21/26: Added the website database integration (celmod-database): live server data, player profiles and web shop orders.
+	 - 11/22/26: The Power Booth and Guess Booth no longer appear near each other. Dr. Kleiner wears a traffic cone.
+		 - The Guess Booth message is shown quietly at the top of the screen.
+		 - The Power Booth tells you how many emblems you brought and how many each upgrade needs; new emblems land under it.
+		 - New celweps: Sunflower, Saw Gun, Melon Launcher and Blade Bow.
