@@ -108,7 +108,7 @@ enum ControlTriggerType
 
 #define CEL_AUTHOR "rockzehh"
 #define CEL_URL "https://github.com/rockzehh/celmod"
-#define CEL_VERSION "2.1.4"
+#define CEL_VERSION "3.0.0"
 #define UPDATE_URL "https://raw.githubusercontent.com/rockzehh/celmod/main/addons/sourcemod/celmod_update.upd"
 #define UPDATE_BETA_URL "https://raw.githubusercontent.com/rockzehh/celmod/beta/addons/sourcemod/celmod_update.upd"
 

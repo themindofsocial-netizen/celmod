@@ -2,7 +2,7 @@
 
 **|CelMod|** is a fully customized building experience, and extra features to enhance the standard gameplay.
 
-Latest release is *2.1.4*, current working version is *3.x*.
+Latest release is *3.0.0*.
 
 Built against SourceMod *1.12.0-git7198* and Metamod: Source *1.12.0-git1219*.
 
