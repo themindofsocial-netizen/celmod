@@ -72,3 +72,4 @@
 		 - The Fire emblem shows its flames, and its fireball is now a real projectile that explodes on impact.
 		 - The Power Booth is the HEV suit case. The Guess Booth is bigger, shows all three props, and Dr. Kleiner greets you there.
 		 - The shovel digs up junk, money boxes, and now and then a Black or White emblem.
+	 - 11/21/26: The Power Booth now works with the emblems you bring to it: spawn them, carry them up to the booth, then press E on it.

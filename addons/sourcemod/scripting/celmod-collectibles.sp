@@ -1247,6 +1247,12 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 
 	g_iLastButtons[iClient] = iButtons;
 
+	// Pressing E while looking at the Power Booth up close.
+	if ((iButtons & IN_USE) && !(iLast & IN_USE) && IsPlayerAlive(iClient) && IsLookingAtBooth(iClient))
+	{
+		Hook_BoothUse(EntRefToEntIndex(g_iBoothRef), iClient, iClient, Use_Toggle, 0.0);
+	}
+
 	// The fallback shovel (no Custom Guns) digs too, whenever it swings at the ground.
 	if ((iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && IsPlayerAlive(iClient) && g_iCelWepItem[iClient] != -1 && g_Items[g_iCelWepItem[iClient]].sDigs[0] != '\0'
 		&& EntRefToEntIndex(g_iCelWepRef[iClient]) == GetEntPropEnt(iClient, Prop_Send, "m_hActiveWeapon"))
@@ -4986,7 +4992,8 @@ void SpawnPowerBooth(float fOrigin[3])
 
 	g_iBoothRef = INVALID_ENT_REFERENCE;
 
-	int iBooth = CreateEntityByName("prop_physics_override");
+	// A plain model that never moves: it works for any model, with or without a physics model of its own.
+	int iBooth = CreateEntityByName("prop_dynamic_override");
 
 	if (iBooth == -1)
 	{
@@ -4995,22 +5002,16 @@ void SpawnPowerBooth(float fOrigin[3])
 
 	DispatchKeyValue(iBooth, "model", g_sBoothModel);
 	DispatchKeyValue(iBooth, "classname", "cel_powerbooth");
-	DispatchKeyValue(iBooth, "spawnflags", "264");
+	DispatchKeyValue(iBooth, "solid", "2");
 
 	DispatchSpawn(iBooth);
 
 	TeleportEntity(iBooth, fOrigin, NULL_VECTOR, NULL_VECTOR);
 
-	AcceptEntityInput(iBooth, "disablemotion");
-
-	SetEntProp(iBooth, Prop_Data, "m_takedamage", 0, 1);
-
 	// Green, see-through and flickering, as it was on the original server.
 	SetEntityRenderMode(iBooth, RENDER_TRANSCOLOR);
 	SetEntityRenderColor(iBooth, 0, 255, 0, 150);
 	SetEntityRenderFx(iBooth, RENDERFX_DISTORT);
-
-	SDKHook(iBooth, SDKHook_UsePost, Hook_BoothUse);
 
 	g_iBoothRef = EntIndexToEntRef(iBooth);
 }
@@ -5035,20 +5036,91 @@ public Action Command_PowerBooth(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+// True when the player is close to the Power Booth and aiming at it.
+bool IsLookingAtBooth(int iClient)
+{
+	float fAngles[3], fBooth[3], fEyes[3], fForward[3], fToBooth[3];
+
+	int iBooth = EntRefToEntIndex(g_iBoothRef);
+
+	if (g_iBoothRef == INVALID_ENT_REFERENCE || iBooth == INVALID_ENT_REFERENCE)
+	{
+		return false;
+	}
+
+	GetClientEyePosition(iClient, fEyes);
+	GetClientEyeAngles(iClient, fAngles);
+	GetAngleVectors(fAngles, fForward, NULL_VECTOR, NULL_VECTOR);
+
+	// The middle of the booth model, not its origin, which can be at its base.
+	float fMaxs[3], fMins[3];
+
+	GetEntPropVector(iBooth, Prop_Data, "m_vecAbsOrigin", fBooth);
+	GetEntPropVector(iBooth, Prop_Send, "m_vecMins", fMins);
+	GetEntPropVector(iBooth, Prop_Send, "m_vecMaxs", fMaxs);
+
+	for (int i = 0; i < 3; i++)
+	{
+		fBooth[i] += (fMins[i] + fMaxs[i]) * 0.5;
+	}
+
+	MakeVectorFromPoints(fEyes, fBooth, fToBooth);
+
+	float fDistance = NormalizeVector(fToBooth, fToBooth);
+
+	if (fDistance > 160.0)
+	{
+		return false;
+	}
+
+	// Roughly aimed at it: within about 25 degrees, wider when right next to it.
+	return (GetVectorDotProduct(fForward, fToBooth) >= (fDistance < 80.0 ? 0.7 : 0.9));
+}
+
+// How close spawned emblems must be to the Power Booth to be used.
+#define BOOTH_REACH 200.0
+
+// How many of the player's spawned copies of an emblem are at the booth.
+int CountAtBooth(int iClient, int iItem, float fBooth[3])
+{
+	float fOrigin[3];
+	int iCount = 0;
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (g_iEntItem[i] != iItem || !IsItemEntity(i) || !Cel_CheckOwner(iClient, i))
+		{
+			continue;
+		}
+
+		Cel_GetEntityOrigin(i, fOrigin);
+
+		if (GetVectorDistance(fOrigin, fBooth) <= BOOTH_REACH)
+		{
+			iCount++;
+		}
+	}
+
+	return iCount;
+}
+
+// The player brings spawned emblems to the booth, then presses E on it. Only emblems sitting at the booth count.
 public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
 {
 	char sInfo[16], sLine[96];
-	int iCost = g_cvUpgradeCost.IntValue, iOptions = 0;
+	float fBooth[3];
+	int iCost = g_cvUpgradeCost.IntValue, iOptions = 0, iOnlyFrom = -1, iOnlyTo = -1;
 
 	if (!IsRealClient(iActivator))
 	{
 		return;
 	}
 
-	// Every upgrade the player can afford right now: into the next emblem (Error to Blue Error), or into a big one.
+	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fBooth);
+
 	Menu mBooth = new Menu(Menu_Booth);
 
-	mBooth.SetTitle("Power Booth\nTrade emblems you own for a better one:");
+	mBooth.SetTitle("Power Booth\nThe emblems you brought here can become:");
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
@@ -5057,9 +5129,14 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 			continue;
 		}
 
-		int iOwned = GetOwned(iActivator, i);
+		int iHere = CountAtBooth(iActivator, i, fBooth);
 
-		if (g_Items[i].iUpgradeTo != -1 && iOwned >= g_Items[i].iUpgradeCost)
+		if (iHere < 1)
+		{
+			continue;
+		}
+
+		if (g_Items[i].iUpgradeTo != -1 && iHere >= g_Items[i].iUpgradeCost)
 		{
 			Format(sInfo, sizeof(sInfo), "%d:%d", i, g_Items[i].iUpgradeTo);
 			Format(sLine, sizeof(sLine), "%d %s  ->  1 %s", g_Items[i].iUpgradeCost, g_Items[i].sName, g_Items[g_Items[i].iUpgradeTo].sName);
@@ -5067,9 +5144,11 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 			mBooth.AddItem(sInfo, sLine);
 
 			iOptions++;
+			iOnlyFrom = i;
+			iOnlyTo = g_Items[i].iUpgradeTo;
 		}
 
-		if (g_Items[i].iBig != -1 && iOwned >= iCost)
+		if (g_Items[i].iBig != -1 && iHere >= iCost)
 		{
 			Format(sInfo, sizeof(sInfo), "%d:%d", i, g_Items[i].iBig);
 			Format(sLine, sizeof(sLine), "%d %s  ->  1 %s", iCost, g_Items[i].sName, g_Items[g_Items[i].iBig].sName);
@@ -5077,6 +5156,8 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 			mBooth.AddItem(sInfo, sLine);
 
 			iOptions++;
+			iOnlyFrom = i;
+			iOnlyTo = g_Items[i].iBig;
 		}
 	}
 
@@ -5086,7 +5167,17 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 
 		EmitSoundToClient(iActivator, SOUND_DENY);
 
-		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} bring me {green}%d{default} of the same emblem for a big one. Some emblems turn into a better emblem for fewer: two {green}Errors{default} make a {green}Blue Error{default}, two Blue make a {green}Green Error{default}.", iCost);
+		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} spawn your emblems and bring them to me, then press {green}E{default} on me. {green}%d{default} of the same emblem make a big one; two {green}Errors{default} make a {green}Blue Error{default}, two Blue make a {green}Green Error{default}.", iCost);
+
+		return;
+	}
+
+	// Only one thing can be made from what was brought: it is made straight away.
+	if (iOptions == 1)
+	{
+		delete mBooth;
+
+		UpgradeAtBooth(iActivator, iEntity, iOnlyFrom, iOnlyTo);
 
 		return;
 	}
@@ -5097,7 +5188,6 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 public int Menu_Booth(Menu mBooth, MenuAction maAction, int iClient, int iChoice)
 {
 	char sInfo[16], sParts[2][8];
-	float fBooth[3], fClient[3];
 
 	if (maAction == MenuAction_End)
 	{
@@ -5118,17 +5208,6 @@ public int Menu_Booth(Menu mBooth, MenuAction maAction, int iClient, int iChoice
 		return 0;
 	}
 
-	// The player has to still be at the booth.
-	GetEntPropVector(iBooth, Prop_Data, "m_vecAbsOrigin", fBooth);
-	GetClientAbsOrigin(iClient, fClient);
-
-	if (GetVectorDistance(fBooth, fClient) > 200.0)
-	{
-		Cel_PrintToChat(iClient, "Stay at the Power Booth to upgrade.");
-
-		return 0;
-	}
-
 	mBooth.GetItem(iChoice, sInfo, sizeof(sInfo));
 
 	if (ExplodeString(sInfo, ":", sParts, 2, sizeof(sParts[])) != 2)
@@ -5136,51 +5215,94 @@ public int Menu_Booth(Menu mBooth, MenuAction maAction, int iClient, int iChoice
 		return 0;
 	}
 
-	int iFrom = StringToInt(sParts[0]), iTo = StringToInt(sParts[1]);
+	UpgradeAtBooth(iClient, iBooth, StringToInt(sParts[0]), StringToInt(sParts[1]));
+
+	return 0;
+}
+
+// Takes the emblems from the booth and puts the new one in their place.
+void UpgradeAtBooth(int iClient, int iBooth, int iFrom, int iTo)
+{
+	float fBooth[3], fOrigin[3], fSpot[3];
 
 	if (iFrom < 0 || iFrom >= g_iItemCount || iTo < 0 || iTo >= g_iItemCount)
 	{
-		return 0;
+		return;
+	}
+
+	if (iTo != g_Items[iFrom].iBig && iTo != g_Items[iFrom].iUpgradeTo)
+	{
+		return;
 	}
 
 	int iCost = (iTo == g_Items[iFrom].iBig) ? g_cvUpgradeCost.IntValue : g_Items[iFrom].iUpgradeCost;
 
-	if (iTo != g_Items[iFrom].iBig && iTo != g_Items[iFrom].iUpgradeTo)
+	GetEntPropVector(iBooth, Prop_Data, "m_vecAbsOrigin", fBooth);
+
+	// Checked again: emblems may have been carried away while the menu was open.
+	if (CountAtBooth(iClient, iFrom, fBooth) < iCost || GetOwned(iClient, iFrom) < iCost)
 	{
-		return 0;
+		EmitSoundToClient(iClient, SOUND_DENY);
+
+		Cel_PrintToChat(iClient, "There are no longer {green}%d %s{default} emblems at the Power Booth.", iCost, g_Items[iFrom].sName);
+
+		return;
 	}
 
-	// Checked again: the player may have traded emblems away while the menu was open.
-	if (GetOwned(iClient, iFrom) < iCost)
-	{
-		Cel_PrintToChat(iClient, "You no longer have {green}%d %s{default} emblems.", iCost, g_Items[iFrom].sName);
+	int iTaken = 0;
 
-		return 0;
+	for (int i = MaxClients + 1; i <= MAXENTITIES && iTaken < iCost; i++)
+	{
+		if (g_iEntItem[i] != iFrom || !IsItemEntity(i) || !Cel_CheckOwner(iClient, i))
+		{
+			continue;
+		}
+
+		Cel_GetEntityOrigin(i, fOrigin);
+
+		if (GetVectorDistance(fOrigin, fBooth) > BOOTH_REACH)
+		{
+			continue;
+		}
+
+		TE_SetupBeamPoints(fOrigin, fBooth, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.5, 4.0, 4.0, 1, 2.0, g_iGreen, 10);
+		TE_SendToAll();
+
+		Cel_DissolveEntity(i);
+
+		// Marked so it is not counted twice while it dissolves.
+		g_iEntItem[i] = -1;
+
+		iTaken++;
 	}
 
 	int iLeft = GetOwned(iClient, iFrom) - iCost;
 
 	SetOwned(iClient, iFrom, iLeft);
 
-	// Spawned copies the player no longer owns are removed.
-	int iSpawned = CountSpawned(iClient, iFrom);
-
-	for (int i = MaxClients + 1; i <= MAXENTITIES && iSpawned > iLeft; i++)
-	{
-		if (g_iEntItem[i] == iFrom && IsItemEntity(i) && Cel_CheckOwner(iClient, i))
-		{
-			AcceptEntityInput(i, "kill");
-
-			iSpawned--;
-		}
-	}
-
 	if (iLeft < 1 && g_iActiveEmblem[iClient] == iFrom)
 	{
 		SetActiveEmblem(iClient, -1);
 	}
 
-	GiveItem(iClient, iTo);
+	// The new emblem appears beside the booth, already the player's.
+	SetOwned(iClient, iTo, GetOwned(iClient, iTo) + 1);
+
+	fSpot = fBooth;
+	fSpot[2] += 16.0;
+
+	float fAngles[3];
+
+	GetEntPropVector(iBooth, Prop_Data, "m_angAbsRotation", fAngles);
+
+	float fForward[3];
+
+	GetAngleVectors(fAngles, fForward, NULL_VECTOR, NULL_VECTOR);
+
+	fSpot[0] += fForward[0] * 48.0;
+	fSpot[1] += fForward[1] * 48.0;
+
+	SpawnItemEntity(iClient, iTo, fSpot, g_fZero);
 
 	TE_SetupBeamRingPoint(fBooth, 10.0, 220.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 10.0, 0.0, g_iGreen, 10, 0);
 	TE_SendToAll();
@@ -5188,8 +5310,6 @@ public int Menu_Booth(Menu mBooth, MenuAction maAction, int iClient, int iChoice
 	EmitSoundToAll(SOUND_REWARD, iBooth);
 
 	Cel_PrintToChatAll("{green}%N{default} used the Power Booth to make a {green}%s{default} emblem!", iClient, g_Items[iTo].sName);
-
-	return 0;
 }
 
 // What an item looks like, for plugins that put one on display (the auction above the Guess Booth).
