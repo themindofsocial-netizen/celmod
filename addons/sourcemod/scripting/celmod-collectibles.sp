@@ -27,7 +27,9 @@
 #define KIND_HAT 1
 #define KIND_WEAPON 2
 
-#define BOOTH_MODEL "models/props_combine/suit_charger001.mdl"
+#define BOOTH_MODEL "models/props_lab/hev_case.mdl"
+#define BOOTH_MODEL_FALLBACK "models/props_combine/suit_charger001.mdl"
+#define CANISTER_MODEL "models/props_combine/headcrabcannister01a.mdl"
 #define BIG_EMBLEM_MODEL "models/celmod/bhys8.mdl"
 
 #define GRAVGUN_CLASS "weapon_physcannon"
@@ -39,12 +41,14 @@
 #define SOUND_DENY "buttons/button8.wav"
 #define SOUND_FIRE "ambient/fire/mtov_flame2.wav"
 #define SOUND_WATER "ambient/water/water_splash1.wav"
-#define SOUND_STEAM "ambient/gas/steam2.wav"
-#define SOUND_FLAME "ambient/fire/fire_med_loop1.wav"
+#define SOUND_STEAM "player/sprayer.wav"
+#define SOUND_FLAME "ambient/fire/mtov_flame2.wav"
 #define SOUND_FIREBALL "ambient/fire/gascan_ignite1.wav"
 #define SOUND_QUAKE "ambient/explosions/exp2.wav"
 #define SOUND_FLASH "npc/scanner/scanner_photo1.wav"
 #define SOUND_CANISTER "weapons/mortar/mortar_shell_incomming1.wav"
+#define SOUND_DIG "physics/surfaces/sand_impact_bullet1.wav"
+#define MONEYBOX_MODEL "models/props_junk/cardboard_box004a.mdl"
 #define SOUND_HEAL "items/medshot4.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
 #define SOUND_BLINK "ambient/machines/teleport1.wav"
@@ -121,13 +125,35 @@ char g_sKindTitle[][] = { "Emblems", "Hats", "Weapons" };
 ConVar g_cvUpgradeCost;
 
 int g_iBoothRef = INVALID_ENT_REFERENCE;
+
+char g_sBoothModel[PLATFORM_MAX_PATH];
+char g_sCanisterModel[PLATFORM_MAX_PATH];
 int g_iCelWepItem[MAXPLAYERS + 1];
+int g_iFireballItem[MAXENTITIES + 1];
+int g_iFireballOwner[MAXENTITIES + 1];
+int g_iMoneyBox[MAXENTITIES + 1];
+bool g_bDugUp[MAXENTITIES + 1];
+float g_fNextCough[MAXPLAYERS + 1];
+float g_fNextDig[MAXPLAYERS + 1];
 int g_iSmogItem[MAXPLAYERS + 1][3];
 int g_iSmogRef[MAXPLAYERS + 1][3];
 
 ConVar g_cvNukeMaxProps;
 ConVar g_cvNukeWrecks;
 ConVar g_cvDigChance;
+ConVar g_cvDigEmblemChance;
+ConVar g_cvDigMoneyChance;
+ConVar g_cvDigMoneyMax;
+ConVar g_cvDigMoneyMin;
+
+// What usually comes up when digging.
+char g_sJunkModels[][] =
+{
+	"models/props_junk/garbage_milkcarton001a.mdl", "models/props_junk/garbage_glassbottle003a.mdl", "models/props_junk/garbage_metalcan001a.mdl",
+	"models/props_junk/garbage_takeoutcarton001a.mdl", "models/props_junk/garbage_newspaper001a.mdl", "models/props_junk/shoe001a.mdl",
+	"models/props_junk/popcan01a.mdl", "models/props_junk/garbage_plasticbottle003a.mdl", "models/props_junk/garbage_coffeemug001a.mdl",
+	"models/props_junk/garbage_bag001a.mdl", "models/props_c17/doll01.mdl", "models/props_junk/meathook001a.mdl"
+};
 int g_iCelWepRef[MAXPLAYERS + 1];
 int g_iPlayerModel[MAXPLAYERS + 1];
 int g_iPlayerModelCount;
@@ -263,7 +289,11 @@ public void OnPluginStart()
 	g_cvDropCount = CreateConVar("cm_drop_count", "5", "Number of crates in one emblem drop.", _, true, 1.0, true, 30.0);
 	g_cvNukeWrecks = CreateConVar("cm_nuke_wrecks_builds", "1", "1: the Nuke emblem unfreezes and scatters props where it lands, as on the original server. 0: builds are safe.", _, true, 0.0, true, 1.0);
 	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
-	g_cvDigChance = CreateConVar("cm_dig_chance", "0.05", "Chance per shovel hit on the ground to dig up an emblem.", _, true, 0.0, true, 1.0);
+	g_cvDigChance = CreateConVar("cm_dig_chance", "0.35", "Chance a shovel hit on the ground digs something up.", _, true, 0.0, true, 1.0);
+	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.04", "Share of finds that are a Black or White emblem.", _, true, 0.0, true, 1.0);
+	g_cvDigMoneyChance = CreateConVar("cm_dig_money_chance", "0.12", "Share of finds that are a money box. The rest is junk.", _, true, 0.0, true, 1.0);
+	g_cvDigMoneyMin = CreateConVar("cm_dig_money_min", "100", "Least cleers in a dug up money box.", _, true, 0.0);
+	g_cvDigMoneyMax = CreateConVar("cm_dig_money_max", "1500", "Most cleers in a dug up money box.", _, true, 0.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
 	g_cvDropInterval = CreateConVar("cm_drop_interval", "0", "Minutes between automatic emblem drops. 0 disables automatic drops.", _, true, 0.0);
 	g_cvDropMinPlayers = CreateConVar("cm_drop_min_players", "2", "Players needed on the server for an automatic emblem drop.", _, true, 1.0);
@@ -400,7 +430,20 @@ public void OnMapStart()
 	g_iMinutesSinceDrop = 0;
 	g_iBoothRef = INVALID_ENT_REFERENCE;
 
-	PrecacheModel(BOOTH_MODEL, true);
+	// The HEV suit case is used when the game has it, the suit charger otherwise.
+	strcopy(g_sBoothModel, sizeof(g_sBoothModel), FileExists(BOOTH_MODEL, true) ? BOOTH_MODEL : BOOTH_MODEL_FALLBACK);
+	strcopy(g_sCanisterModel, sizeof(g_sCanisterModel), FileExists(CANISTER_MODEL, true) ? CANISTER_MODEL : "models/props_c17/oildrum001_explosive.mdl");
+
+	PrecacheModel(g_sBoothModel, true);
+	PrecacheModel(g_sCanisterModel, true);
+
+	for (int i = 0; i < sizeof(g_sJunkModels); i++)
+	{
+		PrecacheModel(g_sJunkModels[i], true);
+	}
+
+	PrecacheModel(MONEYBOX_MODEL, true);
+	PrecacheSound(SOUND_DIG, true);
 
 	CreateTimer(5.0, Timer_SpawnBooth, _, TIMER_FLAG_NO_MAPCHANGE);
 
@@ -445,8 +488,16 @@ public void OnClientDisconnect(int iClient)
 
 public void OnEntityDestroyed(int iEntity)
 {
+	if (iEntity > 0 && iEntity <= MAXENTITIES && g_iFireballOwner[iEntity] != 0)
+	{
+		FireballExploded(iEntity);
+	}
+
 	if (iEntity > 0 && iEntity <= MAXENTITIES)
 	{
+		g_iFireballOwner[iEntity] = 0;
+		g_bDugUp[iEntity] = false;
+		g_iMoneyBox[iEntity] = 0;
 		g_bDropBox[iEntity] = false;
 		g_iEntItem[iEntity] = -1;
 		g_iRewardId[iEntity] = -1;
@@ -1195,6 +1246,39 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 	int iLast = g_iLastButtons[iClient];
 
 	g_iLastButtons[iClient] = iButtons;
+
+	// The fallback shovel (no Custom Guns) digs too, whenever it swings at the ground.
+	if ((iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && IsPlayerAlive(iClient) && g_iCelWepItem[iClient] != -1 && g_Items[g_iCelWepItem[iClient]].sDigs[0] != '\0'
+		&& EntRefToEntIndex(g_iCelWepRef[iClient]) == GetEntPropEnt(iClient, Prop_Send, "m_hActiveWeapon"))
+	{
+		float fAim[3], fDirection[3], fEnd[3], fNormal[3];
+
+		GetClientEyePosition(iClient, fAim);
+
+		float fAngles[3];
+
+		GetClientEyeAngles(iClient, fAngles);
+		GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+		fEnd[0] = fAim[0] + fDirection[0] * 90.0;
+		fEnd[1] = fAim[1] + fDirection[1] * 90.0;
+		fEnd[2] = fAim[2] + fDirection[2] * 90.0;
+
+		Handle hDig = TR_TraceRayFilterEx(fAim, fEnd, MASK_SHOT, RayType_EndPoint, Filter_NotSelf, iClient);
+
+		if (TR_DidHit(hDig) && TR_GetEntityIndex(hDig) == 0)
+		{
+			TR_GetPlaneNormal(hDig, fNormal);
+			TR_GetEndPosition(fEnd, hDig);
+
+			if (fNormal[2] > 0.7)
+			{
+				DigForEmblem(iClient, g_iCelWepItem[iClient], fEnd);
+			}
+		}
+
+		CloseHandle(hDig);
+	}
 
 	int iItem = g_iActiveEmblem[iClient];
 
@@ -2860,19 +2944,32 @@ void LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], floa
 // A burst of sprites thrown in a direction, they fall and fade on their own.
 void SpriteSpray(float fOrigin[3], float fDirection[3], int iModelIndex, int iSpeed, float fNoise, int iCount)
 {
+	float fPos[3];
+
 	if (iModelIndex < 1)
 	{
 		return;
 	}
 
-	TE_Start("Sprite Spray");
-	TE_WriteVector("m_vecOrigin", fOrigin);
-	TE_WriteVector("m_vecDirection", fDirection);
-	TE_WriteNum("m_nModelIndex", iModelIndex);
-	TE_WriteNum("m_nSpeed", iSpeed);
-	TE_WriteFloat("m_fNoise", fNoise);
-	TE_WriteNum("m_nCount", iCount);
-	TE_SendToAll();
+	if (iCount > 14)
+	{
+		iCount = 14;
+	}
+
+	float fReach = iSpeed * 0.25;
+
+	for (int i = 0; i < iCount; i++)
+	{
+		float fAlong = GetRandomFloat(0.0, fReach);
+		float fSpread = fReach * (0.15 + fNoise);
+
+		fPos[0] = fOrigin[0] + fDirection[0] * fAlong + GetRandomFloat(-fSpread, fSpread) * 0.5;
+		fPos[1] = fOrigin[1] + fDirection[1] * fAlong + GetRandomFloat(-fSpread, fSpread) * 0.5;
+		fPos[2] = fOrigin[2] + fDirection[2] * fAlong + GetRandomFloat(-fSpread, fSpread) * 0.5;
+
+		TE_SetupGlowSprite(fPos, iModelIndex, GetRandomFloat(0.25, 0.6), GetRandomFloat(0.4, 1.2), 220);
+		TE_SendToAll();
+	}
 }
 
 // Where the player is aiming, up to a range. Returns what was hit, or -1.
@@ -2940,7 +3037,20 @@ void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
 	fMuzzle[1] = fStart[1] + fDirection[1] * 30.0;
 	fMuzzle[2] = fStart[2] + fDirection[2] * 30.0 - 12.0;
 
-	SpriteSpray(fMuzzle, fDirection, g_Items[iItem].iSpriteIndex, RoundToFloor(g_Items[iItem].fRange * 1.6), 0.12, 4);
+	// A stream of flames that grows wider further from the emblem.
+	for (int i = 0; i < 6; i++)
+	{
+		float fFlame[3];
+		float fAlong = g_Items[iItem].fRange * (i + GetRandomFloat(0.0, 1.0)) / 6.0;
+		float fSpread = 4.0 + fAlong * 0.12;
+
+		fFlame[0] = fMuzzle[0] + fDirection[0] * fAlong + GetRandomFloat(-fSpread, fSpread);
+		fFlame[1] = fMuzzle[1] + fDirection[1] * fAlong + GetRandomFloat(-fSpread, fSpread);
+		fFlame[2] = fMuzzle[2] + fDirection[2] * fAlong + GetRandomFloat(-fSpread, fSpread);
+
+		TE_SetupGlowSprite(fFlame, g_Items[iItem].iSpriteIndex, GetRandomFloat(0.1, 0.2), 0.25 + fAlong / g_Items[iItem].fRange * 1.1, 230);
+		TE_SendToAll();
+	}
 
 	PlayShotSound(iClient, SOUND_FLAME);
 
@@ -3174,7 +3284,7 @@ void SmogCloud(int iClient, int iItem, float fEnd[3])
 {
 	char sColor[32];
 
-	// A player can keep three clouds going at once.
+	// One cloud per player at a time.
 	int iOldest = -1;
 	int iCount = 0;
 
@@ -3189,8 +3299,10 @@ void SmogCloud(int iClient, int iItem, float fEnd[3])
 		}
 	}
 
-	if (iCount >= 3)
+	if (iCount >= 1)
 	{
+		EmitSoundToClient(iClient, SOUND_DENY);
+
 		return;
 	}
 
@@ -3227,7 +3339,7 @@ void SmogCloud(int iClient, int iItem, float fEnd[3])
 	g_iSmogRef[iClient][iOldest] = EntIndexToEntRef(iSmoke);
 	g_iSmogItem[iClient][iOldest] = iItem;
 
-	EmitSoundToAll(SOUND_STEAM, iClient);
+	EmitSoundToAll(SOUND_STEAM, iClient, SNDCHAN_AUTO, SNDLEVEL_CONVO, SND_NOFLAGS, 0.5);
 }
 
 // Once a second: everyone standing in someone's smog coughs and is hurt.
@@ -3265,9 +3377,15 @@ void ThinkSmog()
 					continue;
 				}
 
-				Format(sCough, sizeof(sCough), "ambient/voices/cough%d.wav", GetRandomInt(1, 4));
+				// A cough now and then, not one every second from everyone in the cloud.
+				if (GetGameTime() >= g_fNextCough[i])
+				{
+					g_fNextCough[i] = GetGameTime() + GetRandomFloat(2.5, 4.5);
 
-				EmitSoundToAll(sCough, i);
+					Format(sCough, sizeof(sCough), "ambient/voices/cough%d.wav", GetRandomInt(1, 4));
+
+					EmitSoundToAll(sCough, i, SNDCHAN_VOICE, SNDLEVEL_CONVO, SND_NOFLAGS, 0.6);
+				}
 
 				if (IsClientInGame(iOwner))
 				{
@@ -3400,52 +3518,99 @@ public Action Timer_ChaosHill(Handle hTimer, DataPack dpHill)
 // every prop around it, as it did on the original server. cm_nuke_wrecks_builds 0 keeps builds safe.
 void NukeStrike(int iClient, int iItem, float fEnd[3])
 {
-	char sName[32];
-	float fAngles[3];
+	float fAngles[3], fDirection[3], fStart[3], fVelocity[3];
 
-	int iCanister = CreateEntityByName("env_headcrabcanister");
+	// It comes in steeply from a random side, starting as high as the open space above allows.
+	fAngles[0] = 65.0;
+	fAngles[1] = GetRandomFloat(0.0, 360.0);
+
+	GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+	fStart[0] = fEnd[0] - fDirection[0] * 2000.0;
+	fStart[1] = fEnd[1] - fDirection[1] * 2000.0;
+	fStart[2] = fEnd[2] - fDirection[2] * 2000.0;
+
+	Handle hTrace = TR_TraceRayFilterEx(fEnd, fStart, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+	if (TR_DidHit(hTrace))
+	{
+		TR_GetEndPosition(fStart, hTrace);
+	}
+
+	CloseHandle(hTrace);
+
+	float fDistance = GetVectorDistance(fStart, fEnd);
+
+	if (fDistance < 200.0)
+	{
+		// No room above: it simply drops in from a short way up.
+		fDistance = 200.0;
+	}
+
+	float fFlight = fDistance / 1800.0;
+
+	int iCanister = CreateEntityByName("prop_dynamic_override");
 
 	if (iCanister == -1)
 	{
 		return;
 	}
 
-	Format(sName, sizeof(sName), "cel_nuke_%d", iCanister);
-
-	fAngles[0] = 60.0;
-	fAngles[1] = GetRandomFloat(0.0, 360.0);
-
-	DispatchKeyValue(iCanister, "targetname", sName);
-	DispatchKeyValue(iCanister, "HeadcrabType", "0");
-	DispatchKeyValue(iCanister, "HeadcrabCount", "0");
-	DispatchKeyValue(iCanister, "FlightSpeed", "2500");
-	DispatchKeyValue(iCanister, "FlightTime", "3");
-	DispatchKeyValue(iCanister, "StartingHeight", "0");
-	DispatchKeyValueFloat(iCanister, "Damage", g_Items[iItem].fValue);
-	DispatchKeyValue(iCanister, "DamageRadius", "350");
-	DispatchKeyValue(iCanister, "SmokeLifetime", "12");
-	DispatchKeyValue(iCanister, "spawnflags", "8192");
+	DispatchKeyValue(iCanister, "model", g_sCanisterModel);
+	DispatchKeyValue(iCanister, "solid", "0");
+	DispatchKeyValue(iCanister, "classname", "cel_nuke");
 
 	DispatchSpawn(iCanister);
 
-	TeleportEntity(iCanister, fEnd, fAngles, NULL_VECTOR);
+	float fFacing[3];
 
-	AcceptEntityInput(iCanister, "FireCanister", iClient, iClient);
+	fFacing[0] = fAngles[0];
+	fFacing[1] = fAngles[1];
 
-	KillAfter(iCanister, 25.0);
+	fVelocity[0] = fDirection[0] * 1800.0;
+	fVelocity[1] = fDirection[1] * 1800.0;
+	fVelocity[2] = fDirection[2] * 1800.0;
 
-	EmitSoundToAll(SOUND_CANISTER, iClient);
+	SetEntityMoveType(iCanister, MOVETYPE_NOCLIP);
 
-	Cel_PrintToChatAll("{green}%N{default} called down a {green}Nuke{default}!", iClient);
+	TeleportEntity(iCanister, fStart, fFacing, fVelocity);
+
+	// A smoke trail behind it.
+	int iTrail = CreateEntityByName("env_smoketrail");
+
+	if (iTrail != -1)
+	{
+		DispatchKeyValue(iTrail, "opacity", "0.6");
+		DispatchKeyValue(iTrail, "spawnrate", "40");
+		DispatchKeyValue(iTrail, "lifetime", "2");
+		DispatchKeyValue(iTrail, "startcolor", "180 180 180");
+		DispatchKeyValue(iTrail, "endcolor", "60 60 60");
+		DispatchKeyValue(iTrail, "startsize", "24");
+		DispatchKeyValue(iTrail, "endsize", "80");
+		DispatchKeyValue(iTrail, "spawnradius", "8");
+
+		DispatchSpawn(iTrail);
+
+		TeleportEntity(iTrail, fStart, NULL_VECTOR, NULL_VECTOR);
+
+		SetVariantString("!activator");
+		AcceptEntityInput(iTrail, "SetParent", iCanister, iTrail);
+	}
+
+	KillAfter(iCanister, fFlight);
+
+	EmitSoundToAll(SOUND_CANISTER, iCanister);
 
 	DataPack dpNuke;
 
-	CreateDataTimer(3.2, Timer_NukeImpact, dpNuke, TIMER_FLAG_NO_MAPCHANGE);
+	CreateDataTimer(fFlight, Timer_NukeImpact, dpNuke, TIMER_FLAG_NO_MAPCHANGE);
 
 	dpNuke.WriteCell(GetClientUserId(iClient));
+	dpNuke.WriteCell(iItem);
 	dpNuke.WriteFloat(fEnd[0]);
 	dpNuke.WriteFloat(fEnd[1]);
 	dpNuke.WriteFloat(fEnd[2]);
+	dpNuke.WriteFloat(fAngles[1]);
 }
 
 public Action Timer_NukeImpact(Handle hTimer, DataPack dpNuke)
@@ -3456,16 +3621,83 @@ public Action Timer_NukeImpact(Handle hTimer, DataPack dpNuke)
 	dpNuke.Reset();
 
 	int iClient = GetClientOfUserId(dpNuke.ReadCell());
+	int iItem = dpNuke.ReadCell();
 
 	fImpact[0] = dpNuke.ReadFloat();
 	fImpact[1] = dpNuke.ReadFloat();
 	fImpact[2] = dpNuke.ReadFloat();
+
+	float fYaw = dpNuke.ReadFloat();
+
+	// The blast. Damage counts as the caller's, so kills are theirs.
+	CreateExplosion(iClient > 0 ? iClient : 0, fImpact, (iItem >= 0 && iItem < g_iItemCount) ? g_Items[iItem].fValue : 150.0);
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			continue;
+		}
+
+		GetClientAbsOrigin(i, fOrigin);
+
+		if (GetVectorDistance(fOrigin, fImpact) <= 1200.0)
+		{
+			Client_Shake(i, SHAKE_START, 25.0, 150.0, 2.0);
+		}
+	}
+
+	// The spent canister stays stuck in the ground for a while, smoking.
+	int iWreck = CreateEntityByName("prop_dynamic_override");
+
+	if (iWreck != -1)
+	{
+		float fWreckAngles[3];
+
+		fWreckAngles[0] = 65.0;
+		fWreckAngles[1] = fYaw;
+
+		DispatchKeyValue(iWreck, "model", g_sCanisterModel);
+		DispatchKeyValue(iWreck, "solid", "0");
+		DispatchKeyValue(iWreck, "classname", "cel_nuke_wreck");
+
+		DispatchSpawn(iWreck);
+
+		TeleportEntity(iWreck, fImpact, fWreckAngles, NULL_VECTOR);
+
+		KillAfter(iWreck, 20.0);
+	}
+
+	int iSmoke = CreateEntityByName("env_smokestack");
+
+	if (iSmoke != -1)
+	{
+		DispatchKeyValue(iSmoke, "BaseSpread", "30");
+		DispatchKeyValue(iSmoke, "SpreadSpeed", "10");
+		DispatchKeyValue(iSmoke, "Speed", "60");
+		DispatchKeyValue(iSmoke, "StartSize", "30");
+		DispatchKeyValue(iSmoke, "EndSize", "90");
+		DispatchKeyValue(iSmoke, "Rate", "12");
+		DispatchKeyValue(iSmoke, "JetLength", "220");
+		DispatchKeyValue(iSmoke, "SmokeMaterial", "particle/SmokeStack.vmt");
+		DispatchKeyValue(iSmoke, "rendercolor", "90 90 90");
+		DispatchKeyValue(iSmoke, "renderamt", "200");
+
+		DispatchSpawn(iSmoke);
+
+		TeleportEntity(iSmoke, fImpact, NULL_VECTOR, NULL_VECTOR);
+
+		AcceptEntityInput(iSmoke, "TurnOn");
+
+		KillAfter(iSmoke, 15.0);
+	}
 
 	if (!g_cvNukeWrecks.BoolValue)
 	{
 		return Plugin_Stop;
 	}
 
+	// Everything loose or frozen nearby is unfrozen and thrown, as on the original server.
 	for (int i = MaxClients + 1; i <= MAXENTITIES && iCount < g_cvNukeMaxProps.IntValue; i++)
 	{
 		if (!IsValidEntity(i) || !Cel_IsEntity(i) || GetEntityMoveType(i) != MOVETYPE_VPHYSICS)
@@ -3498,11 +3730,6 @@ public Action Timer_NukeImpact(Handle hTimer, DataPack dpNuke)
 		iCount++;
 	}
 
-	if (iCount > 0 && iClient > 0)
-	{
-		Cel_PrintToChatAll("The Nuke sent {green}%d{default} prop%s flying.", iCount, iCount == 1 ? "" : "s");
-	}
-
 	return Plugin_Stop;
 }
 
@@ -3517,28 +3744,10 @@ void SecondaryAttack(int iClient, int iItem)
 	iColor[2] = g_Items[iItem].iBeamColor[2];
 	iColor[3] = 255;
 
-	// Fireball: a big ball of fire that explodes where it lands.
+	// Fireball: a ball of fire that flies until it hits something, then explodes and sets people alight.
 	if (StrEqual(g_Items[iItem].sSecondary, "fireball"))
 	{
-		TraceEmblemAim(iClient, 3000.0, fStart, fDirection, fEnd);
-
-		fStart[2] -= 12.0;
-
-		float fLife = GetVectorDistance(fStart, fEnd) / 900.0;
-
-		LaunchSprite(iItem, fStart, fEnd, iColor, 900.0, 2.5, false);
-
-		EmitSoundToAll(SOUND_FIREBALL, iClient);
-
-		DataPack dpFireball;
-
-		CreateDataTimer(fLife < 0.1 ? 0.1 : fLife, Timer_Fireball, dpFireball, TIMER_FLAG_NO_MAPCHANGE);
-
-		dpFireball.WriteCell(GetClientUserId(iClient));
-		dpFireball.WriteCell(iItem);
-		dpFireball.WriteFloat(fEnd[0] - fDirection[0] * 8.0);
-		dpFireball.WriteFloat(fEnd[1] - fDirection[1] * 8.0);
-		dpFireball.WriteFloat(fEnd[2] - fDirection[2] * 8.0);
+		LaunchFireball(iClient, iItem, iColor);
 
 		return;
 	}
@@ -3611,29 +3820,108 @@ void SecondaryAttack(int iClient, int iItem)
 	}
 }
 
-public Action Timer_Fireball(Handle hTimer, DataPack dpFireball)
+void LaunchFireball(int iClient, int iItem, int iColor[4])
+{
+	char sColor[32];
+	float fAngles[3], fDirection[3], fStart[3], fVelocity[3];
+
+	GetClientEyePosition(iClient, fStart);
+	GetClientEyeAngles(iClient, fAngles);
+	GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+	fStart[0] += fDirection[0] * 32.0;
+	fStart[1] += fDirection[1] * 32.0;
+	fStart[2] += fDirection[2] * 32.0 - 8.0;
+
+	// The game's own grenade does the flying, the touching and the blast; it is dressed up as a fireball.
+	int iBall = CreateEntityByName("grenade_ar2");
+
+	if (iBall == -1 || iBall > MAXENTITIES)
+	{
+		return;
+	}
+
+	DispatchSpawn(iBall);
+
+	SetEntPropEnt(iBall, Prop_Send, "m_hOwnerEntity", iClient);
+
+	if (HasEntProp(iBall, Prop_Data, "m_hThrower"))
+	{
+		SetEntPropEnt(iBall, Prop_Data, "m_hThrower", iClient);
+	}
+
+	if (HasEntProp(iBall, Prop_Data, "m_flDamage"))
+	{
+		SetEntPropFloat(iBall, Prop_Data, "m_flDamage", g_Items[iItem].fSecondaryValue);
+	}
+
+	if (HasEntProp(iBall, Prop_Data, "m_DmgRadius"))
+	{
+		SetEntPropFloat(iBall, Prop_Data, "m_DmgRadius", 180.0);
+	}
+
+	SetEntityGravity(iBall, 0.15);
+	SetEntityRenderMode(iBall, RENDER_NONE);
+
+	fVelocity[0] = fDirection[0] * 1100.0;
+	fVelocity[1] = fDirection[1] * 1100.0;
+	fVelocity[2] = fDirection[2] * 1100.0;
+
+	TeleportEntity(iBall, fStart, fAngles, fVelocity);
+
+	// The flame itself, riding on the grenade.
+	int iFlame = CreateEntityByName("env_sprite");
+
+	if (iFlame != -1)
+	{
+		Format(sColor, sizeof(sColor), "%d %d %d", iColor[0], iColor[1], iColor[2]);
+
+		DispatchKeyValue(iFlame, "model", g_Items[iItem].sSprite);
+		DispatchKeyValue(iFlame, "rendermode", "5");
+		DispatchKeyValue(iFlame, "renderamt", "255");
+		DispatchKeyValue(iFlame, "rendercolor", sColor);
+		DispatchKeyValue(iFlame, "framerate", "15");
+		DispatchKeyValue(iFlame, "scale", "1.6");
+		DispatchKeyValue(iFlame, "spawnflags", "1");
+
+		DispatchSpawn(iFlame);
+
+		TeleportEntity(iFlame, fStart, NULL_VECTOR, NULL_VECTOR);
+
+		SetVariantString("!activator");
+		AcceptEntityInput(iFlame, "SetParent", iBall, iFlame);
+
+		AcceptEntityInput(iFlame, "ShowSprite");
+	}
+
+	g_iFireballOwner[iBall] = GetClientUserId(iClient);
+	g_iFireballItem[iBall] = iItem;
+
+	EmitSoundToAll(SOUND_FIREBALL, iClient);
+}
+
+// Called when a fireball's grenade blows up: everyone near it is left burning.
+void FireballExploded(int iBall)
 {
 	float fOrigin[3], fVictim[3];
 
-	dpFireball.Reset();
+	int iClient = GetClientOfUserId(g_iFireballOwner[iBall]);
+	int iItem = g_iFireballItem[iBall];
 
-	int iClient = GetClientOfUserId(dpFireball.ReadCell());
-	int iItem = dpFireball.ReadCell();
+	g_iFireballOwner[iBall] = 0;
 
-	fOrigin[0] = dpFireball.ReadFloat();
-	fOrigin[1] = dpFireball.ReadFloat();
-	fOrigin[2] = dpFireball.ReadFloat();
+	GetEntPropVector(iBall, Prop_Data, "m_vecAbsOrigin", fOrigin);
 
-	if (iClient < 1 || !IsClientInGame(iClient) || iItem < 0 || iItem >= g_iItemCount)
+	if (iItem >= 0 && iItem < g_iItemCount)
 	{
-		return Plugin_Stop;
+		SpriteSpray(fOrigin, g_fSkyward, g_Items[iItem].iSpriteIndex, 300, 0.8, 12);
 	}
 
-	CreateExplosion(iClient, fOrigin, g_Items[iItem].fSecondaryValue);
+	if (iClient < 1)
+	{
+		return;
+	}
 
-	SpriteSpray(fOrigin, g_fSkyward, g_Items[iItem].iSpriteIndex, 300, 0.9, 20);
-
-	// Whoever is caught in the blast is left burning.
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (!CanBeHurt(iClient, i))
@@ -3643,13 +3931,11 @@ public Action Timer_Fireball(Handle hTimer, DataPack dpFireball)
 
 		GetClientAbsOrigin(i, fVictim);
 
-		if (GetVectorDistance(fVictim, fOrigin) <= 150.0)
+		if (GetVectorDistance(fVictim, fOrigin) <= 170.0)
 		{
 			IgniteEntity(i, 4.0);
 		}
 	}
-
-	return Plugin_Stop;
 }
 
 // Right click with the emblem in hand.
@@ -4707,7 +4993,7 @@ void SpawnPowerBooth(float fOrigin[3])
 		return;
 	}
 
-	DispatchKeyValue(iBooth, "model", BOOTH_MODEL);
+	DispatchKeyValue(iBooth, "model", g_sBoothModel);
 	DispatchKeyValue(iBooth, "classname", "cel_powerbooth");
 	DispatchKeyValue(iBooth, "spawnflags", "264");
 
@@ -5101,6 +5387,7 @@ public void CG_OnPrimaryAttack(int iClient, int iWeapon)
 	}
 }
 
+// A shovel hit on the ground. Most finds are junk; now and then a money box or an emblem comes up.
 void DigForEmblem(int iClient, int iItem, float fHit[3])
 {
 	char sChoices[8][32];
@@ -5109,25 +5396,129 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 	TE_SetupDust(fHit, fUp, 12.0, 1.0);
 	TE_SendToAll();
 
-	if (GetRandomFloat(0.0, 1.0) > g_cvDigChance.FloatValue)
+	EmitSoundToAll(SOUND_DIG, iClient, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.7);
+
+	// Digging too fast in one place finds nothing new.
+	if (GetGameTime() < g_fNextDig[iClient] || GetRandomFloat(0.0, 1.0) > g_cvDigChance.FloatValue)
 	{
 		return;
 	}
 
-	int iCount = ExplodeString(g_Items[iItem].sDigs, " ", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+	g_fNextDig[iClient] = GetGameTime() + 1.5;
 
-	int iFound = FindItem(KIND_EMBLEM, sChoices[GetRandomInt(0, iCount - 1)]);
+	float fSpot[3];
 
-	if (iFound == -1)
+	fSpot = fHit;
+	fSpot[2] += 12.0;
+
+	float fRoll = GetRandomFloat(0.0, 1.0);
+
+	if (fRoll < g_cvDigEmblemChance.FloatValue)
+	{
+		int iCount = ExplodeString(g_Items[iItem].sDigs, " ", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+
+		int iFound = FindItem(KIND_EMBLEM, sChoices[GetRandomInt(0, iCount - 1)]);
+
+		if (iFound != -1)
+		{
+			// The emblem comes out of the ground already belonging to the digger.
+			int iEntity = SpawnItemEntity(iClient, iFound, fSpot, g_fZero);
+
+			SetOwned(iClient, iFound, GetOwned(iClient, iFound) + 1);
+
+			if (iEntity != -1)
+			{
+				ThrowOutOfGround(iEntity);
+			}
+
+			EmitSoundToAll(SOUND_REWARD, iClient);
+
+			Cel_PrintToChat(iClient, "You dug up a {green}%s{default} emblem!", g_Items[iFound].sName);
+
+			return;
+		}
+	}
+
+	if (fRoll < g_cvDigEmblemChance.FloatValue + g_cvDigMoneyChance.FloatValue)
+	{
+		SpawnDugUp(MONEYBOX_MODEL, fSpot, GetRandomInt(g_cvDigMoneyMin.IntValue, g_cvDigMoneyMax.IntValue));
+
+		Cel_PrintToChat(iClient, "You dug up a {green}money box{default}! Press {green}E{default} on it.");
+
+		return;
+	}
+
+	SpawnDugUp(g_sJunkModels[GetRandomInt(0, sizeof(g_sJunkModels) - 1)], fSpot, 0);
+}
+
+// Something dug up: it pops out of the ground and is gone again after a while. Money boxes hold cleers.
+void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
+{
+	int iProp = CreateEntityByName("prop_physics_override");
+
+	if (iProp == -1 || iProp > MAXENTITIES)
 	{
 		return;
 	}
 
-	GiveItem(iClient, iFound);
+	DispatchKeyValue(iProp, "model", sModel);
+	DispatchKeyValue(iProp, "classname", iMoney > 0 ? "cel_dug_money" : "cel_dug_junk");
+	DispatchKeyValue(iProp, "spawnflags", "256");
 
-	EmitSoundToAll(SOUND_REWARD, iClient);
+	DispatchSpawn(iProp);
 
-	Cel_PrintToChatAll("{green}%N{default} dug up a {green}%s{default} emblem!", iClient, g_Items[iFound].sName);
+	TeleportEntity(iProp, fSpot, NULL_VECTOR, NULL_VECTOR);
+
+	g_bDugUp[iProp] = true;
+	g_iMoneyBox[iProp] = iMoney;
+
+	if (iMoney > 0)
+	{
+		SetEntProp(iProp, Prop_Data, "m_takedamage", 0, 1);
+		SetEntityRenderColor(iProp, 80, 255, 80, 255);
+
+		SDKHook(iProp, SDKHook_UsePost, Hook_MoneyBoxUse);
+
+		KillAfter(iProp, 90.0);
+	} else {
+		KillAfter(iProp, 30.0);
+	}
+
+	ThrowOutOfGround(iProp);
+}
+
+void ThrowOutOfGround(int iEntity)
+{
+	float fVelocity[3];
+
+	fVelocity[0] = GetRandomFloat(-60.0, 60.0);
+	fVelocity[1] = GetRandomFloat(-60.0, 60.0);
+	fVelocity[2] = 260.0;
+
+	if (GetEntityMoveType(iEntity) == MOVETYPE_VPHYSICS)
+	{
+		TeleportEntity(iEntity, NULL_VECTOR, NULL_VECTOR, fVelocity);
+	}
+}
+
+public void Hook_MoneyBoxUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	if (!IsRealClient(iActivator) || g_iMoneyBox[iEntity] < 1)
+	{
+		return;
+	}
+
+	int iMoney = g_iMoneyBox[iEntity];
+
+	g_iMoneyBox[iEntity] = 0;
+
+	Cel_AddToClientBalance(iActivator, iMoney);
+
+	EmitSoundToAll(SOUND_REWARD, iEntity);
+
+	AcceptEntityInput(iEntity, "kill");
+
+	Cel_PrintToChat(iActivator, "The money box had {green}%d CL{default} in it.", iMoney);
 }
 
 //Downloads for custom player models:

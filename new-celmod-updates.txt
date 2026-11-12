@@ -68,3 +68,7 @@
 	 - 11/18/26: 58 new emblems have been added to the emblem pool, from Magma and Glacier to Rocket, Ghost, Vampire and Diamond.
 	 - 11/19/26: The Power Booth now appears floating somewhere random in the map, and the Guess Booth on open ground somewhere random, instead of in the spawn rooms.
 		 - Emblems are switched off when you join the server.
+	 - 11/20/26: The Nuke is a falling canister again and no longer posts in chat. Smog is one quieter cloud at a time.
+		 - The Fire emblem shows its flames, and its fireball is now a real projectile that explodes on impact.
+		 - The Power Booth is the HEV suit case. The Guess Booth is bigger, shows all three props, and Dr. Kleiner greets you there.
+		 - The shovel digs up junk, money boxes, and now and then a Black or White emblem.

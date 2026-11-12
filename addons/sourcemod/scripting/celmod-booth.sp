@@ -1,6 +1,7 @@
 #pragma semicolon 1
 
 #include <celmod>
+#include <studio_hdr>
 
 #pragma newdecls required
 
@@ -13,8 +14,10 @@
  * Admins can hang an item above the booth and auction it: players bid with !bid, the highest bidder gets it.
  */
 
-#define BOOTH_HALF 72.0
-#define DISPLAY_SIZE 34.0
+#define BOOTH_HALF 112.0
+#define DISPLAY_SIZE 40.0
+#define KLEINER_MODEL "models/kleiner.mdl"
+#define KLEINER_HELLO "vo/k_lab/kl_ahhhh.wav"
 
 bool g_bAuction;
 bool g_bBooth;
@@ -33,6 +36,10 @@ float g_fCenter[3];
 int g_iAnswer;
 int g_iAuctionRef = INVALID_ENT_REFERENCE;
 int g_iBeam = -1;
+int g_iKleinerRef = INVALID_ENT_REFERENCE;
+
+//Players Dr. Kleiner has already greeted on this map.
+bool g_bGreeted[MAXPLAYERS + 1];
 int g_iPropRef[3] = { INVALID_ENT_REFERENCE, INVALID_ENT_REFERENCE, INVALID_ENT_REFERENCE };
 int g_iTopBid;
 int g_iTopBidder;
@@ -72,6 +79,16 @@ public void OnPluginStart()
 public void OnMapStart()
 {
 	g_iBeam = PrecacheModel("materials/sprites/laserbeam.vmt", true);
+	
+	PrecacheModel(KLEINER_MODEL, true);
+	PrecacheSound(KLEINER_HELLO, true);
+	
+	g_iKleinerRef = INVALID_ENT_REFERENCE;
+	
+	for (int i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_bGreeted[i] = false;
+	}
 	
 	PrecacheSound("buttons/button9.wav", true);
 	PrecacheSound("buttons/button8.wav", true);
@@ -133,13 +150,23 @@ public Action Timer_PlaceBooth(Handle hTimer)
 	return Plugin_Stop;
 }
 
-//Scales a display model so its longest side is the display size, whatever the prop is.
-void FitDisplay(int iEntity)
+//Scales a display model so its longest side is the display size, whatever the prop is, and moves it so the
+//middle of the model sits on the display point (some props have their origin at a corner or far below).
+void FitDisplay(int iEntity, float fCenter[3])
 {
 	float fMaxs[3], fMins[3];
 	
-	GetEntPropVector(iEntity, Prop_Send, "m_vecMins", fMins);
-	GetEntPropVector(iEntity, Prop_Send, "m_vecMaxs", fMaxs);
+	//The model's own size, from the model file; the entity's collision box is empty when it is not solid.
+	StudioHdr hdr = StudioHdr.FromEntity(iEntity);
+	
+	hdr.get_hull_min(fMins);
+	hdr.get_hull_max(fMaxs);
+	
+	if (fMaxs[0] - fMins[0] < 1.0 && fMaxs[1] - fMins[1] < 1.0 && fMaxs[2] - fMins[2] < 1.0)
+	{
+		hdr.get_view_bbmin(fMins);
+		hdr.get_view_bbmax(fMaxs);
+	}
 	
 	float fLongest = 1.0;
 	
@@ -151,7 +178,18 @@ void FitDisplay(int iEntity)
 		}
 	}
 	
-	SetEntPropFloat(iEntity, Prop_Send, "m_flModelScale", DISPLAY_SIZE / fLongest);
+	float fScale = DISPLAY_SIZE / fLongest;
+	
+	SetEntPropFloat(iEntity, Prop_Send, "m_flModelScale", fScale);
+	
+	float fOrigin[3];
+	
+	for (int i = 0; i < 3; i++)
+	{
+		fOrigin[i] = fCenter[i] - (fMins[i] + fMaxs[i]) * 0.5 * fScale;
+	}
+	
+	TeleportEntity(iEntity, fOrigin, NULL_VECTOR, NULL_VECTOR);
 }
 
 int SpawnDisplay(const char[] sModel, float fOrigin[3])
@@ -171,9 +209,7 @@ int SpawnDisplay(const char[] sModel, float fOrigin[3])
 	
 	DispatchSpawn(iEntity);
 	
-	TeleportEntity(iEntity, fOrigin, NULL_VECTOR, NULL_VECTOR);
-	
-	FitDisplay(iEntity);
+	FitDisplay(iEntity, fOrigin);
 	
 	return iEntity;
 }
@@ -227,6 +263,8 @@ void PlaceBooth(float fOrigin[3])
 	g_fCenter = fOrigin;
 	g_bBooth = (alAliases.Length >= 3);
 	
+	PlaceKleiner(fOrigin);
+	
 	if (g_bBooth)
 	{
 		for (int i = 0; i < 3; i++)
@@ -240,9 +278,9 @@ void PlaceBooth(float fOrigin[3])
 			alAliases.Erase(iPick);
 			alModels.Erase(iPick);
 			
-			fPos[0] = fOrigin[0] + (i - 1) * 44.0;
+			fPos[0] = fOrigin[0] + (i - 1) * 64.0;
 			fPos[1] = fOrigin[1];
-			fPos[2] = fOrigin[2] + 64.0;
+			fPos[2] = fOrigin[2] + 72.0;
 			
 			int iEntity = SpawnDisplay(sValue, fPos);
 			
@@ -256,6 +294,50 @@ void PlaceBooth(float fOrigin[3])
 	
 	delete alAliases;
 	delete alModels;
+}
+
+//Dr. Kleiner stands at the back of the booth, frozen in his A-pose, facing whoever walks up.
+void PlaceKleiner(float fCenter[3])
+{
+	float fAngles[3], fPos[3];
+	
+	RemoveRef(g_iKleinerRef);
+	
+	int iKleiner = CreateEntityByName("prop_dynamic_override");
+	
+	if (iKleiner == -1)
+	{
+		return;
+	}
+	
+	fPos[0] = fCenter[0];
+	fPos[1] = fCenter[1] + BOOTH_HALF - 24.0;
+	fPos[2] = fCenter[2];
+	
+	//Facing into the booth.
+	fAngles[1] = 270.0;
+	
+	DispatchKeyValue(iKleiner, "model", KLEINER_MODEL);
+	DispatchKeyValue(iKleiner, "solid", "2");
+	DispatchKeyValue(iKleiner, "DefaultAnim", "ragdoll");
+	DispatchKeyValue(iKleiner, "classname", "cel_booth_kleiner");
+	
+	DispatchSpawn(iKleiner);
+	
+	TeleportEntity(iKleiner, fPos, fAngles, NULL_VECTOR);
+	
+	//The model's reference pose: arms out, standing still.
+	SetVariantString("ragdoll");
+	AcceptEntityInput(iKleiner, "SetAnimation");
+	
+	SetEntPropFloat(iKleiner, Prop_Send, "m_flPlaybackRate", 0.0);
+	
+	g_iKleinerRef = EntIndexToEntRef(iKleiner);
+}
+
+public void OnClientPutInServer(int iClient)
+{
+	g_bGreeted[iClient] = false;
 }
 
 bool IsInBooth(int iClient)
@@ -305,9 +387,21 @@ public Action Timer_Booth(Handle hTimer)
 		
 		GetClientAbsOrigin(i, fOrigin);
 		
-		if (GetVectorDistance(fOrigin, g_fCenter) > 260.0)
+		if (GetVectorDistance(fOrigin, g_fCenter) > 320.0)
 		{
 			continue;
+		}
+		
+		//Dr. Kleiner greets everyone once a map, the first time they step into the booth.
+		int iKleiner = EntRefToEntIndex(g_iKleinerRef);
+		
+		if (!g_bGreeted[i] && IsInBooth(i) && iKleiner != INVALID_ENT_REFERENCE)
+		{
+			g_bGreeted[i] = true;
+			
+			EmitSoundToClient(i, KLEINER_HELLO, iKleiner);
+			
+			Cel_PrintToChat(i, "{green}Dr. Kleiner:{default} Ah, hello! Welcome to the Guess Booth. One of these three props is the winner. Pick it with {green}!guess 1{default}, {green}2{default} or {green}3{default}.");
 		}
 		
 		if (g_bAuction)

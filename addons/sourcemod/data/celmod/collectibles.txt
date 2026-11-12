@@ -17,7 +17,7 @@
 //   handangles  "pitch yaw roll" of the copy relative to the hand.
 //   power       Used with primary fire, which can be held down (cooldown and range apply to all):
 //               flash     Blinds players facing you. duration = seconds blinded, range.
-//               smog      Smoke cloud where you aim; players in it cough and take "value" damage a second.
+//               smog      Smoke cloud where you aim (one at a time); players in it cough and take "value" damage a second.
 //               nuke      A headcrab canister falls where you aim. value = impact damage. See cm_nuke_wrecks_builds.
 //               shot      Hurts a player. value = damage, dmgtype = burn/drown/poison/shock/dissolve/
 //                         energy/generic, ignite = seconds the player is set on fire (optional).
@@ -83,7 +83,8 @@
 //               carried at once, and base/damage/hand keys are not used. Without Custom Guns, base is used instead.
 //   hitdamage   Damage of one hit (Custom Guns celweps). hitrange = reach, refire = seconds between swings.
 //   ignite, slow  Seconds a hit sets a player on fire, or slows them.
-//   digs        Emblem ids a hit on the ground can dig up (chance: cm_dig_chance).
+//   digs        Emblem ids a hit on the ground can dig up. Most digs find junk; see cm_dig_chance,
+//               cm_dig_emblem_chance, cm_dig_money_chance, cm_dig_money_min and cm_dig_money_max.
 //
 // PlayerModels: name, model and price. A price of 0 is free for everyone.
 //   admin       Admin flags (e.g. "b"). Admins with them own the model; with price 0 nobody else can buy it.
@@ -260,7 +261,7 @@
 			"power"			"smog"
 			"value"			"1"
 			"duration"		"7.0"
-			"cooldown"		"1.5"
+			"cooldown"		"8.0"
 			"range"			"500"
 			"dropweight"	"10"
 		}
@@ -805,7 +806,7 @@
 			"power"			"smog"
 			"value"			"2"
 			"duration"		"6.0"
-			"cooldown"		"2.0"
+			"cooldown"		"8.0"
 			"range"			"600"
 			"dropweight"	"6"
 		}
@@ -877,7 +878,7 @@
 			"power"			"smog"
 			"value"			"1"
 			"duration"		"10.0"
-			"cooldown"		"2.5"
+			"cooldown"		"8.0"
 			"range"			"600"
 			"dropweight"	"8"
 		}
