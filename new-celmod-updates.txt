@@ -65,3 +65,4 @@
 		 - Added the Orange emblem (double speed). Cloud now jumps higher with lower gravity.
 		 - The Power Booth shows a menu: 2 Errors make a Blue Error, 2 Blue make a Green, and 5 of any emblem make a big one.
 		 - Player models can be admin only, and admins can give them with !givemodel.
+	 - 11/18/26: 58 new emblems have been added to the emblem pool, from Magma and Glacier to Rocket, Ghost, Vampire and Diamond.

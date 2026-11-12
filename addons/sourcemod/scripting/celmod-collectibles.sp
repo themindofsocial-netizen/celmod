@@ -20,7 +20,7 @@
  * player get an item back with !emblem / !hat after the entity is removed or the map changes.
  */
 
-#define MAX_ITEMS 192
+#define MAX_ITEMS 320
 #define MAX_PLAYERMODELS 48
 
 #define KIND_EMBLEM 0
