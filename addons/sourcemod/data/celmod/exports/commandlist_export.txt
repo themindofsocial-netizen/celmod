@@ -55,6 +55,7 @@ v_freeze - Client - Freezes the prop you are looking at.
 v_freezeit - Client - Freezes the prop you are looking at.
 v_give - Client - Gives the entity you are looking at to another player.
 v_giveitem - Admin - Gives an emblem or hat to a player.
+v_givemodel - Admin - Gives a player model to a player.
 v_god - Client - Enables/disables breakability on the prop you are looking at.
 v_gravity - Client - Changes the gravity within the land.
 v_guess - Client - Guesses the winning prop at the Guess Booth. One guess per map.
@@ -126,6 +127,7 @@ v_straight - Client - Resets the angles on the prop you are looking at.
 v_straighten - Client - Resets the angles on the prop you are looking at.
 v_stuck - Client - Respawns you.
 v_switch - Client - Switches the side the hud is on the screen.
+v_takemodel - Admin - Takes a player model away from a player.
 v_teleport - Client - Spawns a teleport pad. Use it twice: the first pad sends players to the second.
 v_thirdperson - Client - Switches to a third person view so you can see your emblem and hat.
 v_trade - Client - Offers the entity you are looking at in a trade with another player.

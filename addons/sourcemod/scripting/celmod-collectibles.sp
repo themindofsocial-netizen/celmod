@@ -42,6 +42,9 @@
 #define SOUND_STEAM "ambient/gas/steam2.wav"
 #define SOUND_FLAME "ambient/fire/fire_med_loop1.wav"
 #define SOUND_FIREBALL "ambient/fire/gascan_ignite1.wav"
+#define SOUND_QUAKE "ambient/explosions/exp2.wav"
+#define SOUND_FLASH "npc/scanner/scanner_photo1.wav"
+#define SOUND_CANISTER "weapons/mortar/mortar_shell_incomming1.wav"
 #define SOUND_HEAL "items/medshot4.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
 #define SOUND_BLINK "ambient/machines/teleport1.wav"
@@ -84,6 +87,19 @@ enum struct Item
 	int iModelIndex;
 	int iBig;
 	bool bIsBig;
+	char sUpgradeTo[32];
+	int iUpgradeTo;
+	int iUpgradeCost;
+	float fJump;
+	float fFallDamage;
+	int iPlayerColor[4];
+	bool bPlayerColor;
+	bool bGlow;
+	char sCustomGun[32];
+	float fHitDamage;
+	float fHitRange;
+	float fRefire;
+	char sDigs[64];
 	char sBase[32];
 	float fDamage;
 }
@@ -94,6 +110,7 @@ enum struct PlayerModel
 	char sName[48];
 	char sModel[PLATFORM_MAX_PATH];
 	int iPrice;
+	int iAdminFlags;
 }
 
 char g_sKindClass[][] = { "cel_emblem", "cel_hat", "cel_weapon" };
@@ -105,6 +122,12 @@ ConVar g_cvUpgradeCost;
 
 int g_iBoothRef = INVALID_ENT_REFERENCE;
 int g_iCelWepItem[MAXPLAYERS + 1];
+int g_iSmogItem[MAXPLAYERS + 1][3];
+int g_iSmogRef[MAXPLAYERS + 1][3];
+
+ConVar g_cvNukeMaxProps;
+ConVar g_cvNukeWrecks;
+ConVar g_cvDigChance;
 int g_iCelWepRef[MAXPLAYERS + 1];
 int g_iPlayerModel[MAXPLAYERS + 1];
 int g_iPlayerModelCount;
@@ -118,6 +141,9 @@ bool g_bHeldShown[MAXPLAYERS + 1];
 bool g_bHoldingGravGun[MAXPLAYERS + 1];
 bool g_bInvFromDisk[MAXPLAYERS + 1];
 bool g_bCloaked[MAXPLAYERS + 1];
+bool g_bTinted[MAXPLAYERS + 1];
+bool g_bCelWepTaken[MAXPLAYERS + 1][MAX_ITEMS];
+bool g_bCustomGuns;
 bool g_bGravityManaged[MAXPLAYERS + 1];
 bool g_bPortal[MAXPLAYERS + 1][2];
 bool g_bSpeedManaged[MAXPLAYERS + 1];
@@ -141,6 +167,9 @@ float g_fFrozenUntil[MAXPLAYERS + 1];
 float g_fSkyward[3] = { 0.0, 0.0, 1.0 };
 float g_fNextPower[MAXPLAYERS + 1];
 float g_fNextSecondary[MAXPLAYERS + 1];
+float g_fNextQuake[MAXPLAYERS + 1];
+
+int g_iDemonColor[4] = { 120, 0, 160, 255 };
 float g_fNextShotSound[MAXPLAYERS + 1];
 float g_fPortal[MAXPLAYERS + 1][2][3];
 float g_fPortalWait[MAXPLAYERS + 1];
@@ -162,8 +191,26 @@ Item g_Items[MAX_ITEMS];
 
 KeyValues g_kvInv[MAXPLAYERS + 1];
 
+// Custom Guns (github.com/Alienmario/customguns-hl2dm) gives celweps their own inventory slot, view model and
+// world model. It is optional: without it celweps fall back to a stock weapon.
+native bool CG_GiveGun(int iClient, const char[] sClassname, bool bIgnoreAdminLevel = false);
+native void CG_ClearInventory(int iClient);
+native float CG_PlayActivity(int iWeapon, int iActivity);
+native void CG_SetPlayerAnimation(int iClient, int iPlayerAnim);
+native void CG_GetShootPosition(int iClient, float fPos[3], float fForwardOffset = 0.0, float fRightOffset = 0.0, float fUpOffset = 0.0);
+
+#define CG_ACT_VM_HITCENTER 190
+#define CG_ACT_VM_MISSCENTER 196
+#define CG_PLAYER_ATTACK1 5
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("CG_GiveGun");
+	MarkNativeAsOptional("CG_ClearInventory");
+	MarkNativeAsOptional("CG_PlayActivity");
+	MarkNativeAsOptional("CG_SetPlayerAnimation");
+	MarkNativeAsOptional("CG_GetShootPosition");
+
 	CreateNative("Cel_GetCollectibleId", Native_GetCollectibleId);
 	CreateNative("Cel_GetCollectibleName", Native_GetCollectibleName);
 	CreateNative("Cel_GetCollectibleLook", Native_GetCollectibleLook);
@@ -214,6 +261,9 @@ public void OnPluginStart()
 
 	g_cvDropClaimTime = CreateConVar("cm_drop_claim_time", "30.0", "Seconds after an emblem drop starts before the crates are checked against player lands.", _, true, 5.0);
 	g_cvDropCount = CreateConVar("cm_drop_count", "5", "Number of crates in one emblem drop.", _, true, 1.0, true, 30.0);
+	g_cvNukeWrecks = CreateConVar("cm_nuke_wrecks_builds", "1", "1: the Nuke emblem unfreezes and scatters props where it lands, as on the original server. 0: builds are safe.", _, true, 0.0, true, 1.0);
+	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
+	g_cvDigChance = CreateConVar("cm_dig_chance", "0.05", "Chance per shovel hit on the ground to dig up an emblem.", _, true, 0.0, true, 1.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
 	g_cvDropInterval = CreateConVar("cm_drop_interval", "0", "Minutes between automatic emblem drops. 0 disables automatic drops.", _, true, 0.0);
 	g_cvDropMinPlayers = CreateConVar("cm_drop_min_players", "2", "Players needed on the server for an automatic emblem drop.", _, true, 1.0);
@@ -233,6 +283,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
 	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
 	RegAdminCmd("v_powerbooth", Command_PowerBooth, ADMFLAG_SLAY, "|CelMod| Moves the Power Booth to where you are looking.");
+	RegAdminCmd("v_givemodel", Command_GiveModel, ADMFLAG_SLAY, "|CelMod| Gives a player model to a player.");
+	RegAdminCmd("v_takemodel", Command_TakeModel, ADMFLAG_SLAY, "|CelMod| Takes a player model away from a player.");
 	RegConsoleCmd("v_buymodel", Command_BuyModel, "|CelMod| Buys a player model.");
 	RegConsoleCmd("v_playermodel", Command_PlayerModel, "|CelMod| Wears a player model you own, or goes back to your own (off).");
 	RegConsoleCmd("v_playermodels", Command_PlayerModels, "|CelMod| Lists the player models and their prices.");
@@ -261,6 +313,27 @@ public void OnPluginStart()
 				OnClientPutInServer(i);
 			}
 		}
+	}
+}
+
+public void OnAllPluginsLoaded()
+{
+	g_bCustomGuns = LibraryExists("customguns");
+}
+
+public void OnLibraryAdded(const char[] sName)
+{
+	if (StrEqual(sName, "customguns"))
+	{
+		g_bCustomGuns = true;
+	}
+}
+
+public void OnLibraryRemoved(const char[] sName)
+{
+	if (StrEqual(sName, "customguns"))
+	{
+		g_bCustomGuns = false;
 	}
 }
 
@@ -295,6 +368,20 @@ public void OnMapStart()
 	PrecacheSound(SOUND_ICE, true);
 	PrecacheSound(SOUND_SHOCK, true);
 	PrecacheSound(SOUND_HEAL, true);
+	PrecacheSound(SOUND_QUAKE, true);
+	PrecacheSound(SOUND_FLASH, true);
+	PrecacheSound(SOUND_CANISTER, true);
+	PrecacheModel("models/props_wasteland/antlionhill.mdl", true);
+	PrecacheModel("models/error.mdl", true);
+
+	for (int i = 1; i <= 4; i++)
+	{
+		char sCough[64];
+
+		Format(sCough, sizeof(sCough), "ambient/voices/cough%d.wav", i);
+
+		PrecacheSound(sCough, true);
+	}
 	PrecacheSound(SOUND_FLAME, true);
 	PrecacheSound(SOUND_FIREBALL, true);
 	PrecacheSound(SOUND_WATER, true);
@@ -395,6 +482,11 @@ public void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
 			if (g_iCelWepItem[iOldOwner] == iItem)
 			{
 				SetActiveCelWep(iOldOwner, -1);
+			}
+
+			if (g_bCelWepTaken[iOldOwner][iItem])
+			{
+				SetCelWepTaken(iOldOwner, iItem, false);
 			}
 		}
 	}
@@ -975,6 +1067,22 @@ public void Hook_ItemUse(int iEntity, int iActivator, int iCaller, UseType utTyp
 		return;
 	}
 
+	if (g_Items[iItem].iKind == KIND_WEAPON && UsesCustomGun(iItem))
+	{
+		SetCelWepTaken(iActivator, iItem, !g_bCelWepTaken[iActivator][iItem]);
+
+		EmitSoundToAll(g_bCelWepTaken[iActivator][iItem] ? SOUND_EQUIP : SOUND_UNEQUIP, iEntity);
+
+		if (g_bCelWepTaken[iActivator][iItem])
+		{
+			Cel_PrintToChat(iActivator, "You took your {green}%s{default}. It is in your weapons now. Press {green}E{default} on it again to put it back.", g_Items[iItem].sName);
+		} else {
+			Cel_PrintToChat(iActivator, "You put your {green}%s{default} back.", g_Items[iItem].sName);
+		}
+
+		return;
+	}
+
 	if (g_Items[iItem].iKind == KIND_WEAPON)
 	{
 		if (g_iCelWepItem[iActivator] == iItem)
@@ -1095,13 +1203,13 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		return Plugin_Continue;
 	}
 
-	if (StrEqual(g_Items[iItem].sPower, "jump"))
+	// Jump emblems, and any emblem with a "jumpboost", jump higher.
+	if ((StrEqual(g_Items[iItem].sPower, "jump") || g_Items[iItem].fJump > 0.0) && (iButtons & IN_JUMP) && !(iLast & IN_JUMP) && (GetEntityFlags(iClient) & FL_ONGROUND))
 	{
-		if ((iButtons & IN_JUMP) && !(iLast & IN_JUMP) && (GetEntityFlags(iClient) & FL_ONGROUND))
-		{
-			RequestFrame(Frame_Jump, GetClientUserId(iClient));
-		}
-	} else if (StrEqual(g_Items[iItem].sPower, "feather"))
+		RequestFrame(Frame_Jump, GetClientUserId(iClient));
+	}
+
+	if (StrEqual(g_Items[iItem].sPower, "feather"))
 	{
 		float fVelocity[3];
 
@@ -1147,14 +1255,21 @@ public void Frame_Jump(any iUserId)
 
 	int iItem = g_iActiveEmblem[iClient];
 
-	if (iItem == -1 || !StrEqual(g_Items[iItem].sPower, "jump"))
+	if (iItem == -1)
+	{
+		return;
+	}
+
+	float fJump = StrEqual(g_Items[iItem].sPower, "jump") ? g_Items[iItem].fValue : g_Items[iItem].fJump;
+
+	if (fJump <= 0.0)
 	{
 		return;
 	}
 
 	GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fVelocity);
 
-	fVelocity[2] = g_Items[iItem].fValue;
+	fVelocity[2] = fJump;
 
 	TeleportEntity(iClient, NULL_VECTOR, NULL_VECTOR, fVelocity);
 }
@@ -1178,6 +1293,23 @@ public Action Timer_RestoreClient(Handle hTimer, any iUserId)
 	{
 		g_iActiveEmblem[iClient] = iItem;
 	}
+
+	// Custom Guns celweps the player had taken.
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		char sKey[64];
+
+		if (g_Items[i].iKind != KIND_WEAPON || g_Items[i].sCustomGun[0] == '\0')
+		{
+			continue;
+		}
+
+		Format(sKey, sizeof(sKey), "taken_%s", g_Items[i].sId);
+
+		g_bCelWepTaken[iClient][i] = (Inv_GetInt(iClient, sKey) == 1 && GetOwned(iClient, i) > 0);
+	}
+
+	CreateTimer(1.5, Timer_GiveCelWeps, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
 
 	Inv_GetString(iClient, "active_weapon", sId, sizeof(sId));
 
@@ -1221,6 +1353,9 @@ public Action Timer_ApplyHat(Handle hTimer, any iUserId)
 	if (iClient > 0 && IsClientInGame(iClient))
 	{
 		CreateHatEntity(iClient);
+
+		// Custom Guns empties the inventory on death and refills it a second after spawning; ours go in after that.
+		CreateTimer(1.5, Timer_GiveCelWeps, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
 
 		// Weapons are lost on death, so the celwep is handed back.
 		if (g_iCelWepItem[iClient] != -1 && IsPlayerAlive(iClient))
@@ -1333,6 +1468,22 @@ public Action Timer_Think(Handle hTimer)
 			g_bSpeedManaged[i] = (fSpeed != 1.0);
 		}
 
+		// Some emblems tint their holder (Demon turns them deep purple).
+		if (g_bHoldingGravGun[i] && iItem != -1 && g_Items[iItem].bPlayerColor && fNow >= g_fFrozenUntil[i])
+		{
+			g_bTinted[i] = true;
+
+			SetEntityRenderColor(i, g_Items[iItem].iPlayerColor[0], g_Items[iItem].iPlayerColor[1], g_Items[iItem].iPlayerColor[2], 255);
+		} else if (g_bTinted[i])
+		{
+			g_bTinted[i] = false;
+
+			if (fNow >= g_fFrozenUntil[i] && !g_bCloaked[i])
+			{
+				SetEntityRenderColor(i, 255, 255, 255, 255);
+			}
+		}
+
 		// Cloak: the player is nearly invisible while the emblem is in hand.
 		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "cloak"))
 		{
@@ -1399,6 +1550,11 @@ public Action Timer_Think(Handle hTimer)
 	}
 
 	ThinkPortals();
+
+	if (g_iTick % 5 == 0)
+	{
+		ThinkSmog();
+	}
 
 	return Plugin_Continue;
 }
@@ -1595,6 +1751,20 @@ void LoadItems()
 		while (kvItems.GotoNextKey());
 	}
 
+	// Emblems that turn into another emblem at the Power Booth (two Errors make a Blue Error, and so on).
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (g_Items[i].sUpgradeTo[0] != '\0')
+		{
+			g_Items[i].iUpgradeTo = FindItem(KIND_EMBLEM, g_Items[i].sUpgradeTo);
+
+			if (g_Items[i].iUpgradeTo == -1)
+			{
+				LogError("|CelMod| Emblem '%s' upgrades to the unknown emblem '%s'.", g_Items[i].sId, g_Items[i].sUpgradeTo);
+			}
+		}
+	}
+
 	// Every emblem gets a big version, made at the Power Booth. It is stronger and uses the large model.
 	int iEmblems = g_iItemCount;
 
@@ -1625,6 +1795,8 @@ void LoadItems()
 		g_Items[iBig].iWeight = 0;
 		g_Items[iBig].bIsBig = true;
 		g_Items[iBig].iBig = -1;
+		g_Items[iBig].iUpgradeTo = -1;
+		g_Items[iBig].sUpgradeTo[0] = '\0';
 
 		// Stronger numbers, except where a bigger value would make the power weaker.
 		if (StrEqual(g_Items[i].sPower, "resist") || StrEqual(g_Items[i].sPower, "gravity") || StrEqual(g_Items[i].sPower, "cloak") || StrEqual(g_Items[i].sPower, "feather"))
@@ -1672,6 +1844,23 @@ void LoadItems()
 
 			g_PlayerModels[iModel].iPrice = kvItems.GetNum("price", 0);
 
+			char sFlags[32], sMaterials[PLATFORM_MAX_PATH];
+
+			// Admin flags, e.g. "b". Admins with them can wear the model without buying it; nobody else can buy it.
+			kvItems.GetString("admin", sFlags, sizeof(sFlags), "");
+
+			g_PlayerModels[iModel].iAdminFlags = (sFlags[0] == '\0') ? 0 : ReadFlagString(sFlags);
+
+			// Custom models: the model's own files are sent to players, plus every file in "materials" if given.
+			AddModelToDownloads(g_PlayerModels[iModel].sModel);
+
+			kvItems.GetString("materials", sMaterials, sizeof(sMaterials), "");
+
+			if (sMaterials[0] != '\0')
+			{
+				AddFolderToDownloads(sMaterials);
+			}
+
 			PrecacheModel(g_PlayerModels[iModel].sModel, true);
 		}
 		while (kvItems.GotoNextKey());
@@ -1714,6 +1903,22 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].bIsBig = false;
 
 	kvItems.GetString("base", g_Items[iItem].sBase, sizeof(Item::sBase), "weapon_crowbar");
+	kvItems.GetString("upgradesto", g_Items[iItem].sUpgradeTo, sizeof(Item::sUpgradeTo), "");
+	kvItems.GetString("customgun", g_Items[iItem].sCustomGun, sizeof(Item::sCustomGun), "");
+	kvItems.GetString("digs", g_Items[iItem].sDigs, sizeof(Item::sDigs), "");
+
+	g_Items[iItem].iUpgradeTo = -1;
+	g_Items[iItem].iUpgradeCost = kvItems.GetNum("upgradecost", 2);
+	g_Items[iItem].fJump = kvItems.GetFloat("jumpboost", 0.0);
+	g_Items[iItem].fFallDamage = kvItems.GetFloat("falldamage", 1.0);
+	g_Items[iItem].bGlow = view_as<bool>(kvItems.GetNum("glow", 0));
+	g_Items[iItem].fHitDamage = kvItems.GetFloat("hitdamage", 25.0);
+	g_Items[iItem].fHitRange = kvItems.GetFloat("hitrange", 80.0);
+	g_Items[iItem].fRefire = kvItems.GetFloat("refire", 0.5);
+
+	kvItems.GetColor4("playercolor", g_Items[iItem].iPlayerColor);
+
+	g_Items[iItem].bPlayerColor = (g_Items[iItem].iPlayerColor[3] > 0);
 
 	g_Items[iItem].fDamage = kvItems.GetFloat("damage", 1.0);
 
@@ -1758,6 +1963,12 @@ void ReadItem(KeyValues kvItems, int iKind)
 	kvItems.GetString("sprite", g_Items[iItem].sSprite, sizeof(Item::sSprite), "sprites/glow04_noz.vmt");
 
 	g_Items[iItem].iSpriteIndex = PrecacheModel(g_Items[iItem].sSprite, true);
+
+	// A big shot model needs no sprite index of its own; sprite sprays use a glow instead.
+	if (StrContains(g_Items[iItem].sSprite, ".mdl", false) != -1)
+	{
+		g_Items[iItem].iSpriteIndex = PrecacheModel("sprites/glow04_noz.vmt", true);
+	}
 	g_Items[iItem].fSpeed = kvItems.GetFloat("speed", 1.0);
 
 	char sDamageType[24];
@@ -2100,6 +2311,11 @@ int SpawnItemEntity(int iClient, int iItem, float fOrigin[3], float fAngles[3])
 
 	SDKHook(iEntity, SDKHook_UsePost, Hook_ItemUse);
 
+	if (g_Items[iItem].bGlow)
+	{
+		SetEntityRenderFx(iEntity, RENDERFX_GLOWSHELL);
+	}
+
 	return iEntity;
 }
 
@@ -2157,6 +2373,11 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 	SetEntityRenderColor(iHand, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
+	if (g_Items[iItem].bGlow)
+	{
+		SetEntityRenderFx(iHand, RENDERFX_GLOWSHELL);
+	}
+
 	SetVariantString("!activator");
 	AcceptEntityInput(iHand, "SetParent", iClient, iHand);
 
@@ -2213,7 +2434,8 @@ void RestoreWeapon(int iClient)
 bool IsShotPower(const char[] sPower)
 {
 	return (StrEqual(sPower, "fire") || StrEqual(sPower, "blizzard") || StrEqual(sPower, "shock") || StrEqual(sPower, "push") || StrEqual(sPower, "blast") || StrEqual(sPower, "blink")
-		|| StrEqual(sPower, "flamethrower") || StrEqual(sPower, "shot") || StrEqual(sPower, "spray") || StrEqual(sPower, "medic") || StrEqual(sPower, "magnitude") || StrEqual(sPower, "chaos") || StrEqual(sPower, "portal") || StrEqual(sPower, "demon"));
+		|| StrEqual(sPower, "flamethrower") || StrEqual(sPower, "shot") || StrEqual(sPower, "spray") || StrEqual(sPower, "medic") || StrEqual(sPower, "magnitude") || StrEqual(sPower, "chaos") || StrEqual(sPower, "portal") || StrEqual(sPower, "demon")
+		|| StrEqual(sPower, "flash") || StrEqual(sPower, "smog") || StrEqual(sPower, "nuke"));
 }
 
 // Primary fire with a shot emblem: a beam from the player to whatever they are aiming at.
@@ -2271,15 +2493,34 @@ void FireEmblemShot(int iClient, int iItem)
 		return;
 	}
 
-	// Demon: a purple burst where the player aims, nothing more.
+	// Demon: a tower of dark power bursts out of the ground where the player aims.
 	if (StrEqual(sPower, "demon"))
 	{
-		TE_SetupBeamRingPoint(fEnd, 4.0, 120.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.5, 8.0, 0.0, iColor, 10, 0);
-		TE_SendToAll();
+		DemonTower(iClient, iItem, fEnd, iColor);
 
-		SpriteSpray(fEnd, g_fSkyward, g_Items[iItem].iSpriteIndex, 180, 0.3, 14);
+		return;
+	}
 
-		EmitSoundToAll(SOUND_FIRE, iClient);
+	// Solar: a flash of light that blinds everyone facing the holder.
+	if (StrEqual(sPower, "flash"))
+	{
+		SolarFlash(iClient, iItem);
+
+		return;
+	}
+
+	// Smog: a cloud of grey smoke that makes players inside it cough.
+	if (StrEqual(sPower, "smog"))
+	{
+		SmogCloud(iClient, iItem, fEnd);
+
+		return;
+	}
+
+	// Nuke: calls down a headcrab canister.
+	if (StrEqual(sPower, "nuke"))
+	{
+		NukeStrike(iClient, iItem, fEnd);
 
 		return;
 	}
@@ -2337,6 +2578,8 @@ void FireEmblemShot(int iClient, int iItem)
 	if (StrEqual(sPower, "chaos"))
 	{
 		float fVictim[3];
+
+		ChaosHill(iClient, iItem, fEnd);
 
 		TE_SetupBeamRingPoint(fEnd, 10.0, g_Items[iItem].fValue * 2.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 1.0, 12.0, 0.0, iColor, 10, 0);
 		TE_SendToAll();
@@ -2447,7 +2690,15 @@ void DrawShotEffect(int iClient, int iItem, float fStart[3], float fEnd[3], floa
 		return;
 	}
 
-	if (StrEqual(sFx, "flame"))
+	if (StrEqual(sFx, "model"))
+	{
+		LaunchModel(iItem, fStart, fEnd, iColor, 1500.0);
+
+		TE_SetupSparks(fEnd, fUp, 4, 2);
+		TE_SendToAll();
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else if (StrEqual(sFx, "flame"))
 	{
 		LaunchSprite(iItem, fStart, fEnd, iColor, 1100.0, 0.6, false);
 		SpriteSpray(fEnd, fUp, iSprite, 70, 0.6, 3);
@@ -2739,6 +2990,526 @@ void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
 	}
 }
 
+// A model that flies from one point to another and removes itself on arrival (the Errors fire error models).
+void LaunchModel(int iItem, float fStart[3], float fEnd[3], int iColor[4], float fSpeed)
+{
+	char sBuffer[64];
+	float fAngles[3], fVelocity[3];
+
+	float fDistance = GetVectorDistance(fStart, fEnd);
+
+	if (fDistance < 24.0 || GetEntityCount() > GetMaxEntities() - 200)
+	{
+		return;
+	}
+
+	int iModel = CreateEntityByName("prop_dynamic_override");
+
+	if (iModel == -1)
+	{
+		return;
+	}
+
+	float fLife = fDistance / fSpeed;
+
+	DispatchKeyValue(iModel, "model", g_Items[iItem].sSprite);
+	DispatchKeyValue(iModel, "solid", "0");
+	DispatchKeyValue(iModel, "classname", "cel_emblem_shot");
+
+	DispatchSpawn(iModel);
+
+	SetEntityRenderColor(iModel, iColor[0], iColor[1], iColor[2], 255);
+
+	MakeVectorFromPoints(fStart, fEnd, fVelocity);
+	GetVectorAngles(fVelocity, fAngles);
+
+	ScaleVector(fVelocity, 1.0 / fLife);
+
+	SetEntityMoveType(iModel, MOVETYPE_NOCLIP);
+
+	TeleportEntity(iModel, fStart, fAngles, fVelocity);
+
+	Format(sBuffer, sizeof(sBuffer), "OnUser1 !self:Kill::%.2f:1", fLife);
+
+	SetVariantString(sBuffer);
+	AcceptEntityInput(iModel, "AddOutput");
+	AcceptEntityInput(iModel, "FireUser1");
+}
+
+// Removes an entity after a delay, without a timer of our own.
+void KillAfter(int iEntity, float fDelay)
+{
+	char sBuffer[64];
+
+	Format(sBuffer, sizeof(sBuffer), "OnUser2 !self:Kill::%.2f:1", fDelay);
+
+	SetVariantString(sBuffer);
+	AcceptEntityInput(iEntity, "AddOutput");
+	AcceptEntityInput(iEntity, "FireUser2");
+}
+
+// Demon: a column of dark power rises out of the ground and throws everyone standing on it.
+void DemonTower(int iClient, int iItem, float fEnd[3], int iColor[4])
+{
+	float fBase[3], fDown[3], fTop[3], fVictim[3];
+
+	// The tower always starts on the ground below where the player aims.
+	fDown = fEnd;
+	fDown[2] -= 2000.0;
+
+	Handle hTrace = TR_TraceRayFilterEx(fEnd, fDown, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+	fBase = fEnd;
+
+	if (TR_DidHit(hTrace))
+	{
+		TR_GetEndPosition(fBase, hTrace);
+	}
+
+	CloseHandle(hTrace);
+
+	fTop = fBase;
+	fTop[2] += 360.0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		float fA[3], fB[3];
+
+		fA = fBase;
+		fB = fTop;
+
+		fA[0] += Cosine(i * 2.094) * 20.0;
+		fA[1] += Sine(i * 2.094) * 20.0;
+		fB[0] = fA[0];
+		fB[1] = fA[1];
+
+		TE_SetupBeamPoints(fA, fB, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.6, 18.0, 4.0, 1, 6.0, iColor, 20);
+		TE_SendToAll();
+	}
+
+	TE_SetupBeamRingPoint(fBase, 8.0, 160.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.6, 10.0, 0.0, iColor, 10, 0);
+	TE_SendToAll();
+
+	SpriteSpray(fBase, g_fSkyward, g_Items[iItem].iSpriteIndex, 500, 0.15, 16);
+
+	EmitSoundToAll(SOUND_FIRE, iClient);
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!CanBeHurt(iClient, i))
+		{
+			continue;
+		}
+
+		GetClientAbsOrigin(i, fVictim);
+
+		if (GetVectorDistance(fVictim, fBase) > 80.0)
+		{
+			continue;
+		}
+
+		float fThrow[3] = { 0.0, 0.0, 500.0 };
+
+		TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fThrow);
+
+		SDKHooks_TakeDamage(i, iClient, iClient, g_Items[iItem].fValue, DMG_ENERGYBEAM);
+	}
+}
+
+// Solar: blinds everyone who can see the holder and is facing them, like a combine scanner's flash.
+void SolarFlash(int iClient, int iItem)
+{
+	float fEyes[3], fFacing[3], fOtherEyes[3], fToHolder[3];
+
+	GetClientEyePosition(iClient, fEyes);
+
+	TE_SetupGlowSprite(fEyes, g_Items[iItem].iSpriteIndex, 0.4, 4.0, 255);
+	TE_SendToAll();
+
+	EmitSoundToAll(SOUND_FLASH, iClient);
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i) || IsFakeClient(i))
+		{
+			continue;
+		}
+
+		GetClientEyePosition(i, fOtherEyes);
+
+		if (GetVectorDistance(fEyes, fOtherEyes) > g_Items[iItem].fRange)
+		{
+			continue;
+		}
+
+		// Only players looking towards the holder are blinded.
+		float fAngles[3];
+
+		GetClientEyeAngles(i, fAngles);
+		GetAngleVectors(fAngles, fFacing, NULL_VECTOR, NULL_VECTOR);
+
+		MakeVectorFromPoints(fOtherEyes, fEyes, fToHolder);
+		NormalizeVector(fToHolder, fToHolder);
+
+		if (GetVectorDotProduct(fFacing, fToHolder) < 0.5)
+		{
+			continue;
+		}
+
+		Handle hTrace = TR_TraceRayFilterEx(fOtherEyes, fEyes, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+		bool bBlocked = TR_DidHit(hTrace);
+
+		CloseHandle(hTrace);
+
+		if (bBlocked)
+		{
+			continue;
+		}
+
+		int iHold = RoundToFloor(g_Items[iItem].fDuration * 1000.0);
+
+		Client_ScreenFade(i, 1500, FFADE_IN | FFADE_PURGE, iHold, 255, 255, 255, 255);
+	}
+}
+
+// Smog: a cloud of grey smoke that lasts a while. Everyone inside coughs and takes damage every second.
+void SmogCloud(int iClient, int iItem, float fEnd[3])
+{
+	char sColor[32];
+
+	// A player can keep three clouds going at once.
+	int iOldest = -1;
+	int iCount = 0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		if (EntRefToEntIndex(g_iSmogRef[iClient][i]) != INVALID_ENT_REFERENCE)
+		{
+			iCount++;
+		} else if (iOldest == -1)
+		{
+			iOldest = i;
+		}
+	}
+
+	if (iCount >= 3)
+	{
+		return;
+	}
+
+	int iSmoke = CreateEntityByName("env_smokestack");
+
+	if (iSmoke == -1)
+	{
+		return;
+	}
+
+	Format(sColor, sizeof(sColor), "%d %d %d", g_Items[iItem].iColor[0] + 30, g_Items[iItem].iColor[1] + 30, g_Items[iItem].iColor[2] + 30);
+
+	DispatchKeyValue(iSmoke, "BaseSpread", "60");
+	DispatchKeyValue(iSmoke, "SpreadSpeed", "12");
+	DispatchKeyValue(iSmoke, "Speed", "18");
+	DispatchKeyValue(iSmoke, "StartSize", "40");
+	DispatchKeyValue(iSmoke, "EndSize", "90");
+	DispatchKeyValue(iSmoke, "Rate", "18");
+	DispatchKeyValue(iSmoke, "JetLength", "90");
+	DispatchKeyValue(iSmoke, "Twist", "8");
+	DispatchKeyValue(iSmoke, "SmokeMaterial", "particle/SmokeStack.vmt");
+	DispatchKeyValue(iSmoke, "rendercolor", sColor);
+	DispatchKeyValue(iSmoke, "renderamt", "220");
+	DispatchKeyValue(iSmoke, "classname", "cel_smog");
+
+	DispatchSpawn(iSmoke);
+
+	TeleportEntity(iSmoke, fEnd, NULL_VECTOR, NULL_VECTOR);
+
+	AcceptEntityInput(iSmoke, "TurnOn");
+
+	KillAfter(iSmoke, g_Items[iItem].fDuration);
+
+	g_iSmogRef[iClient][iOldest] = EntIndexToEntRef(iSmoke);
+	g_iSmogItem[iClient][iOldest] = iItem;
+
+	EmitSoundToAll(SOUND_STEAM, iClient);
+}
+
+// Once a second: everyone standing in someone's smog coughs and is hurt.
+void ThinkSmog()
+{
+	char sCough[64];
+	float fCloud[3], fVictim[3];
+
+	for (int iOwner = 1; iOwner <= MaxClients; iOwner++)
+	{
+		for (int c = 0; c < 3; c++)
+		{
+			int iSmoke = EntRefToEntIndex(g_iSmogRef[iOwner][c]);
+
+			if (iSmoke == INVALID_ENT_REFERENCE)
+			{
+				continue;
+			}
+
+			int iItem = g_iSmogItem[iOwner][c];
+
+			GetEntPropVector(iSmoke, Prop_Data, "m_vecAbsOrigin", fCloud);
+
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (!IsClientInGame(i) || !IsPlayerAlive(i) || Cel_GetNoKill(i) || (i == iOwner))
+				{
+					continue;
+				}
+
+				GetClientEyePosition(i, fVictim);
+
+				if (GetVectorDistance(fVictim, fCloud) > 160.0)
+				{
+					continue;
+				}
+
+				Format(sCough, sizeof(sCough), "ambient/voices/cough%d.wav", GetRandomInt(1, 4));
+
+				EmitSoundToAll(sCough, i);
+
+				if (IsClientInGame(iOwner))
+				{
+					SDKHooks_TakeDamage(i, iOwner, iOwner, (iItem >= 0 && iItem < g_iItemCount) ? g_Items[iItem].fValue : 1.0, DMG_POISON);
+				}
+			}
+		}
+	}
+}
+
+// Chaos: an antlion hill bursts out of the ground with fire pouring from its top, then sinks back down.
+void ChaosHill(int iClient, int iItem, float fEnd[3])
+{
+	float fDown[3], fGround[3];
+
+	fDown = fEnd;
+	fDown[2] -= 2000.0;
+
+	Handle hTrace = TR_TraceRayFilterEx(fEnd, fDown, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+	fGround = fEnd;
+
+	if (TR_DidHit(hTrace))
+	{
+		TR_GetEndPosition(fGround, hTrace);
+	}
+
+	CloseHandle(hTrace);
+
+	int iHill = CreateEntityByName("prop_dynamic_override");
+
+	if (iHill == -1)
+	{
+		return;
+	}
+
+	DispatchKeyValue(iHill, "model", "models/props_wasteland/antlionhill.mdl");
+	DispatchKeyValue(iHill, "solid", "0");
+	DispatchKeyValue(iHill, "classname", "cel_chaoshill");
+	DispatchKeyValueFloat(iHill, "modelscale", 0.6);
+
+	DispatchSpawn(iHill);
+
+	float fStart[3];
+
+	fStart = fGround;
+	fStart[2] -= 120.0;
+
+	TeleportEntity(iHill, fStart, NULL_VECTOR, NULL_VECTOR);
+
+	int iFire = CreateEntityByName("env_fire");
+
+	if (iFire != -1)
+	{
+		float fTop[3];
+
+		fTop = fGround;
+		fTop[2] += 40.0;
+
+		DispatchKeyValue(iFire, "firesize", "96");
+		DispatchKeyValue(iFire, "fireattack", "1");
+		DispatchKeyValue(iFire, "damagescale", "0");
+		DispatchKeyValue(iFire, "health", "6");
+		DispatchKeyValue(iFire, "spawnflags", "133");
+
+		DispatchSpawn(iFire);
+
+		TeleportEntity(iFire, fTop, NULL_VECTOR, NULL_VECTOR);
+
+		AcceptEntityInput(iFire, "StartFire");
+
+		KillAfter(iFire, g_Items[iItem].fDuration);
+	}
+
+	KillAfter(iHill, g_Items[iItem].fDuration + 1.0);
+
+	DataPack dpHill;
+
+	CreateDataTimer(0.05, Timer_ChaosHill, dpHill, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+
+	dpHill.WriteCell(EntIndexToEntRef(iHill));
+	dpHill.WriteFloat(fGround[2]);
+	dpHill.WriteFloat(GetGameTime());
+	dpHill.WriteFloat(g_Items[iItem].fDuration);
+}
+
+// Raises the hill over a second, holds it, then lowers it again.
+public Action Timer_ChaosHill(Handle hTimer, DataPack dpHill)
+{
+	float fOrigin[3];
+
+	dpHill.Reset();
+
+	int iHill = EntRefToEntIndex(dpHill.ReadCell());
+	float fGround = dpHill.ReadFloat();
+	float fStarted = dpHill.ReadFloat();
+	float fDuration = dpHill.ReadFloat();
+
+	if (iHill == INVALID_ENT_REFERENCE)
+	{
+		return Plugin_Stop;
+	}
+
+	float fAge = GetGameTime() - fStarted;
+	float fRise = 1.0;
+
+	if (fAge < 1.0)
+	{
+		fRise = fAge;
+	} else if (fAge > fDuration)
+	{
+		fRise = 1.0 - (fAge - fDuration);
+	}
+
+	if (fRise < 0.0)
+	{
+		fRise = 0.0;
+	}
+
+	GetEntPropVector(iHill, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+	fOrigin[2] = fGround - 120.0 + 120.0 * fRise;
+
+	TeleportEntity(iHill, fOrigin, NULL_VECTOR, NULL_VECTOR);
+
+	return (fAge > fDuration + 1.0) ? Plugin_Stop : Plugin_Continue;
+}
+
+// Nuke: a headcrab canister falls from the sky where the player aims. On impact it unfreezes and scatters
+// every prop around it, as it did on the original server. cm_nuke_wrecks_builds 0 keeps builds safe.
+void NukeStrike(int iClient, int iItem, float fEnd[3])
+{
+	char sName[32];
+	float fAngles[3];
+
+	int iCanister = CreateEntityByName("env_headcrabcanister");
+
+	if (iCanister == -1)
+	{
+		return;
+	}
+
+	Format(sName, sizeof(sName), "cel_nuke_%d", iCanister);
+
+	fAngles[0] = 60.0;
+	fAngles[1] = GetRandomFloat(0.0, 360.0);
+
+	DispatchKeyValue(iCanister, "targetname", sName);
+	DispatchKeyValue(iCanister, "HeadcrabType", "0");
+	DispatchKeyValue(iCanister, "HeadcrabCount", "0");
+	DispatchKeyValue(iCanister, "FlightSpeed", "2500");
+	DispatchKeyValue(iCanister, "FlightTime", "3");
+	DispatchKeyValue(iCanister, "StartingHeight", "0");
+	DispatchKeyValueFloat(iCanister, "Damage", g_Items[iItem].fValue);
+	DispatchKeyValue(iCanister, "DamageRadius", "350");
+	DispatchKeyValue(iCanister, "SmokeLifetime", "12");
+	DispatchKeyValue(iCanister, "spawnflags", "8192");
+
+	DispatchSpawn(iCanister);
+
+	TeleportEntity(iCanister, fEnd, fAngles, NULL_VECTOR);
+
+	AcceptEntityInput(iCanister, "FireCanister", iClient, iClient);
+
+	KillAfter(iCanister, 25.0);
+
+	EmitSoundToAll(SOUND_CANISTER, iClient);
+
+	Cel_PrintToChatAll("{green}%N{default} called down a {green}Nuke{default}!", iClient);
+
+	DataPack dpNuke;
+
+	CreateDataTimer(3.2, Timer_NukeImpact, dpNuke, TIMER_FLAG_NO_MAPCHANGE);
+
+	dpNuke.WriteCell(GetClientUserId(iClient));
+	dpNuke.WriteFloat(fEnd[0]);
+	dpNuke.WriteFloat(fEnd[1]);
+	dpNuke.WriteFloat(fEnd[2]);
+}
+
+public Action Timer_NukeImpact(Handle hTimer, DataPack dpNuke)
+{
+	float fImpact[3], fOrigin[3], fPush[3];
+	int iCount = 0;
+
+	dpNuke.Reset();
+
+	int iClient = GetClientOfUserId(dpNuke.ReadCell());
+
+	fImpact[0] = dpNuke.ReadFloat();
+	fImpact[1] = dpNuke.ReadFloat();
+	fImpact[2] = dpNuke.ReadFloat();
+
+	if (!g_cvNukeWrecks.BoolValue)
+	{
+		return Plugin_Stop;
+	}
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES && iCount < g_cvNukeMaxProps.IntValue; i++)
+	{
+		if (!IsValidEntity(i) || !Cel_IsEntity(i) || GetEntityMoveType(i) != MOVETYPE_VPHYSICS)
+		{
+			continue;
+		}
+
+		Cel_GetEntityOrigin(i, fOrigin);
+
+		float fDistance = GetVectorDistance(fOrigin, fImpact);
+
+		if (fDistance > 400.0)
+		{
+			continue;
+		}
+
+		Cel_SetMotion(i, true);
+
+		MakeVectorFromPoints(fImpact, fOrigin, fPush);
+		NormalizeVector(fPush, fPush);
+
+		float fForce = 1400.0 * (1.0 - fDistance / 500.0);
+
+		fPush[0] *= fForce;
+		fPush[1] *= fForce;
+		fPush[2] = fPush[2] * fForce + 500.0;
+
+		TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fPush);
+
+		iCount++;
+	}
+
+	if (iCount > 0 && iClient > 0)
+	{
+		Cel_PrintToChatAll("The Nuke sent {green}%d{default} prop%s flying.", iCount, iCount == 1 ? "" : "s");
+	}
+
+	return Plugin_Stop;
+}
+
 // Right click attacks chosen with the "secondary" key.
 void SecondaryAttack(int iClient, int iItem)
 {
@@ -2919,17 +3690,41 @@ void SecondaryEmblemPower(int iClient, int iItem)
 		return;
 	}
 
-	// Demon: slams the holder straight down.
+	// Demon: shakes the screens of everyone nearby.
 	if (StrEqual(sPower, "demon"))
 	{
-		if (!(GetEntityFlags(iClient) & FL_ONGROUND))
+		if (GetGameTime() < g_fNextQuake[iClient])
 		{
-			GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fVelocity);
+			EmitSoundToClient(iClient, SOUND_DENY);
 
-			fVelocity[2] = -1000.0;
-
-			TeleportEntity(iClient, NULL_VECTOR, NULL_VECTOR, fVelocity);
+			return;
 		}
+
+		g_fNextQuake[iClient] = GetGameTime() + 10.0;
+
+		float fHolder[3], fOther[3];
+
+		GetClientAbsOrigin(iClient, fHolder);
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i))
+			{
+				continue;
+			}
+
+			GetClientAbsOrigin(i, fOther);
+
+			if (GetVectorDistance(fHolder, fOther) <= 700.0)
+			{
+				Client_Shake(i, SHAKE_START, 18.0, 150.0, 2.5);
+			}
+		}
+
+		EmitSoundToAll(SOUND_QUAKE, iClient);
+
+		TE_SetupBeamRingPoint(fHolder, 10.0, 700.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 16.0, 0.0, g_iDemonColor, 10, 0);
+		TE_SendToAll();
 
 		return;
 	}
@@ -3142,7 +3937,20 @@ public Action Hook_PlayerTakeDamage(int iVictim, int &iAttacker, int &iInflictor
 
 	int iItem = g_iActiveEmblem[iVictim];
 
-	if (iItem == -1 || !StrEqual(g_Items[iItem].sPower, "resist"))
+	if (iItem == -1)
+	{
+		return aResult;
+	}
+
+	// Demon and similar emblems soften falls.
+	if ((iDamageType & DMG_FALL) && g_Items[iItem].fFallDamage != 1.0)
+	{
+		fDamage *= g_Items[iItem].fFallDamage;
+
+		return Plugin_Changed;
+	}
+
+	if (!StrEqual(g_Items[iItem].sPower, "resist"))
 	{
 		return aResult;
 	}
@@ -3533,10 +4341,17 @@ bool IsRealClient(int iClient)
 void ResetClient(int iClient)
 {
 	g_bCloaked[iClient] = false;
+	g_bTinted[iClient] = false;
 	g_bGravityManaged[iClient] = false;
+
+	for (int i = 0; i < MAX_ITEMS; i++)
+	{
+		g_bCelWepTaken[iClient][i] = false;
+	}
 	g_bPortal[iClient][0] = false;
 	g_bPortal[iClient][1] = false;
 	g_fNextSecondary[iClient] = 0.0;
+	g_fNextQuake[iClient] = 0.0;
 	g_fPortalWait[iClient] = 0.0;
 	g_bFrozenTint[iClient] = false;
 	g_bHoldingGravGun[iClient] = false;
@@ -3549,6 +4364,11 @@ void ResetClient(int iClient)
 	g_iActiveHat[iClient] = -1;
 	g_iHatEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iLastButtons[iClient] = 0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		g_iSmogRef[iClient][i] = INVALID_ENT_REFERENCE;
+	}
 	g_iCelWepItem[iClient] = -1;
 	g_iCelWepRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iPlayerModel[iClient] = -1;
@@ -3619,7 +4439,19 @@ bool OwnsPlayerModel(int iClient, int iModel)
 
 	Format(sKey, sizeof(sKey), "playermodel_%s", g_PlayerModels[iModel].sId);
 
-	return (g_PlayerModels[iModel].iPrice < 1 || Inv_GetInt(iClient, sKey) == 1);
+	// Given or bought.
+	if (Inv_GetInt(iClient, sKey) == 1)
+	{
+		return true;
+	}
+
+	// Admin models belong to every admin with the flags.
+	if (g_PlayerModels[iModel].iAdminFlags != 0)
+	{
+		return CheckCommandAccess(iClient, "celmod_playermodel_admin", g_PlayerModels[iModel].iAdminFlags, true);
+	}
+
+	return (g_PlayerModels[iModel].iPrice < 1);
 }
 
 void ApplyPlayerModel(int iClient)
@@ -3664,6 +4496,12 @@ public Action Command_PlayerModels(int iClient, int iArgs)
 
 	for (int i = 0; i < g_iPlayerModelCount; i++)
 	{
+		// Admin models that are not for sale are only listed for those who have them.
+		if (g_PlayerModels[i].iAdminFlags != 0 && g_PlayerModels[i].iPrice < 1 && !OwnsPlayerModel(iClient, i))
+		{
+			continue;
+		}
+
 		if (OwnsPlayerModel(iClient, i))
 		{
 			Format(sEntry, sizeof(sEntry), "%s {green}(owned)%s{default}", g_PlayerModels[i].sId, g_iPlayerModel[iClient] == i ? " [on]" : "");
@@ -3725,6 +4563,12 @@ public Action Command_BuyModel(int iClient, int iArgs)
 	if (OwnsPlayerModel(iClient, iModel))
 	{
 		Cel_ReplyToCommand(iClient, "You already own the {green}%s{default} player model.", g_PlayerModels[iModel].sName);
+		return Plugin_Handled;
+	}
+
+	if (g_PlayerModels[iModel].iAdminFlags != 0 && g_PlayerModels[iModel].iPrice < 1)
+	{
+		Cel_ReplyToCommand(iClient, "The {green}%s{default} player model is not for sale.", g_PlayerModels[iModel].sName);
 		return Plugin_Handled;
 	}
 
@@ -3897,47 +4741,137 @@ public Action Command_PowerBooth(int iClient, int iArgs)
 
 public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
 {
-	float fOrigin[3];
-	int iCost = g_cvUpgradeCost.IntValue, iChosen = -1;
+	char sInfo[16], sLine[96];
+	int iCost = g_cvUpgradeCost.IntValue, iOptions = 0;
 
 	if (!IsRealClient(iActivator))
 	{
 		return;
 	}
 
-	// The enabled emblem is upgraded first, otherwise the first emblem the player has enough of.
-	if (g_iActiveEmblem[iActivator] != -1 && g_Items[g_iActiveEmblem[iActivator]].iBig != -1 && GetOwned(iActivator, g_iActiveEmblem[iActivator]) >= iCost)
-	{
-		iChosen = g_iActiveEmblem[iActivator];
-	}
+	// Every upgrade the player can afford right now: into the next emblem (Error to Blue Error), or into a big one.
+	Menu mBooth = new Menu(Menu_Booth);
 
-	for (int i = 0; i < g_iItemCount && iChosen == -1; i++)
+	mBooth.SetTitle("Power Booth\nTrade emblems you own for a better one:");
+
+	for (int i = 0; i < g_iItemCount; i++)
 	{
-		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iBig != -1 && GetOwned(iActivator, i) >= iCost)
+		if (g_Items[i].iKind != KIND_EMBLEM || g_Items[i].bIsBig)
 		{
-			iChosen = i;
+			continue;
+		}
+
+		int iOwned = GetOwned(iActivator, i);
+
+		if (g_Items[i].iUpgradeTo != -1 && iOwned >= g_Items[i].iUpgradeCost)
+		{
+			Format(sInfo, sizeof(sInfo), "%d:%d", i, g_Items[i].iUpgradeTo);
+			Format(sLine, sizeof(sLine), "%d %s  ->  1 %s", g_Items[i].iUpgradeCost, g_Items[i].sName, g_Items[g_Items[i].iUpgradeTo].sName);
+
+			mBooth.AddItem(sInfo, sLine);
+
+			iOptions++;
+		}
+
+		if (g_Items[i].iBig != -1 && iOwned >= iCost)
+		{
+			Format(sInfo, sizeof(sInfo), "%d:%d", i, g_Items[i].iBig);
+			Format(sLine, sizeof(sLine), "%d %s  ->  1 %s", iCost, g_Items[i].sName, g_Items[g_Items[i].iBig].sName);
+
+			mBooth.AddItem(sInfo, sLine);
+
+			iOptions++;
 		}
 	}
 
-	if (iChosen == -1)
+	if (iOptions == 0)
 	{
+		delete mBooth;
+
 		EmitSoundToClient(iActivator, SOUND_DENY);
 
-		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} bring {green}%d{default} of the same emblem and I will turn them into one big emblem.", iCost);
+		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} bring me {green}%d{default} of the same emblem for a big one. Some emblems turn into a better emblem for fewer: two {green}Errors{default} make a {green}Blue Error{default}, two Blue make a {green}Green Error{default}.", iCost);
 
 		return;
 	}
 
-	int iLeft = GetOwned(iActivator, iChosen) - iCost;
+	mBooth.Display(iActivator, 20);
+}
 
-	SetOwned(iActivator, iChosen, iLeft);
+public int Menu_Booth(Menu mBooth, MenuAction maAction, int iClient, int iChoice)
+{
+	char sInfo[16], sParts[2][8];
+	float fBooth[3], fClient[3];
+
+	if (maAction == MenuAction_End)
+	{
+		delete mBooth;
+
+		return 0;
+	}
+
+	if (maAction != MenuAction_Select || !IsRealClient(iClient))
+	{
+		return 0;
+	}
+
+	int iBooth = EntRefToEntIndex(g_iBoothRef);
+
+	if (iBooth == INVALID_ENT_REFERENCE)
+	{
+		return 0;
+	}
+
+	// The player has to still be at the booth.
+	GetEntPropVector(iBooth, Prop_Data, "m_vecAbsOrigin", fBooth);
+	GetClientAbsOrigin(iClient, fClient);
+
+	if (GetVectorDistance(fBooth, fClient) > 200.0)
+	{
+		Cel_PrintToChat(iClient, "Stay at the Power Booth to upgrade.");
+
+		return 0;
+	}
+
+	mBooth.GetItem(iChoice, sInfo, sizeof(sInfo));
+
+	if (ExplodeString(sInfo, ":", sParts, 2, sizeof(sParts[])) != 2)
+	{
+		return 0;
+	}
+
+	int iFrom = StringToInt(sParts[0]), iTo = StringToInt(sParts[1]);
+
+	if (iFrom < 0 || iFrom >= g_iItemCount || iTo < 0 || iTo >= g_iItemCount)
+	{
+		return 0;
+	}
+
+	int iCost = (iTo == g_Items[iFrom].iBig) ? g_cvUpgradeCost.IntValue : g_Items[iFrom].iUpgradeCost;
+
+	if (iTo != g_Items[iFrom].iBig && iTo != g_Items[iFrom].iUpgradeTo)
+	{
+		return 0;
+	}
+
+	// Checked again: the player may have traded emblems away while the menu was open.
+	if (GetOwned(iClient, iFrom) < iCost)
+	{
+		Cel_PrintToChat(iClient, "You no longer have {green}%d %s{default} emblems.", iCost, g_Items[iFrom].sName);
+
+		return 0;
+	}
+
+	int iLeft = GetOwned(iClient, iFrom) - iCost;
+
+	SetOwned(iClient, iFrom, iLeft);
 
 	// Spawned copies the player no longer owns are removed.
-	int iSpawned = CountSpawned(iActivator, iChosen);
+	int iSpawned = CountSpawned(iClient, iFrom);
 
 	for (int i = MaxClients + 1; i <= MAXENTITIES && iSpawned > iLeft; i++)
 	{
-		if (g_iEntItem[i] == iChosen && IsItemEntity(i) && Cel_CheckOwner(iActivator, i))
+		if (g_iEntItem[i] == iFrom && IsItemEntity(i) && Cel_CheckOwner(iClient, i))
 		{
 			AcceptEntityInput(i, "kill");
 
@@ -3945,21 +4879,21 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 		}
 	}
 
-	if (iLeft < 1 && g_iActiveEmblem[iActivator] == iChosen)
+	if (iLeft < 1 && g_iActiveEmblem[iClient] == iFrom)
 	{
-		SetActiveEmblem(iActivator, -1);
+		SetActiveEmblem(iClient, -1);
 	}
 
-	GiveItem(iActivator, g_Items[iChosen].iBig);
+	GiveItem(iClient, iTo);
 
-	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
-
-	TE_SetupBeamRingPoint(fOrigin, 10.0, 220.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 10.0, 0.0, g_iGreen, 10, 0);
+	TE_SetupBeamRingPoint(fBooth, 10.0, 220.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 10.0, 0.0, g_iGreen, 10, 0);
 	TE_SendToAll();
 
-	EmitSoundToAll(SOUND_REWARD, iEntity);
+	EmitSoundToAll(SOUND_REWARD, iBooth);
 
-	Cel_PrintToChatAll("{green}%N{default} used the Power Booth to make a {green}%s{default} emblem!", iActivator, g_Items[g_Items[iChosen].iBig].sName);
+	Cel_PrintToChatAll("{green}%N{default} used the Power Booth to make a {green}%s{default} emblem!", iClient, g_Items[iTo].sName);
+
+	return 0;
 }
 
 // What an item looks like, for plugins that put one on display (the auction above the Guess Booth).
@@ -3983,4 +4917,329 @@ public int Native_GetCollectibleLook(Handle hPlugin, int iNumParams)
 	SetNativeArray(8, g_Items[iItem].iColor, 4);
 
 	return true;
+}
+
+//Custom Guns celweps:
+bool UsesCustomGun(int iItem)
+{
+	return (g_bCustomGuns && g_Items[iItem].sCustomGun[0] != '\0' && GetFeatureStatus(FeatureType_Native, "CG_GiveGun") == FeatureStatus_Available);
+}
+
+int FindCustomGunItem(const char[] sClassname)
+{
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (g_Items[i].iKind == KIND_WEAPON && StrEqual(g_Items[i].sCustomGun, sClassname, false))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+// Several celweps can be carried at once. Custom Guns can only empty a whole inventory, so to put one back the
+// inventory is emptied and the rest are handed out again.
+void SetCelWepTaken(int iClient, int iItem, bool bTaken)
+{
+	char sKey[64];
+
+	g_bCelWepTaken[iClient][iItem] = bTaken;
+
+	Format(sKey, sizeof(sKey), "taken_%s", g_Items[iItem].sId);
+
+	Inv_SetInt(iClient, sKey, bTaken ? 1 : 0);
+
+	if (!IsPlayerAlive(iClient) || !UsesCustomGun(iItem))
+	{
+		return;
+	}
+
+	if (bTaken)
+	{
+		CG_GiveGun(iClient, g_Items[iItem].sCustomGun, true);
+
+		return;
+	}
+
+	CG_ClearInventory(iClient);
+
+	GiveTakenCelWeps(iClient);
+}
+
+void GiveTakenCelWeps(int iClient)
+{
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (g_bCelWepTaken[iClient][i] && UsesCustomGun(i) && GetOwned(iClient, i) > 0)
+		{
+			CG_GiveGun(iClient, g_Items[i].sCustomGun, true);
+		}
+	}
+}
+
+public Action Timer_GiveCelWeps(Handle hTimer, any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+
+	if (iClient > 0 && IsClientInGame(iClient) && IsPlayerAlive(iClient))
+	{
+		GiveTakenCelWeps(iClient);
+	}
+
+	return Plugin_Stop;
+}
+
+// Called by Custom Guns when a player swings one of its weapons. Celweps are melee weapons: the hit, damage and
+// effects come from the celwep's entry in collectibles.txt.
+public void CG_OnPrimaryAttack(int iClient, int iWeapon)
+{
+	char sClassname[64];
+	float fAngles[3], fEnd[3], fForward[3], fStart[3];
+
+	GetEntityClassname(iWeapon, sClassname, sizeof(sClassname));
+
+	int iItem = FindCustomGunItem(sClassname);
+
+	if (iItem == -1)
+	{
+		return;
+	}
+
+	float fNext = GetGameTime() + g_Items[iItem].fRefire;
+
+	SetEntPropFloat(iWeapon, Prop_Send, "m_flNextPrimaryAttack", fNext);
+	SetEntPropFloat(iWeapon, Prop_Send, "m_flNextSecondaryAttack", fNext);
+
+	CG_SetPlayerAnimation(iClient, CG_PLAYER_ATTACK1);
+
+	CG_GetShootPosition(iClient, fStart);
+	GetClientEyeAngles(iClient, fAngles);
+	GetAngleVectors(fAngles, fForward, NULL_VECTOR, NULL_VECTOR);
+
+	fEnd[0] = fStart[0] + fForward[0] * g_Items[iItem].fHitRange;
+	fEnd[1] = fStart[1] + fForward[1] * g_Items[iItem].fHitRange;
+	fEnd[2] = fStart[2] + fForward[2] * g_Items[iItem].fHitRange;
+
+	float fMins[3] = { -10.0, -10.0, -10.0 }, fMaxs[3] = { 10.0, 10.0, 10.0 };
+
+	Handle hTrace = TR_TraceHullFilterEx(fStart, fEnd, fMins, fMaxs, MASK_SHOT_HULL, Filter_NotSelf, iClient);
+
+	if (!TR_DidHit(hTrace))
+	{
+		CloseHandle(hTrace);
+
+		CG_PlayActivity(iWeapon, CG_ACT_VM_MISSCENTER);
+
+		EmitGameSoundToAll("Weapon_Crowbar.Single", iWeapon);
+
+		return;
+	}
+
+	float fHit[3], fNormal[3];
+
+	int iHit = TR_GetEntityIndex(hTrace);
+
+	TR_GetEndPosition(fHit, hTrace);
+	TR_GetPlaneNormal(hTrace, fNormal);
+
+	CloseHandle(hTrace);
+
+	CG_PlayActivity(iWeapon, CG_ACT_VM_HITCENTER);
+
+	EmitGameSoundToAll("Weapon_Crowbar.Melee_Hit", iWeapon);
+
+	if (iHit > 0 && iHit <= MaxClients)
+	{
+		if (CanBeHurt(iClient, iHit))
+		{
+			SDKHooks_TakeDamage(iHit, iClient, iClient, g_Items[iItem].fHitDamage, DMG_CLUB);
+
+			if (g_Items[iItem].fIgnite > 0.0)
+			{
+				IgniteEntity(iHit, g_Items[iItem].fIgnite);
+			}
+
+			if (g_Items[iItem].fSlow > 0.0)
+			{
+				g_fFrozenUntil[iHit] = GetGameTime() + g_Items[iItem].fSlow;
+				g_bFrozenTint[iHit] = true;
+
+				SetEntityRenderColor(iHit, 90, 160, 255, 255);
+			}
+		}
+
+		return;
+	}
+
+	// Loose physics props get knocked about; nobody else's frozen build is touched.
+	if (iHit > MaxClients && GetEntityMoveType(iHit) == MOVETYPE_VPHYSICS && (!Cel_IsEntity(iHit) || Cel_CheckOwner(iClient, iHit)))
+	{
+		float fPush[3];
+
+		fPush[0] = fForward[0] * 250.0;
+		fPush[1] = fForward[1] * 250.0;
+		fPush[2] = fForward[2] * 250.0;
+
+		TeleportEntity(iHit, NULL_VECTOR, NULL_VECTOR, fPush);
+	}
+
+	// Digging: a shovel hitting the ground can turn up an emblem.
+	if (iHit == 0 && fNormal[2] > 0.7 && g_Items[iItem].sDigs[0] != '\0')
+	{
+		DigForEmblem(iClient, iItem, fHit);
+	}
+}
+
+void DigForEmblem(int iClient, int iItem, float fHit[3])
+{
+	char sChoices[8][32];
+	float fUp[3] = { 0.0, 0.0, 1.0 };
+
+	TE_SetupDust(fHit, fUp, 12.0, 1.0);
+	TE_SendToAll();
+
+	if (GetRandomFloat(0.0, 1.0) > g_cvDigChance.FloatValue)
+	{
+		return;
+	}
+
+	int iCount = ExplodeString(g_Items[iItem].sDigs, " ", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+
+	int iFound = FindItem(KIND_EMBLEM, sChoices[GetRandomInt(0, iCount - 1)]);
+
+	if (iFound == -1)
+	{
+		return;
+	}
+
+	GiveItem(iClient, iFound);
+
+	EmitSoundToAll(SOUND_REWARD, iClient);
+
+	Cel_PrintToChatAll("{green}%N{default} dug up a {green}%s{default} emblem!", iClient, g_Items[iFound].sName);
+}
+
+//Downloads for custom player models:
+void AddModelToDownloads(const char[] sModel)
+{
+	static const char sExtensions[][] = { ".mdl", ".vvd", ".phy", ".dx80.vtx", ".dx90.vtx", ".sw.vtx", ".vtx" };
+	char sBase[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+
+	strcopy(sBase, sizeof(sBase), sModel);
+
+	int iDot = FindCharInString(sBase, '.', true);
+
+	if (iDot == -1)
+	{
+		return;
+	}
+
+	sBase[iDot] = '\0';
+
+	for (int i = 0; i < sizeof(sExtensions); i++)
+	{
+		Format(sFile, sizeof(sFile), "%s%s", sBase, sExtensions[i]);
+
+		// Only files the server really has, so stock models add nothing.
+		if (FileExists(sFile, false))
+		{
+			AddFileToDownloadsTable(sFile);
+		}
+	}
+}
+
+void AddFolderToDownloads(const char[] sFolder)
+{
+	char sEntry[PLATFORM_MAX_PATH], sPath[PLATFORM_MAX_PATH];
+	FileType ftType;
+
+	DirectoryListing dlFolder = OpenDirectory(sFolder, false);
+
+	if (dlFolder == null)
+	{
+		LogError("|CelMod| The player model materials folder '%s' does not exist.", sFolder);
+
+		return;
+	}
+
+	while (dlFolder.GetNext(sEntry, sizeof(sEntry), ftType))
+	{
+		if (StrEqual(sEntry, ".") || StrEqual(sEntry, ".."))
+		{
+			continue;
+		}
+
+		Format(sPath, sizeof(sPath), "%s/%s", sFolder, sEntry);
+
+		if (ftType == FileType_Directory)
+		{
+			AddFolderToDownloads(sPath);
+		} else if (ftType == FileType_File)
+		{
+			AddFileToDownloadsTable(sPath);
+		}
+	}
+
+	delete dlFolder;
+}
+
+Action SetModelGiven(int iClient, int iArgs, bool bGive)
+{
+	char sKey[64], sModel[64], sTarget[MAX_NAME_LENGTH];
+
+	if (iArgs < 2)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]%s{default} <player> <model>", bGive ? "givemodel" : "takemodel");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	GetCmdArg(2, sModel, sizeof(sModel));
+
+	int iTarget = FindTarget(iClient, sTarget, true, false);
+
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+
+	int iModel = FindPlayerModel(sModel);
+
+	if (iModel == -1)
+	{
+		Cel_ReplyToCommand(iClient, "There is no player model called {green}%s{default}.", sModel);
+		return Plugin_Handled;
+	}
+
+	Format(sKey, sizeof(sKey), "playermodel_%s", g_PlayerModels[iModel].sId);
+
+	Inv_SetInt(iTarget, sKey, bGive ? 1 : 0);
+
+	if (!bGive && g_iPlayerModel[iTarget] == iModel && !OwnsPlayerModel(iTarget, iModel))
+	{
+		g_iPlayerModel[iTarget] = -1;
+
+		Inv_SetString(iTarget, "active_playermodel", "none");
+	}
+
+	if (bGive)
+	{
+		Cel_PrintToChat(iTarget, "You were given the {green}%s{default} player model. Wear it with {green}!playermodel %s{default}.", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].sId);
+		Cel_ReplyToCommand(iClient, "Gave the {green}%s{default} player model to {green}%N{default}.", g_PlayerModels[iModel].sName, iTarget);
+	} else {
+		Cel_ReplyToCommand(iClient, "Took the {green}%s{default} player model from {green}%N{default}.", g_PlayerModels[iModel].sName, iTarget);
+	}
+
+	return Plugin_Handled;
+}
+
+public Action Command_GiveModel(int iClient, int iArgs)
+{
+	return SetModelGiven(iClient, iArgs, true);
+}
+
+public Action Command_TakeModel(int iClient, int iArgs)
+{
+	return SetModelGiven(iClient, iArgs, false);
 }

@@ -58,3 +58,10 @@
 		 - Added the Guess Booth (!guess) and auctions above it (!auction, !bid).
 		 - Added buyable player models (!playermodels, !buymodel, !playermodel).
 		 - Emblem drop crates are tinted with their emblem's color. Drops are admin triggered by default.
+	 - 11/17/26: Celweps can be real, separate weapons with the Custom Guns plugin: axe, fire sword, ice blade, power blade, pickaxe and shovel.
+		 - The shovel can dig up Black and White emblems.
+		 - Emblems reworked: Solar blinds players facing you, the Errors fire errors (25/50/75 damage), Smog makes a coughing smoke cloud,
+		   Chaos raises a burning antlion hill, Demon raises towers of dark power and shakes screens, Nuke drops a headcrab canister.
+		 - Added the Orange emblem (double speed). Cloud now jumps higher with lower gravity.
+		 - The Power Booth shows a menu: 2 Errors make a Blue Error, 2 Blue make a Green, and 5 of any emblem make a big one.
+		 - Player models can be admin only, and admins can give them with !givemodel.

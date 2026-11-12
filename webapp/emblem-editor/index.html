@@ -140,6 +140,9 @@ const POWERS = [
 	['blast', 'Blast: explosion where you aim', ['value', 'cooldown', 'range', 'fx'], 'Magnitude'],
 	['demon', 'Demon: burst, right click slams down', ['cooldown', 'range', 'sprite'], ''],
 	['blink', 'Blink: teleport where you aim', ['cooldown', 'range'], ''],
+	['flash', 'Flash: blinds players facing you', ['cooldown', 'range', 'duration', 'sprite'], ''],
+	['smog', 'Smog: smoke cloud, players inside cough', ['value', 'cooldown', 'range', 'duration'], 'Damage per second'],
+	['nuke', 'Nuke: headcrab canister from the sky', ['value', 'cooldown', 'range'], 'Impact damage'],
 	['speed', 'Speed: run faster', ['value'], 'Speed multiplier'],
 	['sprint', 'Sprint: never runs out', [], ''],
 	['gravity', 'Gravity: lighter or heavier', ['value'], 'Gravity multiplier'],
@@ -155,7 +158,7 @@ const POWERS = [
 const FX = [
 	['beam', 'Beam with impact ring', false], ['flame', 'Flame sprites', true], ['ice', 'Ice shards', true],
 	['water', 'Water arc', true], ['energy', 'Energy bolts', true], ['smoke', 'Smoke puffs', true],
-	['orb', 'Large orb', true], ['spray', 'Sprite spray', true], ['laser', 'Thin laser', false],
+	['orb', 'Large orb', true], ['model', 'Flying model (sprite = .mdl)', true], ['spray', 'Sprite spray', true], ['laser', 'Thin laser', false],
 	['plasma', 'Plasma beam', false], ['rainbow', 'Rainbow beam', false], ['none', 'Nothing', false],
 ];
 // Skins of the emblem model. Skins without a texture here use stock game textures in game.
@@ -174,7 +177,7 @@ const DEFAULTS = {
 	handoffset: '0 0 0', handangles: '0 0 0', power: 'none', dropweight: '10',
 };
 const ORDER = ['name', 'model', 'skin', 'color', 'scale', 'handscale', 'handoffset', 'handangles', 'power', 'value', 'cooldown',
-	'duration', 'range', 'dmgtype', 'ignite', 'slow', 'knockback', 'speed', 'fx', 'sprite', 'secondary', 'secondaryvalue', 'secondarycooldown', 'beamcolor', 'dropweight'];
+	'duration', 'range', 'dmgtype', 'ignite', 'slow', 'knockback', 'speed', 'fx', 'sprite', 'secondary', 'secondaryvalue', 'secondarycooldown', 'beamcolor', 'jumpboost', 'falldamage', 'playercolor', 'glow', 'upgradesto', 'upgradecost', 'dropweight'];
 
 // ---- State ---------------------------------------------------------------------------------
 let emblems = [{ id: 'new_emblem', kv: { ...DEFAULTS } }];

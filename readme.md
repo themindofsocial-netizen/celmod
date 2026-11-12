@@ -55,6 +55,7 @@ v_fly|Enables/disables nocip on the player.|None|Client|
 v_freeze|Freezes the prop you are looking at.|v_freezeit|Client|
 v_give|Gives the entity you are looking at to another player.|None|Client|
 v_giveitem|Gives an emblem or hat to a player.|None|Admin|
+v_givemodel|Gives a player model to a player.|None|Admin|
 v_god|Enables/disables breakability on the prop you are looking at.|None|Client|
 v_gravity|Changes the gravity within the land.|v_landgravity|Client|
 v_guess|Guesses the winning prop at the Guess Booth. One guess per map.|None|Client|
@@ -103,6 +104,7 @@ v_stackinfo|Gets the origin difference between props for help stacking.|None|Cli
 v_stand|Resets the angles on the prop you are looking at.|v_straight, v_straighten|Client|
 v_stuck|Respawns you.|None|Client|
 v_switch|Switches the side the hud is on the screen.|None|Client|
+v_takemodel|Takes a player model away from a player.|None|Admin|
 v_teleport|Spawns a teleport pad. Use it twice: the first pad sends players to the second.|None|Client|
 v_thirdperson|Switches to a third person view so you can see your emblem and hat.|None|Client|
 v_trade|Offers the entity you are looking at in a trade with another player.|None|Client|

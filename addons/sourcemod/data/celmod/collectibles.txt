@@ -16,6 +16,9 @@
 //   handoffset  "forward left up" from the right hand, to line the copy up with the hand.
 //   handangles  "pitch yaw roll" of the copy relative to the hand.
 //   power       Used with primary fire, which can be held down (cooldown and range apply to all):
+//               flash     Blinds players facing you. duration = seconds blinded, range.
+//               smog      Smoke cloud where you aim; players in it cough and take "value" damage a second.
+//               nuke      A headcrab canister falls where you aim. value = impact damage. See cm_nuke_wrecks_builds.
 //               shot      Hurts a player. value = damage, dmgtype = burn/drown/poison/shock/dissolve/
 //                         energy/generic, ignite = seconds the player is set on fire (optional).
 //               flamethrower  A short stream of flames. value = damage per hit, ignite = seconds on fire.
@@ -25,7 +28,7 @@
 //               portal    Places a portal. Right click places the other one; walk in to cross.
 //               chaos     Sets fire to players within "value" units of where you aim for "duration".
 //               blast     Explosion where you aim. value = magnitude.
-//               demon     Purple burst where you aim. Right click in the air slams you down.
+//               demon     A tower of dark power rises where you aim (value = damage). Right click shakes nearby screens.
 //               blink     Teleports you to where you aim.
 //               Passive powers:
 //               speed     Run faster. value = speed multiplier.
@@ -41,8 +44,14 @@
 //               gold      Earn money. value = CL per minute while enabled.
 //               none      Cosmetic only.
 //   speed       Any emblem can also carry a speed multiplier, on top of its power.
+//   jumpboost   Upward speed of a jump while held (a normal jump is about 200).
+//   falldamage  Fall damage multiplier while held (0.4 = 40%).
+//   playercolor "R G B A" tint of the holder while held.
+//   glow        1 = the emblem glows.
+//   upgradesto, upgradecost  At the Power Booth, this many of the emblem turn into one of the other emblem.
 //   fx          What a shot looks like:
 //               flame, ice, water, energy, smoke, orb  Sprites that fly to the target ("sprite").
+//               model                                  A model that flies to the target ("sprite" is a .mdl).
 //               spray                                  A burst of sprites thrown forward ("sprite").
 //               laser, plasma, rainbow, beam           Beams. beam is the default.
 //               none                                   Nothing.
@@ -69,8 +78,18 @@
 //   damage      Damage multiplier for hits made with it.
 //   model       Shown as the cel, and in the holder's hand to other players (handscale, handoffset, handangles).
 //   The holder's own first person view stays the stock weapon.
+//   customgun   With the Custom Guns plugin installed: the Custom Guns weapon this celwep is, e.g. weapon_cm_axe
+//               (scripts/weapon_cm_axe.txt). It is then a separate weapon with its own view model, several can be
+//               carried at once, and base/damage/hand keys are not used. Without Custom Guns, base is used instead.
+//   hitdamage   Damage of one hit (Custom Guns celweps). hitrange = reach, refire = seconds between swings.
+//   ignite, slow  Seconds a hit sets a player on fire, or slows them.
+//   digs        Emblem ids a hit on the ground can dig up (chance: cm_dig_chance).
 //
 // PlayerModels: name, model and price. A price of 0 is free for everyone.
+//   admin       Admin flags (e.g. "b"). Admins with them own the model; with price 0 nobody else can buy it.
+//   materials   A folder whose files are all sent to players, for custom models, e.g. "materials/models/player/mymodel".
+//   A model's own files (.mdl, .vvd, .phy, .vtx) are sent automatically when the server has them.
+//   Admins can also give or take any model with !givemodel and !takemodel.
 "Collectibles"
 {
 	"Emblems"
@@ -233,19 +252,16 @@
 		{
 			"name"			"Smog"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"5"
-			"color"			"50 50 50 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"shot"
-			"value"			"3"
-			"cooldown"		"0.5"
+			"color"			"50 50 50 255"
+			"skin"			"5"
+			"power"			"smog"
+			"value"			"1"
+			"duration"		"7.0"
+			"cooldown"		"1.5"
 			"range"			"500"
-			"dmgtype"		"poison"
-			"beamcolor"		"150 150 150 255"
-			"fx"			"smoke"
-			"sprite"		"sprites/steam1.vmt"
 			"dropweight"	"10"
 		}
 		"grey"
@@ -265,55 +281,62 @@
 			"sprite"		"sprites/glow04_noz.vmt"
 			"dropweight"	"10"
 		}
-		"error_red"
+		"error"
 		{
-			"name"			"Error (Red)"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"4"
-			"color"			"255 50 50 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
+			"name"			"Error"
+			"color"			"255 255 255 255"
+			"skin"			"4"
 			"power"			"shot"
 			"value"			"25"
 			"cooldown"		"1.5"
 			"range"			"3000"
-			"fx"			"orb"
-			"sprite"		"sprites/glow04_noz.vmt"
+			"fx"			"model"
+			"sprite"		"models/error.mdl"
+			"beamcolor"		"255 255 255 255"
+			"upgradesto"	"error_blue"
+			"upgradecost"	"2"
 			"dropweight"	"4"
 		}
 		"error_blue"
 		{
-			"name"			"Error (Blue)"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"4"
-			"color"			"0 0 255 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
+			"name"			"Blue Error"
+			"color"			"0 0 255 255"
+			"skin"			"4"
 			"power"			"shot"
 			"value"			"50"
 			"cooldown"		"1.5"
 			"range"			"3000"
-			"fx"			"orb"
-			"sprite"		"sprites/glow04_noz.vmt"
+			"fx"			"model"
+			"sprite"		"models/error.mdl"
+			"beamcolor"		"60 60 255 255"
+			"upgradesto"	"error_green"
+			"upgradecost"	"2"
 			"dropweight"	"3"
 		}
 		"error_green"
 		{
-			"name"			"Error (Green)"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"4"
-			"color"			"0 255 0 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
+			"name"			"Green Error"
+			"color"			"0 255 0 255"
+			"skin"			"4"
 			"power"			"shot"
 			"value"			"75"
 			"cooldown"		"1.5"
 			"range"			"3000"
-			"fx"			"orb"
-			"sprite"		"sprites/glow04_noz.vmt"
+			"fx"			"model"
+			"sprite"		"models/error.mdl"
+			"beamcolor"		"60 255 60 255"
 			"dropweight"	"2"
 		}
 		"speed"
@@ -328,6 +351,19 @@
 			"power"			"speed"
 			"value"			"1.4"
 			"dropweight"	"15"
+		}
+		"orange"
+		{
+			"name"			"Orange"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 128 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"speed"
+			"value"			"2.0"
+			"dropweight"	"10"
 		}
 		"peach"
 		{
@@ -351,7 +387,8 @@
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
 			"power"			"gravity"
-			"value"			"0.536"
+			"value"			"0.8"
+			"jumpboost"		"330"
 			"dropweight"	"12"
 		}
 		"magnitude"
@@ -375,16 +412,20 @@
 		{
 			"name"			"Demon"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"5"
-			"color"			"30 0 30 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
+			"color"			"30 0 30 255"
+			"skin"			"5"
 			"power"			"demon"
-			"cooldown"		"0.5"
-			"range"			"1000"
-			"speed"			"1.2"
-			"beamcolor"		"200 0 255 255"
+			"value"			"20"
+			"cooldown"		"1.0"
+			"range"			"480"
+			"speed"			"1.35"
+			"jumpboost"		"330"
+			"falldamage"	"0.4"
+			"playercolor"	"30 0 30 255"
+			"beamcolor"		"120 0 160 255"
 			"sprite"		"sprites/purpleglow1.vmt"
 			"dropweight"	"6"
 		}
@@ -437,17 +478,16 @@
 		{
 			"name"			"Chaos"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"6"
-			"color"			"255 255 255 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
+			"color"			"255 255 255 255"
+			"skin"			"6"
 			"power"			"chaos"
 			"value"			"200"
 			"duration"		"5.0"
 			"cooldown"		"15.0"
 			"range"			"600"
-			"beamcolor"		"255 120 0 255"
 			"sprite"		"sprites/flamelet1.vmt"
 			"dropweight"	"3"
 		}
@@ -455,16 +495,17 @@
 		{
 			"name"			"Solar"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"0"
-			"color"			"255 255 200 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"blast"
-			"value"			"80"
-			"cooldown"		"4.0"
-			"range"			"1500"
-			"fx"			"laser"
+			"color"			"255 255 255 255"
+			"skin"			"0"
+			"power"			"flash"
+			"cooldown"		"6.0"
+			"duration"		"3.0"
+			"range"			"1000"
+			"sprite"		"sprites/light_glow03.vmt"
+			"glow"			"1"
 			"dropweight"	"3"
 		}
 		"nuke"
@@ -476,13 +517,10 @@
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"blast"
-			"value"			"200"
-			"cooldown"		"10.0"
-			"range"			"3000"
-			"beamcolor"		"80 80 255 255"
-			"fx"			"orb"
-			"sprite"		"sprites/glow04_noz.vmt"
+			"power"			"nuke"
+			"value"			"150"
+			"cooldown"		"30.0"
+			"range"			"4000"
 			"dropweight"	"0"
 		}
 		"gold"
@@ -544,8 +582,7 @@
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"none"
-			"dropweight"	"8"
+			"dropweight"	"0"
 		}
 		"white"
 		{
@@ -556,8 +593,7 @@
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"none"
-			"dropweight"	"8"
+			"dropweight"	"0"
 		}
 	}
 
@@ -566,23 +602,86 @@
 		"axe"
 		{
 			"name"			"Axe"
-			"model"			"models/props_junk/shovel01a.mdl"
+			"model"			"models/celweps/a2.mdl"
+			"customgun"		"weapon_cm_axe"
+			"hitdamage"		"20"
+			"refire"		"0.5"
 			"base"			"weapon_crowbar"
-			"damage"		"2.0"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"dropweight"	"0"
 		}
-		"sword"
+		"firesword"
 		{
-			"name"			"Sword"
-			"model"			"models/props_junk/harpoon002a.mdl"
+			"name"			"Fire Sword"
+			"model"			"models/celweps/a5.mdl"
+			"customgun"		"weapon_cm_firesword"
+			"hitdamage"		"30"
+			"refire"		"0.5"
+			"ignite"		"3.0"
 			"base"			"weapon_crowbar"
-			"damage"		"3.0"
 			"color"			"255 255 255 255"
-			"handscale"		"0.6"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"iceblade"
+		{
+			"name"			"Ice Blade"
+			"model"			"models/celweps/a1.mdl"
+			"customgun"		"weapon_cm_iceblade"
+			"hitdamage"		"15"
+			"refire"		"0.4"
+			"slow"			"1.5"
+			"base"			"weapon_crowbar"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"powerblade"
+		{
+			"name"			"Power Blade"
+			"model"			"models/celweps/a1.mdl"
+			"customgun"		"weapon_cm_powerblade"
+			"hitdamage"		"40"
+			"refire"		"0.7"
+			"base"			"weapon_crowbar"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"pickaxe"
+		{
+			"name"			"Pickaxe"
+			"model"			"models/celweps/a8.mdl"
+			"customgun"		"weapon_cm_pickaxe"
+			"hitdamage"		"75"
+			"refire"		"1.0"
+			"base"			"weapon_crowbar"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"shovel"
+		{
+			"name"			"Shovel"
+			"model"			"models/props_junk/shovel01a.mdl"
+			"customgun"		"weapon_cm_shovel"
+			"hitdamage"		"10"
+			"refire"		"0.5"
+			"digs"			"black white"
+			"base"			"weapon_crowbar"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
 			"handoffset"	"0 0 0"
 			"handangles"	"0 0 0"
 			"dropweight"	"0"
@@ -610,6 +709,7 @@
 		"mossman"	{ "name" "Mossman"		"model" "models/mossman.mdl"		"price" "75000" }
 		"breen"		{ "name" "Dr. Breen"	"model" "models/breen.mdl"			"price" "150000" }
 		"gman"		{ "name" "G-Man"		"model" "models/gman_high.mdl"		"price" "500000" }
+		"admin"		{ "name" "Combine Elite"	"model" "models/combine_super_soldier.mdl"	"price" "0"	"admin" "b" }
 	}
 
 	"Hats"
