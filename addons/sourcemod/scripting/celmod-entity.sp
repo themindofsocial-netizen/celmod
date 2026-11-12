@@ -1950,7 +1950,7 @@ public int Native_GetEntityCatagory(Handle hPlugin, int iNumParams)
 	if (etEntityType == ENTTYPE_AMMO || etEntityType == ENTTYPE_AMMOCRATE || etEntityType == ENTTYPE_BIT || etEntityType == ENTTYPE_CHARGER || etEntityType == ENTTYPE_TRIGGER || etEntityType == ENTTYPE_WEAPONSPWNER)
 	{
 		return view_as<int>(ENTCATAGORY_BIT);
-	}else if (etEntityType == ENTTYPE_DOOR || etEntityType == ENTTYPE_EFFECT || etEntityType == ENTTYPE_INTERNET || etEntityType == ENTTYPE_LADDER || etEntityType == ENTTYPE_LIGHT || etEntityType == ENTTYPE_EMBLEM || etEntityType == ENTTYPE_HAT)
+	}else if (etEntityType == ENTTYPE_DOOR || etEntityType == ENTTYPE_EFFECT || etEntityType == ENTTYPE_INTERNET || etEntityType == ENTTYPE_LADDER || etEntityType == ENTTYPE_LIGHT || etEntityType == ENTTYPE_EMBLEM || etEntityType == ENTTYPE_HAT || etEntityType == ENTTYPE_CELWEP)
 	{
 		return view_as<int>(ENTCATAGORY_CEL);
 	} else if (etEntityType == ENTTYPE_CYCLER || etEntityType == ENTTYPE_DYNAMIC || etEntityType == ENTTYPE_PHYSICS || etEntityType == ENTTYPE_CLEER)
@@ -2047,6 +2047,9 @@ public int Native_GetEntityType(Handle hPlugin, int iNumParams)
 	} else if (StrEqual(sClassname, "cel_hat", false))
 	{
 		return view_as<int>(ENTTYPE_HAT);
+	} else if (StrEqual(sClassname, "cel_weapon", false))
+	{
+		return view_as<int>(ENTTYPE_CELWEP);
 	} else {
 		return view_as<int>(ENTTYPE_UNKNOWN);
 	}
@@ -2109,6 +2112,9 @@ public int Native_GetEntityTypeFromName(Handle hPlugin, int iNumParams)
 	} else if (StrEqual(sEntityType, "hat", false))
 	{
 		return view_as<int>(ENTTYPE_HAT);
+	} else if (StrEqual(sEntityType, "celwep", false))
+	{
+		return view_as<int>(ENTTYPE_CELWEP);
 	} else {
 		return view_as<int>(ENTTYPE_UNKNOWN);
 	}
@@ -2188,6 +2194,10 @@ public int Native_GetEntityTypeName(Handle hPlugin, int iNumParams)
 		case ENTTYPE_HAT:
 		{
 			Format(sEntityType, sizeof(sEntityType), "hat cel");
+		}
+		case ENTTYPE_CELWEP:
+		{
+			Format(sEntityType, sizeof(sEntityType), "weapon cel");
 		}
 		case ENTTYPE_UNKNOWN:
 		{

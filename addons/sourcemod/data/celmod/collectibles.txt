@@ -60,6 +60,17 @@
 //   offset      "forward left up" from the player's eyes.
 //   angles      "pitch yaw roll" relative to the player's head.
 //   scale       Model scale.
+//
+// Big emblems: every emblem automatically has a big version ("<id>_big", e.g. fire_big) made at the Power Booth
+// from several copies. It uses models/celmod/bhys8.mdl and is about half again as strong.
+//
+// Weapon (celwep) keys:
+//   base        The stock weapon the player is handed, e.g. weapon_crowbar, weapon_stunstick, weapon_pistol.
+//   damage      Damage multiplier for hits made with it.
+//   model       Shown as the cel, and in the holder's hand to other players (handscale, handoffset, handangles).
+//   The holder's own first person view stays the stock weapon.
+//
+// PlayerModels: name, model and price. A price of 0 is free for everyone.
 "Collectibles"
 {
 	"Emblems"
@@ -548,6 +559,57 @@
 			"power"			"none"
 			"dropweight"	"8"
 		}
+	}
+
+	"Weapons"
+	{
+		"axe"
+		{
+			"name"			"Axe"
+			"model"			"models/props_junk/shovel01a.mdl"
+			"base"			"weapon_crowbar"
+			"damage"		"2.0"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"sword"
+		{
+			"name"			"Sword"
+			"model"			"models/props_junk/harpoon002a.mdl"
+			"base"			"weapon_crowbar"
+			"damage"		"3.0"
+			"color"			"255 255 255 255"
+			"handscale"		"0.6"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+		"sunflower"
+		{
+			"name"			"Sunflower"
+			"model"			"models/props_lab/cactus.mdl"
+			"base"			"weapon_stunstick"
+			"damage"		"1.5"
+			"color"			"255 230 60 255"
+			"handscale"		"1.0"
+			"handoffset"	"0 0 0"
+			"handangles"	"0 0 0"
+			"dropweight"	"0"
+		}
+	}
+
+	"PlayerModels"
+	{
+		"alyx"		{ "name" "Alyx"			"model" "models/alyx.mdl"			"price" "50000" }
+		"barney"	{ "name" "Barney"		"model" "models/barney.mdl"			"price" "50000" }
+		"kleiner"	{ "name" "Dr. Kleiner"	"model" "models/kleiner.mdl"		"price" "75000" }
+		"eli"		{ "name" "Eli"			"model" "models/eli.mdl"			"price" "75000" }
+		"mossman"	{ "name" "Mossman"		"model" "models/mossman.mdl"		"price" "75000" }
+		"breen"		{ "name" "Dr. Breen"	"model" "models/breen.mdl"			"price" "150000" }
+		"gman"		{ "name" "G-Man"		"model" "models/gman_high.mdl"		"price" "500000" }
 	}
 
 	"Hats"

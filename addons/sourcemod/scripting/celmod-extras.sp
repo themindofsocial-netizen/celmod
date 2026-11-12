@@ -12,6 +12,10 @@
 
 ArrayList g_alUndo[MAXPLAYERS + 1];
 
+//While a build loads: the entity each saved id became, and the links still to be made.
+ArrayList g_alLoadLinks[MAXPLAYERS + 1];
+StringMap g_smLoadIds[MAXPLAYERS + 1];
+
 bool g_bHide[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bHideHooked[MAXENTITIES + 1];
 bool g_bLandBan[MAXPLAYERS + 1][MAXPLAYERS + 1];
@@ -52,6 +56,8 @@ public void OnPluginStart()
 		g_iWeldRef[i] = INVALID_ENT_REFERENCE;
 		g_iTeleportRef[i] = INVALID_ENT_REFERENCE;
 		g_alUndo[i] = new ArrayList();
+		g_alLoadLinks[i] = new ArrayList(3);
+		g_smLoadIds[i] = new StringMap();
 	}
 	
 	BuildPath(Path_SM, g_sSoundDB, sizeof(g_sSoundDB), "data/celmod/sounds.txt");
@@ -774,7 +780,7 @@ public Action Command_Weld(int iClient, int iArgs)
 	
 	Cel_ChangeBeam(iClient, iFirst);
 	
-	Cel_ReplyToCommandEntity(iClient, iFirst, "Welded your [type]. It now moves with the other entity. Welds are not saved with builds.");
+	Cel_ReplyToCommandEntity(iClient, iFirst, "Welded your [type]. It now moves with the other entity. ");
 	
 	return Plugin_Handled;
 }
@@ -894,7 +900,7 @@ public Action Command_Message(int iClient, int iArgs)
 	
 	SDKHook(iProp, SDKHook_UsePost, Hook_MessageUse);
 	
-	Cel_ReplyToCommand(iClient, "Spawned a message cel. Players read it by pressing {green}E{default} on it. It is not saved with builds.");
+	Cel_ReplyToCommand(iClient, "Spawned a message cel. Players read it by pressing {green}E{default} on it.");
 	
 	return Plugin_Handled;
 }
@@ -945,7 +951,7 @@ public Action Command_Sound(int iClient, int iArgs)
 	
 	SDKHook(iProp, SDKHook_UsePost, Hook_SoundUse);
 	
-	Cel_ReplyToCommand(iClient, "Spawned a {green}%s{default} sound cel. Press {green}E{default} on it to play it. It is not saved with builds.", sName);
+	Cel_ReplyToCommand(iClient, "Spawned a {green}%s{default} sound cel. Press {green}E{default} on it to play it.", sName);
 	
 	return Plugin_Handled;
 }
@@ -1074,7 +1080,7 @@ public Action Command_Teleport(int iClient, int iArgs)
 	
 	Cel_SetColor(iPad, 255, 140, 0, 255);
 	
-	Cel_ReplyToCommand(iClient, "Spawned the teleport exit. Walking onto the blue pad now takes players to the orange one. Teleports are not saved with builds.");
+	Cel_ReplyToCommand(iClient, "Spawned the teleport exit. Walking onto the blue pad now takes players to the orange one.");
 	
 	return Plugin_Handled;
 }
@@ -1104,4 +1110,135 @@ public void Hook_TeleportTouch(int iEntity, int iOther)
 	TeleportEntity(iOther, fOrigin, NULL_VECTOR, NULL_VECTOR);
 	
 	EmitSoundToAll("ambient/machines/teleport1.wav", iExit);
+}
+
+//Build saving: every entity is given an id, and anything that points at another entity stores that entity's id.
+public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
+{
+	kvSave.SetNum("x_id", iEntity);
+	
+	if (g_sMessage[iEntity][0] != '\0')
+	{
+		kvSave.SetString("x_message", g_sMessage[iEntity]);
+	}
+	
+	if (g_sSound[iEntity][0] != '\0')
+	{
+		kvSave.SetString("x_sound", g_sSound[iEntity]);
+	}
+	
+	int iExit = EntRefToEntIndex(g_iTeleportDest[iEntity]);
+	
+	if (g_iTeleportDest[iEntity] != INVALID_ENT_REFERENCE && iExit != INVALID_ENT_REFERENCE)
+	{
+		kvSave.SetNum("x_teleport", iExit);
+	}
+	
+	int iParent = GetEntPropEnt(iEntity, Prop_Data, "m_hMoveParent");
+	
+	if (iParent > MaxClients && Cel_IsEntity(iParent))
+	{
+		kvSave.SetNum("x_weld", iParent);
+	}
+	
+	if (Cel_GetEntityType(iEntity) == ENTTYPE_TRIGGER && Cel_GetTriggerLink(iEntity) > 0)
+	{
+		kvSave.SetNum("x_link", Cel_GetTriggerLink(iEntity));
+	}
+}
+
+public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
+{
+	char sId[16];
+	int iLink[3];
+	
+	IntToString(kvSave.GetNum("x_id", -1), sId, sizeof(sId));
+	
+	g_smLoadIds[iClient].SetValue(sId, EntIndexToEntRef(iEntity));
+	
+	kvSave.GetString("x_message", g_sMessage[iEntity], sizeof(g_sMessage[]), "");
+	
+	if (g_sMessage[iEntity][0] != '\0')
+	{
+		SetEntProp(iEntity, Prop_Data, "m_spawnflags", GetEntProp(iEntity, Prop_Data, "m_spawnflags") | 256);
+		
+		SDKHook(iEntity, SDKHook_UsePost, Hook_MessageUse);
+	}
+	
+	kvSave.GetString("x_sound", g_sSound[iEntity], sizeof(g_sSound[]), "");
+	
+	if (g_sSound[iEntity][0] != '\0')
+	{
+		PrecacheSound(g_sSound[iEntity]);
+		
+		g_fNextSoundUse[iEntity] = 0.0;
+		
+		SetEntProp(iEntity, Prop_Data, "m_spawnflags", GetEntProp(iEntity, Prop_Data, "m_spawnflags") | 256);
+		
+		SDKHook(iEntity, SDKHook_UsePost, Hook_SoundUse);
+	}
+	
+	//Links are made once the whole build is in, the other entity may not exist yet. 0 = teleport, 1 = weld, 2 = button link.
+	static const char sKeys[][] = { "x_teleport", "x_weld", "x_link" };
+	
+	for (int i = 0; i < sizeof(sKeys); i++)
+	{
+		if (kvSave.GetNum(sKeys[i], -1) != -1)
+		{
+			iLink[0] = i;
+			iLink[1] = EntIndexToEntRef(iEntity);
+			iLink[2] = kvSave.GetNum(sKeys[i]);
+			
+			g_alLoadLinks[iClient].PushArray(iLink);
+		}
+	}
+}
+
+public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
+{
+	char sId[16];
+	int iLink[3], iRef;
+	
+	for (int i = 0; i < g_alLoadLinks[iClient].Length; i++)
+	{
+		g_alLoadLinks[iClient].GetArray(i, iLink);
+		
+		IntToString(iLink[2], sId, sizeof(sId));
+		
+		int iEntity = EntRefToEntIndex(iLink[1]);
+		
+		if (iEntity == INVALID_ENT_REFERENCE || !g_smLoadIds[iClient].GetValue(sId, iRef))
+		{
+			continue;
+		}
+		
+		int iOther = EntRefToEntIndex(iRef);
+		
+		if (iOther == INVALID_ENT_REFERENCE)
+		{
+			continue;
+		}
+		
+		switch (iLink[0])
+		{
+			case 0:
+			{
+				g_iTeleportDest[iEntity] = iRef;
+				
+				SDKHook(iEntity, SDKHook_StartTouchPost, Hook_TeleportTouch);
+			}
+			case 1:
+			{
+				SetVariantString("!activator");
+				AcceptEntityInput(iEntity, "SetParent", iOther, iEntity);
+			}
+			case 2:
+			{
+				Cel_SetTriggerLink(iEntity, iOther);
+			}
+		}
+	}
+	
+	g_alLoadLinks[iClient].Clear();
+	g_smLoadIds[iClient].Clear();
 }

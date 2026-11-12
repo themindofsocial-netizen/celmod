@@ -9,12 +9,15 @@ v_alpha - Client - Changes the transparency on the prop you are looking at.
 v_ammo - Client - Creates a ammo bit that will give ammo when the player touches it.
 v_ammocrate - Client - Creates a ammo crate bit that will give ammo to the player.
 v_amt - Client - Changes the transparency on the prop you are looking at.
+v_auction - Admin - Auctions an emblem, hat or weapon above the Guess Booth, or cancels the auction.
 v_autobuild - Admin - Stacks props on the x, y and z axis.
 v_axis - Client - Creates a marker to the player showing every axis.
 v_balance - Client - Gets the players current balance.
+v_bid - Client - Bids on the item being auctioned above the Guess Booth.
 v_blacklist - Admin - Adds/removes a prop from the spawn blacklist.
 v_button - Client - Spawns a button trigger bit.
 v_buy - Client - Purchases the current entity you are looking at or command you specified.
+v_buymodel - Client - Buys a player model.
 v_charger - Client - Creates a health/suit charger bit that will give health/suit to the player.
 v_cl - Client - Shows your balance, or drops an amount of cleers for another player to pick up.
 v_clear - Client - Deletes one of your saved builds.
@@ -32,6 +35,7 @@ v_delall - Client - Removes all the entities that you own.
 v_delete - Client - Removes the prop you are looking at.
 v_deleteall - Client - Removes all the entities that you own.
 v_delreward - Admin - Removes the reward pickup you are looking at.
+v_delzone - Admin - Deletes the area you are standing in.
 v_dm - Client - Changes the mode to deathmatch within the land.
 v_door - Client - Spawns a working door cel.
 v_drop - Client - Teleports the entity you are looking at to the floor.
@@ -53,6 +57,8 @@ v_give - Client - Gives the entity you are looking at to another player.
 v_giveitem - Admin - Gives an emblem or hat to a player.
 v_god - Client - Enables/disables breakability on the prop you are looking at.
 v_gravity - Client - Changes the gravity within the land.
+v_guess - Client - Guesses the winning prop at the Guess Booth. One guess per map.
+v_guessbooth - Admin - Moves the Guess Booth to where you are standing and picks new props.
 v_hat - Client - Spawns a hat you own, or takes off your hat.
 v_hats - Client - Lists the emblems and hats you own.
 v_hide - Client - Hides another player's entities from your view.
@@ -85,7 +91,10 @@ v_p - Client - Spawns a prop by name.
 v_paint - Client - Colors the prop you are looking at.
 v_palette - Client - Colors the prop you are looking at with your own red, green and blue values.
 v_paste - Client - Pastes the prop in your copy buffer where you are looking at.
+v_playermodel - Client - Wears a player model you own, or goes back to your own (off).
+v_playermodels - Client - Lists the player models and their prices.
 v_pmove - Client - Moves the prop you are looking at on it's origin.
+v_powerbooth - Admin - Moves the Power Booth to where you are looking.
 v_proplist - Client - Displays the prop list.
 v_props - Client - Displays the prop list.
 v_r - Client - Rotates the prop you are looking at.
@@ -128,6 +137,10 @@ v_unfreezeit - Client - Unfreezes the prop you are looking at.
 v_unlock - Client - Unlocks the cel you are looking at.
 v_updatelist - Client - Displays the update list.
 v_updates - Client - Displays the update list.
+v_weapon - Client - Spawns a weapon cel you own, or puts your celwep away (off).
+v_weapons - Client - Lists the emblems, hats and weapons you own.
 v_weld - Client - Welds one of your entities to another so they move together.
 v_wep - Client - Creates a weapon bit that will give a weapon when the player touches it.
 v_weps - Client - Gives you every weapon.
+v_zone - Admin - Creates an event or restricted area. Use it at one corner, then at the opposite corner.
+v_zones - Client - Lists the event and restricted areas on this map.

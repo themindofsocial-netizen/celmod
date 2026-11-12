@@ -39,6 +39,7 @@ enum EntityType
 	ENTTYPE_UNKNOWN = 16,
 	ENTTYPE_EMBLEM = 17,
 	ENTTYPE_HAT = 18,
+	ENTTYPE_CELWEP = 19,
 };
 
 enum EffectType
@@ -181,6 +182,23 @@ forward void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
  * @param sSaveName  The name of the build that was loaded.
  */
 forward void Cel_OnBuildLoaded(int iClient, const char[] sSaveName);
+
+/**
+ * Called for each entity while a build is being saved, so a plugin can store its own data with it.
+ *
+ * @param iEntity  The entity being saved.
+ * @param kvSave   The save file, positioned on this entity's section. Do not move or close it.
+ */
+forward void Cel_OnSaveEntity(int iEntity, KeyValues kvSave);
+
+/**
+ * Called for each entity after it has been spawned from a build, so a plugin can restore its own data.
+ *
+ * @param iClient  The client loading the build.
+ * @param iEntity  The entity that was spawned.
+ * @param kvSave   The save file, positioned on this entity's section. Do not move or close it.
+ */
+forward void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave);
 
 native void Cel_AddToBlacklist(char[] sAlias);
 
@@ -523,6 +541,15 @@ native bool Cel_GiveCollectible(int iClient, const char[] sKind, const char[] sI
 
 native bool Cel_IsCollectible(int iEntity);
 
+/**
+ * Looks up how an emblem, hat or weapon looks, to put one on display.
+ *
+ * @param sKind  "emblem", "hat" or "weapon".
+ * @param sId	The id or name of the item.
+ * @return	   True if the item exists.
+ */
+native bool Cel_GetCollectibleLook(const char[] sKind, const char[] sId, char[] sModel, int iModelLength, char[] sName, int iNameLength, int &iSkin, int iColor[4]);
+
 native int Cel_GetColor(int iEntity, int iColor[4]);
 
 native int Cel_GetCombinedCount(int iClient);
@@ -793,6 +820,10 @@ native RenderFx Cel_GetRenderFXFromName(const char[] sRenderFXName);
 native char Cel_GetRenderFXName(RenderFx rfRenderFX, char[] sRenderFX, int iMaxLength);
 
 native int Cel_GetSaveSystemVersion();
+
+native int Cel_GetTriggerLink(int iEntity);
+
+native void Cel_SetTriggerLink(int iEntity, int iTarget);
 
 native int Cel_GetTriggerType(iEntity);
 

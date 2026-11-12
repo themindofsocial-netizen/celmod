@@ -9,6 +9,8 @@ bool g_bLate;
 float g_fCrosshairOrigin[MAXPLAYERS + 1][3];
 
 Handle g_hOnBuildLoaded;
+Handle g_hOnLoadEntity;
+Handle g_hOnSaveEntity;
 
 int g_iSaveOverride[MAXPLAYERS + 1];
 
@@ -34,6 +36,8 @@ public void OnPluginStart()
 	LoadTranslations("celmod.phrases");
 	
 	g_hOnBuildLoaded = CreateGlobalForward("Cel_OnBuildLoaded", ET_Ignore, Param_Cell, Param_String);
+	g_hOnLoadEntity = CreateGlobalForward("Cel_OnLoadEntity", ET_Ignore, Param_Cell, Param_Cell, Param_Cell);
+	g_hOnSaveEntity = CreateGlobalForward("Cel_OnSaveEntity", ET_Ignore, Param_Cell, Param_Cell);
 	
 	if (g_bLate)
 	{
@@ -328,14 +332,18 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 					{
 						iProp = Cel_SpawnWeaponBit(iClient, view_as<WeaponBitType>(kvLoadBuild.GetNum("weaponbittype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
 					}
-					case ENTTYPE_EMBLEM, ENTTYPE_HAT:
+					case ENTTYPE_TRIGGER:
+					{
+						iProp = Cel_SpawnButton(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+					}
+					case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP:
 					{
 						char sItemId[64];
 						
 						kvLoadBuild.GetString("itemid", sItemId, sizeof(sItemId));
 						
 						//Returns -1 when the player no longer owns the item, or it is already spawned.
-						iProp = Cel_SpawnCollectible(iClient, etType == ENTTYPE_EMBLEM ? "emblem" : "hat", sItemId, fEnt[0], fOrigin);
+						iProp = Cel_SpawnCollectible(iClient, etType == ENTTYPE_EMBLEM ? "emblem" : (etType == ENTTYPE_HAT ? "hat" : "weapon"), sItemId, fEnt[0], fOrigin);
 					}
 					case ENTTYPE_UNKNOWN:
 					{
@@ -361,6 +369,15 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 				
 				Cel_SetColorFade(iProp, view_as<bool>(kvLoadBuild.GetNum("colorfading")), kvLoadBuild.GetNum("fc1-1"), kvLoadBuild.GetNum("fc1-2"), kvLoadBuild.GetNum("fc1-3"), kvLoadBuild.GetNum("fc2-1"), kvLoadBuild.GetNum("fc2-2"), kvLoadBuild.GetNum("fc2-3"));
 				Cel_SetRainbow(iProp, view_as<bool>(kvLoadBuild.GetNum("colorrainbow")));
+				
+				//Other plugins restore what they stored with this entity (teleports, messages, sounds, links, welds).
+				Call_StartForward(g_hOnLoadEntity);
+				
+				Call_PushCell(iClient);
+				Call_PushCell(iProp);
+				Call_PushCell(kvLoadBuild);
+				
+				Call_Finish();
 			}
 			
 			while (kvLoadBuild.GotoNextKey());
@@ -597,7 +614,7 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 							
 							kvSaveBuild.SetNum("weaponbittype", Cel_GetWeaponType(i));
 						}
-						case ENTTYPE_EMBLEM, ENTTYPE_HAT:
+						case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP:
 						{
 							char sItemId[64];
 							
@@ -606,6 +623,14 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 							kvSaveBuild.SetString("itemid", sItemId);
 						}
 					}
+					
+					//Other plugins add what they need to rebuild this entity.
+					Call_StartForward(g_hOnSaveEntity);
+					
+					Call_PushCell(i);
+					Call_PushCell(kvSaveBuild);
+					
+					Call_Finish();
 					
 					kvSaveBuild.Rewind();
 				}

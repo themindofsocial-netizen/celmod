@@ -51,3 +51,10 @@
 		 - Held emblems now point forwards. Hats find the head on more player models.
 		 - !emblems, !hats and !inventory show everything you own in one list.
 		 - Added !tune for admins to line up held emblems and hats while in game.
+	 - 11/16/26: Teleports, message cels, sound cels, welds and buttons with their links are now saved with builds.
+		 - The Power Booth appears on every map. Bring it 5 of the same emblem to make one big emblem.
+		 - Added event areas and restricted areas for admins (!zone, !delzone, !zones).
+		 - Added celweps: weapon cels you own and press E on to take the weapon (!weapon, !weapons).
+		 - Added the Guess Booth (!guess) and auctions above it (!auction, !bid).
+		 - Added buyable player models (!playermodels, !buymodel, !playermodel).
+		 - Emblem drop crates are tinted with their emblem's color. Drops are admin triggered by default.

@@ -20,10 +20,15 @@
  * player get an item back with !emblem / !hat after the entity is removed or the map changes.
  */
 
-#define MAX_ITEMS 64
+#define MAX_ITEMS 192
+#define MAX_PLAYERMODELS 48
 
 #define KIND_EMBLEM 0
 #define KIND_HAT 1
+#define KIND_WEAPON 2
+
+#define BOOTH_MODEL "models/props_combine/suit_charger001.mdl"
+#define BIG_EMBLEM_MODEL "models/celmod/bhys8.mdl"
 
 #define GRAVGUN_CLASS "weapon_physcannon"
 #define GRAVGUN_WORLDMODEL "models/weapons/w_physics.mdl"
@@ -77,7 +82,34 @@ enum struct Item
 	float fHandAngles[3];
 	float fHandScale;
 	int iModelIndex;
+	int iBig;
+	bool bIsBig;
+	char sBase[32];
+	float fDamage;
 }
+
+enum struct PlayerModel
+{
+	char sId[32];
+	char sName[48];
+	char sModel[PLATFORM_MAX_PATH];
+	int iPrice;
+}
+
+char g_sKindClass[][] = { "cel_emblem", "cel_hat", "cel_weapon" };
+char g_sKindName[][] = { "emblem", "hat", "weapon" };
+char g_sKindPlural[][] = { "emblems", "hats", "weapons" };
+char g_sKindTitle[][] = { "Emblems", "Hats", "Weapons" };
+
+ConVar g_cvUpgradeCost;
+
+int g_iBoothRef = INVALID_ENT_REFERENCE;
+int g_iCelWepItem[MAXPLAYERS + 1];
+int g_iCelWepRef[MAXPLAYERS + 1];
+int g_iPlayerModel[MAXPLAYERS + 1];
+int g_iPlayerModelCount;
+
+PlayerModel g_PlayerModels[MAX_PLAYERMODELS];
 
 bool g_bLate;
 bool g_bDropBox[MAXENTITIES + 1];
@@ -134,6 +166,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 {
 	CreateNative("Cel_GetCollectibleId", Native_GetCollectibleId);
 	CreateNative("Cel_GetCollectibleName", Native_GetCollectibleName);
+	CreateNative("Cel_GetCollectibleLook", Native_GetCollectibleLook);
 	CreateNative("Cel_GiveCollectible", Native_GiveCollectible);
 	CreateNative("Cel_IsCollectible", Native_IsCollectible);
 	CreateNative("Cel_SpawnCollectible", Native_SpawnCollectible);
@@ -181,7 +214,8 @@ public void OnPluginStart()
 
 	g_cvDropClaimTime = CreateConVar("cm_drop_claim_time", "30.0", "Seconds after an emblem drop starts before the crates are checked against player lands.", _, true, 5.0);
 	g_cvDropCount = CreateConVar("cm_drop_count", "5", "Number of crates in one emblem drop.", _, true, 1.0, true, 30.0);
-	g_cvDropInterval = CreateConVar("cm_drop_interval", "60", "Minutes between automatic emblem drops. 0 disables automatic drops.", _, true, 0.0);
+	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
+	g_cvDropInterval = CreateConVar("cm_drop_interval", "0", "Minutes between automatic emblem drops. 0 disables automatic drops.", _, true, 0.0);
 	g_cvDropMinPlayers = CreateConVar("cm_drop_min_players", "2", "Players needed on the server for an automatic emblem drop.", _, true, 1.0);
 	g_cvDropRadius = CreateConVar("cm_drop_radius", "1200.0", "How far from a player or land a crate can fall.", _, true, 64.0);
 	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
@@ -198,6 +232,12 @@ public void OnPluginStart()
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
 	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
 	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
+	RegAdminCmd("v_powerbooth", Command_PowerBooth, ADMFLAG_SLAY, "|CelMod| Moves the Power Booth to where you are looking.");
+	RegConsoleCmd("v_buymodel", Command_BuyModel, "|CelMod| Buys a player model.");
+	RegConsoleCmd("v_playermodel", Command_PlayerModel, "|CelMod| Wears a player model you own, or goes back to your own (off).");
+	RegConsoleCmd("v_playermodels", Command_PlayerModels, "|CelMod| Lists the player models and their prices.");
+	RegConsoleCmd("v_weapon", Command_Weapon, "|CelMod| Spawns a weapon cel you own, or puts your celwep away (off).");
+	RegConsoleCmd("v_weapons", Command_Inventory, "|CelMod| Lists the emblems, hats and weapons you own.");
 	RegConsoleCmd("v_emblem", Command_Emblem, "|CelMod| Spawns an emblem you own, or disables your active emblem.");
 	RegConsoleCmd("v_emblems", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
 	RegConsoleCmd("v_hat", Command_Hat, "|CelMod| Spawns a hat you own, or takes off your hat.");
@@ -271,6 +311,11 @@ public void OnMapStart()
 	}
 
 	g_iMinutesSinceDrop = 0;
+	g_iBoothRef = INVALID_ENT_REFERENCE;
+
+	PrecacheModel(BOOTH_MODEL, true);
+
+	CreateTimer(5.0, Timer_SpawnBooth, _, TIMER_FLAG_NO_MAPCHANGE);
 
 	LoadItems();
 	LoadRewards();
@@ -345,6 +390,11 @@ public void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
 			if (g_iActiveHat[iOldOwner] == iItem)
 			{
 				SetActiveHat(iOldOwner, -1);
+			}
+
+			if (g_iCelWepItem[iOldOwner] == iItem)
+			{
+				SetActiveCelWep(iOldOwner, -1);
 			}
 		}
 	}
@@ -435,6 +485,19 @@ public Action Command_Hat(int iClient, int iArgs)
 	return HandleItemCommand(iClient, iArgs, KIND_HAT);
 }
 
+public Action Command_Weapon(int iClient, int iArgs)
+{
+	return HandleItemCommand(iClient, iArgs, KIND_WEAPON);
+}
+
+int KindFromName(const char[] sKind)
+{
+	if (StrEqual(sKind, "hat", false)) return KIND_HAT;
+	if (StrEqual(sKind, "weapon", false) || StrEqual(sKind, "celwep", false)) return KIND_WEAPON;
+
+	return KIND_EMBLEM;
+}
+
 Action HandleItemCommand(int iClient, int iArgs, int iKind)
 {
 	char sArg[64];
@@ -447,7 +510,7 @@ Action HandleItemCommand(int iClient, int iArgs, int iKind)
 
 	if (iArgs < 1)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]%s{default} <name/off>", iKind == KIND_EMBLEM ? "emblem" : "hat");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]%s{default} <name/off>", g_sKindName[iKind]);
 
 		PrintInventory(iClient, iKind);
 
@@ -463,6 +526,11 @@ Action HandleItemCommand(int iClient, int iArgs, int iKind)
 			SetActiveEmblem(iClient, -1);
 
 			Cel_ReplyToCommand(iClient, "Your emblem has been disabled.");
+		} else if (iKind == KIND_WEAPON)
+		{
+			SetActiveCelWep(iClient, -1);
+
+			Cel_ReplyToCommand(iClient, "Your celwep has been put away.");
 		} else {
 			SetActiveHat(iClient, -1);
 
@@ -476,7 +544,7 @@ Action HandleItemCommand(int iClient, int iArgs, int iKind)
 
 	if (iItem == -1)
 	{
-		Cel_ReplyToCommand(iClient, "There is no %s called {green}%s{default}.", iKind == KIND_EMBLEM ? "emblem" : "hat", sArg);
+		Cel_ReplyToCommand(iClient, "There is no %s called {green}%s{default}.", g_sKindName[iKind], sArg);
 		return Plugin_Handled;
 	}
 
@@ -484,13 +552,13 @@ Action HandleItemCommand(int iClient, int iArgs, int iKind)
 
 	if (iOwned < 1)
 	{
-		Cel_ReplyToCommand(iClient, "You do not own a {green}%s{default} %s.", g_Items[iItem].sName, iKind == KIND_EMBLEM ? "emblem" : "hat");
+		Cel_ReplyToCommand(iClient, "You do not own a {green}%s{default} %s.", g_Items[iItem].sName, g_sKindName[iKind]);
 		return Plugin_Handled;
 	}
 
 	if (CountSpawned(iClient, iItem) >= iOwned)
 	{
-		Cel_ReplyToCommand(iClient, "Every {green}%s{default} %s you own is already spawned.", g_Items[iItem].sName, iKind == KIND_EMBLEM ? "emblem" : "hat");
+		Cel_ReplyToCommand(iClient, "Every {green}%s{default} %s you own is already spawned.", g_Items[iItem].sName, g_sKindName[iKind]);
 		return Plugin_Handled;
 	}
 
@@ -505,13 +573,13 @@ Action HandleItemCommand(int iClient, int iArgs, int iKind)
 
 	if (iEntity == -1)
 	{
-		Cel_ReplyToCommand(iClient, "The %s could not be spawned.", iKind == KIND_EMBLEM ? "emblem" : "hat");
+		Cel_ReplyToCommand(iClient, "The %s could not be spawned.", g_sKindName[iKind]);
 		return Plugin_Handled;
 	}
 
 	Cel_FixSpawnPosition(iEntity, fOrigin);
 
-	Cel_ReplyToCommand(iClient, "Spawned your {green}%s{default} %s. Press {green}E{default} on it to %s.", g_Items[iItem].sName, iKind == KIND_EMBLEM ? "emblem" : "hat", iKind == KIND_EMBLEM ? "enable it" : "wear it");
+	Cel_ReplyToCommand(iClient, "Spawned your {green}%s{default} %s. Press {green}E{default} on it to %s.", g_Items[iItem].sName, g_sKindName[iKind], iKind == KIND_EMBLEM ? "enable it" : (iKind == KIND_HAT ? "wear it" : "take it"));
 
 	return Plugin_Handled;
 }
@@ -578,6 +646,7 @@ public Action Command_Inventory(int iClient, int iArgs)
 
 	PrintInventory(iClient, KIND_EMBLEM);
 	PrintInventory(iClient, KIND_HAT);
+	PrintInventory(iClient, KIND_WEAPON);
 
 	return Plugin_Handled;
 }
@@ -706,7 +775,7 @@ public Action Command_GiveItem(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 
-	int iItem = FindItem(StrEqual(sKind, "hat", false) ? KIND_HAT : KIND_EMBLEM, sId);
+	int iItem = FindItem(KindFromName(sKind), sId);
 
 	if (iItem == -1)
 	{
@@ -716,7 +785,7 @@ public Action Command_GiveItem(int iClient, int iArgs)
 
 	GiveItem(iTarget, iItem);
 
-	Cel_ReplyToCommand(iClient, "Gave a {green}%s{default} %s to {green}%N{default}.", g_Items[iItem].sName, g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat", iTarget);
+	Cel_ReplyToCommand(iClient, "Gave a {green}%s{default} %s to {green}%N{default}.", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind], iTarget);
 
 	return Plugin_Handled;
 }
@@ -766,7 +835,7 @@ public Action Command_Reward(int iClient, int iArgs)
 	GetCmdArg(1, sKind, sizeof(sKind));
 	GetCmdArg(2, sId, sizeof(sId));
 
-	iKind = StrEqual(sKind, "hat", false) ? KIND_HAT : KIND_EMBLEM;
+	iKind = KindFromName(sKind);
 
 	if (!StrEqual(sId, "random", false))
 	{
@@ -793,7 +862,7 @@ public Action Command_Reward(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 
-	Cel_ReplyToCommand(iClient, "Created reward pickup {green}#%d{default} (%s: %s) on this map.", iId, iKind == KIND_EMBLEM ? "emblem" : "hat", sId);
+	Cel_ReplyToCommand(iClient, "Created reward pickup {green}#%d{default} (%s: %s) on this map.", iId, g_sKindName[iKind], sId);
 
 	return Plugin_Handled;
 }
@@ -893,9 +962,9 @@ public void Hook_ItemUse(int iEntity, int iActivator, int iCaller, UseType utTyp
 
 		if (Cel_IsEntityForSale(iEntity))
 		{
-			Cel_PrintToChat(iActivator, "This {green}%s{default} %s is for sale for {green}%d CL{default}. Type {green}!buy{default} while looking at it.", g_Items[iItem].sName, g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat", Cel_GetEntityPrice(iEntity));
+			Cel_PrintToChat(iActivator, "This {green}%s{default} %s is for sale for {green}%d CL{default}. Type {green}!buy{default} while looking at it.", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind], Cel_GetEntityPrice(iEntity));
 		} else {
-			Cel_PrintToChat(iActivator, "This %s does not belong to you.", g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat");
+			Cel_PrintToChat(iActivator, "This %s does not belong to you.", g_sKindName[g_Items[iItem].iKind]);
 		}
 
 		return;
@@ -903,6 +972,26 @@ public void Hook_ItemUse(int iEntity, int iActivator, int iCaller, UseType utTyp
 
 	if (Cel_IsLocked(iEntity))
 	{
+		return;
+	}
+
+	if (g_Items[iItem].iKind == KIND_WEAPON)
+	{
+		if (g_iCelWepItem[iActivator] == iItem)
+		{
+			SetActiveCelWep(iActivator, -1);
+
+			EmitSoundToAll(SOUND_UNEQUIP, iEntity);
+
+			Cel_PrintToChat(iActivator, "You put your {green}%s{default} away.", g_Items[iItem].sName);
+		} else {
+			SetActiveCelWep(iActivator, iItem);
+
+			EmitSoundToAll(SOUND_EQUIP, iEntity);
+
+			Cel_PrintToChat(iActivator, "You took your {green}%s{default}. It is in your weapons now.", g_Items[iItem].sName);
+		}
+
 		return;
 	}
 
@@ -979,7 +1068,7 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 
 	EmitSoundToAll(SOUND_REWARD, iEntity);
 
-	Cel_PrintToChatAll("{green}%N{default} has earned a {green}%s{default} %s!", iActivator, g_Items[iItem].sName, g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat");
+	Cel_PrintToChatAll("{green}%N{default} has earned a {green}%s{default} %s!", iActivator, g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
 }
 
 public Action Hook_HatTransmit(int iEntity, int iClient)
@@ -1090,6 +1179,27 @@ public Action Timer_RestoreClient(Handle hTimer, any iUserId)
 		g_iActiveEmblem[iClient] = iItem;
 	}
 
+	Inv_GetString(iClient, "active_weapon", sId, sizeof(sId));
+
+	iItem = FindItem(KIND_WEAPON, sId);
+
+	if (iItem != -1 && GetOwned(iClient, iItem) > 0 && IsPlayerAlive(iClient))
+	{
+		SetActiveCelWep(iClient, iItem);
+	}
+
+	Inv_GetString(iClient, "active_playermodel", sId, sizeof(sId));
+
+	for (int i = 0; i < g_iPlayerModelCount; i++)
+	{
+		if (StrEqual(g_PlayerModels[i].sId, sId, false) && OwnsPlayerModel(iClient, i))
+		{
+			g_iPlayerModel[iClient] = i;
+
+			ApplyPlayerModel(iClient);
+		}
+	}
+
 	Inv_GetString(iClient, "active_hat", sId, sizeof(sId));
 
 	iItem = FindItem(KIND_HAT, sId);
@@ -1112,6 +1222,14 @@ public Action Timer_ApplyHat(Handle hTimer, any iUserId)
 	{
 		CreateHatEntity(iClient);
 
+		// Weapons are lost on death, so the celwep is handed back.
+		if (g_iCelWepItem[iClient] != -1 && IsPlayerAlive(iClient))
+		{
+			SetActiveCelWep(iClient, g_iCelWepItem[iClient]);
+		}
+
+		ApplyPlayerModel(iClient);
+
 		// The view resets on respawn, so a player who chose third person gets it back.
 		if (g_bThirdPerson[iClient])
 		{
@@ -1130,6 +1248,8 @@ public Action Timer_Think(Handle hTimer)
 
 	g_iTick++;
 
+	bool bModelCheck = (g_iTick % 5 == 0);
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i))
@@ -1145,6 +1265,12 @@ public Action Timer_Think(Handle hTimer)
 
 		iItem = g_iActiveEmblem[i];
 
+		// The game puts players back on their own model now and then, a bought model is put back on.
+		if (bModelCheck && g_iPlayerModel[i] != -1)
+		{
+			ApplyPlayerModel(i);
+		}
+
 		iWeapon = GetEntPropEnt(i, Prop_Send, "m_hActiveWeapon");
 
 		g_bHoldingGravGun[i] = false;
@@ -1158,12 +1284,20 @@ public Action Timer_Think(Handle hTimer)
 
 		// Third person model: other players see the emblem in this player's hand in place of the
 		// gravity gun. The player's own first person view model is never touched.
-		if (g_bHoldingGravGun[i] && iItem != -1)
+		int iShow = (g_bHoldingGravGun[i] && iItem != -1) ? iItem : -1;
+
+		// A celwep is shown the same way while its weapon is the one in hand.
+		if (iShow == -1 && g_iCelWepItem[i] != -1 && iWeapon > MaxClients && EntRefToEntIndex(g_iCelWepRef[i]) == iWeapon)
 		{
-			if (!g_bHeldShown[i] || g_iHandItem[i] != iItem || g_iModdedWeaponRef[i] != EntIndexToEntRef(iWeapon))
+			iShow = g_iCelWepItem[i];
+		}
+
+		if (iShow != -1)
+		{
+			if (!g_bHeldShown[i] || g_iHandItem[i] != iShow || g_iModdedWeaponRef[i] != EntIndexToEntRef(iWeapon))
 			{
 				RestoreWeapon(i);
-				ShowHeldEmblem(i, iItem, iWeapon);
+				ShowHeldEmblem(i, iShow, iWeapon);
 			}
 		} else if (g_bHeldShown[i])
 		{
@@ -1346,7 +1480,7 @@ public Action Timer_DropSettle(Handle hTimer, any iRef)
 
 	SetOwned(iOwner, iItem, GetOwned(iOwner, iItem) + 1);
 
-	Cel_PrintToChatAll("A crate landed in {green}%N{default}'s land and contained a {green}%s{default} %s!", iOwner, g_Items[iItem].sName, g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat");
+	Cel_PrintToChatAll("A crate landed in {green}%N{default}'s land and contained a {green}%s{default} %s!", iOwner, g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
 
 	return Plugin_Stop;
 }
@@ -1392,7 +1526,7 @@ public int Native_GiveCollectible(Handle hPlugin, int iNumParams)
 	GetNativeString(2, sKind, sizeof(sKind));
 	GetNativeString(3, sId, sizeof(sId));
 
-	int iItem = FindItem(StrEqual(sKind, "hat", false) ? KIND_HAT : KIND_EMBLEM, sId);
+	int iItem = FindItem(KindFromName(sKind), sId);
 
 	if (iItem == -1 || !IsRealClient(iClient))
 	{
@@ -1420,7 +1554,7 @@ public int Native_SpawnCollectible(Handle hPlugin, int iNumParams)
 	GetNativeArray(4, fAngles, 3);
 	GetNativeArray(5, fOrigin, 3);
 
-	int iItem = FindItem(StrEqual(sKind, "hat", false) ? KIND_HAT : KIND_EMBLEM, sId);
+	int iItem = FindItem(KindFromName(sKind), sId);
 
 	if (iItem == -1 || !IsRealClient(iClient))
 	{
@@ -1461,6 +1595,88 @@ void LoadItems()
 		while (kvItems.GotoNextKey());
 	}
 
+	// Every emblem gets a big version, made at the Power Booth. It is stronger and uses the large model.
+	int iEmblems = g_iItemCount;
+
+	for (int i = 0; i < iEmblems && g_iItemCount < MAX_ITEMS; i++)
+	{
+		int iBig = g_iItemCount++;
+
+		g_Items[iBig] = g_Items[i];
+
+		Format(g_Items[iBig].sId, sizeof(Item::sId), "%s_big", g_Items[i].sId);
+		Format(g_Items[iBig].sName, sizeof(Item::sName), "Big %s", g_Items[i].sName);
+
+		if (StrEqual(g_Items[i].sModel, "models/celmod/phys8.mdl", false))
+		{
+			strcopy(g_Items[iBig].sModel, sizeof(Item::sModel), BIG_EMBLEM_MODEL);
+
+			// The large model is about eight times the size, in the hand it is shown a little bigger than normal.
+			g_Items[iBig].fHandScale = g_Items[i].fHandScale * 0.18;
+		} else {
+			g_Items[iBig].fScale = g_Items[i].fScale * 2.0;
+			g_Items[iBig].fHandScale = g_Items[i].fHandScale * 1.4;
+		}
+
+		g_Items[iBig].iModelIndex = PrecacheModel(g_Items[iBig].sModel, true);
+		g_Items[iBig].fCooldown = g_Items[i].fCooldown * 0.75;
+		g_Items[iBig].fSecondaryValue = g_Items[i].fSecondaryValue * 1.5;
+		g_Items[iBig].fSecondaryCooldown = g_Items[i].fSecondaryCooldown * 0.75;
+		g_Items[iBig].iWeight = 0;
+		g_Items[iBig].bIsBig = true;
+		g_Items[iBig].iBig = -1;
+
+		// Stronger numbers, except where a bigger value would make the power weaker.
+		if (StrEqual(g_Items[i].sPower, "resist") || StrEqual(g_Items[i].sPower, "gravity") || StrEqual(g_Items[i].sPower, "cloak") || StrEqual(g_Items[i].sPower, "feather"))
+		{
+			g_Items[iBig].fValue = g_Items[i].fValue * 0.75;
+		} else if (StrEqual(g_Items[i].sPower, "speed"))
+		{
+			g_Items[iBig].fValue = g_Items[i].fValue + 0.3;
+		} else {
+			g_Items[iBig].fValue = g_Items[i].fValue * 1.5;
+		}
+
+		g_Items[i].iBig = iBig;
+	}
+
+	kvItems.Rewind();
+
+	if (kvItems.JumpToKey("Weapons", false) && kvItems.GotoFirstSubKey())
+	{
+		do
+		{
+			ReadItem(kvItems, KIND_WEAPON);
+		}
+		while (kvItems.GotoNextKey());
+	}
+
+	kvItems.Rewind();
+
+	g_iPlayerModelCount = 0;
+
+	if (kvItems.JumpToKey("PlayerModels", false) && kvItems.GotoFirstSubKey())
+	{
+		do
+		{
+			if (g_iPlayerModelCount >= MAX_PLAYERMODELS)
+			{
+				break;
+			}
+
+			int iModel = g_iPlayerModelCount++;
+
+			kvItems.GetSectionName(g_PlayerModels[iModel].sId, sizeof(PlayerModel::sId));
+			kvItems.GetString("name", g_PlayerModels[iModel].sName, sizeof(PlayerModel::sName), g_PlayerModels[iModel].sId);
+			kvItems.GetString("model", g_PlayerModels[iModel].sModel, sizeof(PlayerModel::sModel), "");
+
+			g_PlayerModels[iModel].iPrice = kvItems.GetNum("price", 0);
+
+			PrecacheModel(g_PlayerModels[iModel].sModel, true);
+		}
+		while (kvItems.GotoNextKey());
+	}
+
 	kvItems.Rewind();
 
 	if (kvItems.JumpToKey("Hats", false) && kvItems.GotoFirstSubKey())
@@ -1477,6 +1693,8 @@ void LoadItems()
 	// Players keep their active items across map changes, but item indexes can move if the file was edited.
 	for (int i = 1; i <= MaxClients; i++)
 	{
+		if (g_iCelWepItem[i] >= g_iItemCount) g_iCelWepItem[i] = -1;
+		if (g_iPlayerModel[i] >= g_iPlayerModelCount) g_iPlayerModel[i] = -1;
 		if (g_iActiveEmblem[i] >= g_iItemCount) g_iActiveEmblem[i] = -1;
 		if (g_iActiveHat[i] >= g_iItemCount) g_iActiveHat[i] = -1;
 	}
@@ -1492,6 +1710,12 @@ void ReadItem(KeyValues kvItems, int iKind)
 	int iItem = g_iItemCount;
 
 	g_Items[iItem].iKind = iKind;
+	g_Items[iItem].iBig = -1;
+	g_Items[iItem].bIsBig = false;
+
+	kvItems.GetString("base", g_Items[iItem].sBase, sizeof(Item::sBase), "weapon_crowbar");
+
+	g_Items[iItem].fDamage = kvItems.GetFloat("damage", 1.0);
 
 	kvItems.GetSectionName(g_Items[iItem].sId, sizeof(Item::sId));
 
@@ -1729,7 +1953,7 @@ void Inv_SetString(int iClient, const char[] sKey, const char[] sValue)
 //Ownership ledger:
 void GetLedgerKey(int iItem, char[] sKey, int iMaxLength)
 {
-	Format(sKey, iMaxLength, "%s_%s", g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat", g_Items[iItem].sId);
+	Format(sKey, iMaxLength, "%s_%s", g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sId);
 }
 
 int GetOwned(int iClient, int iItem)
@@ -1771,7 +1995,7 @@ void GiveItem(int iClient, int iItem)
 {
 	SetOwned(iClient, iItem, GetOwned(iClient, iItem) + 1);
 
-	Cel_PrintToChat(iClient, "You received a {green}%s{default} %s! Type {green}!%s %s{default} to spawn it.", g_Items[iItem].sName, g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat", g_Items[iItem].iKind == KIND_EMBLEM ? "emblem" : "hat", g_Items[iItem].sId);
+	Cel_PrintToChat(iClient, "You received a {green}%s{default} %s! Type {green}!%s %s{default} to spawn it.", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind], g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sId);
 }
 
 void PrintInventory(int iClient, int iKind)
@@ -1796,7 +2020,7 @@ void PrintInventory(int iClient, int iKind)
 
 		iCount++;
 
-		Format(sEntry, sizeof(sEntry), "%s%s", g_Items[i].sName, (g_iActiveEmblem[iClient] == i || g_iActiveHat[iClient] == i) ? " {green}[on]{default}" : "");
+		Format(sEntry, sizeof(sEntry), "%s%s", g_Items[i].sName, (g_iActiveEmblem[iClient] == i || g_iActiveHat[iClient] == i || g_iCelWepItem[iClient] == i) ? " {green}[on]{default}" : "");
 
 		if (iOwned > 1)
 		{
@@ -1812,7 +2036,7 @@ void PrintInventory(int iClient, int iKind)
 
 		if (sList[0] == '\0')
 		{
-			Format(sList, sizeof(sList), "{green}%s:{default} %s", iKind == KIND_EMBLEM ? "Emblems" : "Hats", sEntry);
+			Format(sList, sizeof(sList), "{green}%s:{default} %s", g_sKindTitle[iKind], sEntry);
 		} else {
 			Format(sList, sizeof(sList), "%s, %s", sList, sEntry);
 		}
@@ -1820,7 +2044,7 @@ void PrintInventory(int iClient, int iKind)
 
 	if (iCount == 0)
 	{
-		Cel_ReplyToCommand(iClient, "You do not own any %s.", iKind == KIND_EMBLEM ? "emblems" : "hats");
+		Cel_ReplyToCommand(iClient, "You do not own any %s.", g_sKindPlural[iKind]);
 	} else {
 		Cel_ReplyToCommand(iClient, "%s", sList);
 	}
@@ -1844,7 +2068,7 @@ int SpawnItemEntity(int iClient, int iItem, float fOrigin[3], float fAngles[3])
 	PrecacheModel(g_Items[iItem].sModel);
 
 	DispatchKeyValue(iEntity, "model", g_Items[iItem].sModel);
-	DispatchKeyValue(iEntity, "classname", g_Items[iItem].iKind == KIND_EMBLEM ? "cel_emblem" : "cel_hat");
+	DispatchKeyValue(iEntity, "classname", g_sKindClass[g_Items[iItem].iKind]);
 	DispatchKeyValue(iEntity, "spawnflags", "256");
 
 	if (g_Items[iItem].iKind == KIND_EMBLEM && g_Items[iItem].fScale != 1.0)
@@ -2900,16 +3124,27 @@ void BlinkPlayer(int iClient, float fStart[3], float fDirection[3], float fEnd[3
 // Resist emblem: the holder takes less damage.
 public Action Hook_PlayerTakeDamage(int iVictim, int &iAttacker, int &iInflictor, float &fDamage, int &iDamageType)
 {
+	Action aResult = Plugin_Continue;
+
+	// Celweps: hits made with the celwep in hand use its damage multiplier.
+	if (iAttacker > 0 && iAttacker <= MaxClients && iAttacker != iVictim && iInflictor == iAttacker && g_iCelWepItem[iAttacker] != -1
+		&& EntRefToEntIndex(g_iCelWepRef[iAttacker]) == GetEntPropEnt(iAttacker, Prop_Send, "m_hActiveWeapon"))
+	{
+		fDamage *= g_Items[g_iCelWepItem[iAttacker]].fDamage;
+
+		aResult = Plugin_Changed;
+	}
+
 	if (iVictim < 1 || iVictim > MaxClients || !g_bHoldingGravGun[iVictim])
 	{
-		return Plugin_Continue;
+		return aResult;
 	}
 
 	int iItem = g_iActiveEmblem[iVictim];
 
 	if (iItem == -1 || !StrEqual(g_Items[iItem].sPower, "resist"))
 	{
-		return Plugin_Continue;
+		return aResult;
 	}
 
 	fDamage *= g_Items[iItem].fValue;
@@ -3063,7 +3298,7 @@ int StartDrop(int iCount)
 
 		// The crate must survive the fall and being thrown around with the gravity gun.
 		SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
-		SetEntityRenderColor(iBox, 255, 200, 0, 255);
+		SetEntityRenderColor(iBox, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
 		g_bDropBox[iBox] = true;
 		g_iEntItem[iBox] = iItem;
@@ -3174,7 +3409,7 @@ void LoadRewards()
 			kvRewards.GetString("item", sId, sizeof(sId), "random");
 			kvRewards.GetVector("origin", fOrigin);
 
-			SpawnRewardEntity(StringToInt(sSection), StrEqual(sKind, "hat", false) ? KIND_HAT : KIND_EMBLEM, sId, fOrigin);
+			SpawnRewardEntity(StringToInt(sSection), KindFromName(sKind), sId, fOrigin);
 		}
 		while (kvRewards.GotoNextKey());
 	}
@@ -3215,7 +3450,7 @@ int SaveReward(int iId, int iKind, const char[] sId, float fOrigin[3])
 	IntToString(iId, sKey, sizeof(sKey));
 
 	kvRewards.JumpToKey(sKey, true);
-	kvRewards.SetString("kind", iKind == KIND_EMBLEM ? "emblem" : "hat");
+	kvRewards.SetString("kind", g_sKindName[iKind]);
 	kvRewards.SetString("item", sId);
 	kvRewards.SetVector("origin", fOrigin);
 	kvRewards.Rewind();
@@ -3314,8 +3549,438 @@ void ResetClient(int iClient)
 	g_iActiveHat[iClient] = -1;
 	g_iHatEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iLastButtons[iClient] = 0;
+	g_iCelWepItem[iClient] = -1;
+	g_iCelWepRef[iClient] = INVALID_ENT_REFERENCE;
+	g_iPlayerModel[iClient] = -1;
 	g_bHeldShown[iClient] = false;
 	g_iHandEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iHandItem[iClient] = -1;
 	g_iModdedWeaponRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+//Celweps:
+// A celwep is a stock weapon the player is handed, shown as its own model and hitting with its own damage.
+void SetActiveCelWep(int iClient, int iItem)
+{
+	g_iCelWepItem[iClient] = iItem;
+	g_iCelWepRef[iClient] = INVALID_ENT_REFERENCE;
+
+	RestoreWeapon(iClient);
+
+	if (iItem == -1)
+	{
+		Inv_SetString(iClient, "active_weapon", "none");
+
+		return;
+	}
+
+	Inv_SetString(iClient, "active_weapon", g_Items[iItem].sId);
+
+	if (!IsPlayerAlive(iClient))
+	{
+		return;
+	}
+
+	char sClassname[64];
+	int iWeapon = -1;
+
+	// The player may already carry the stock weapon this celwep is built on.
+	for (int i = 0; i < 48; i++)
+	{
+		int iHeld = GetEntPropEnt(iClient, Prop_Send, "m_hMyWeapons", i);
+
+		if (iHeld > MaxClients && IsValidEntity(iHeld))
+		{
+			GetEntityClassname(iHeld, sClassname, sizeof(sClassname));
+
+			if (StrEqual(sClassname, g_Items[iItem].sBase, false))
+			{
+				iWeapon = iHeld;
+				break;
+			}
+		}
+	}
+
+	if (iWeapon == -1)
+	{
+		iWeapon = GivePlayerItem(iClient, g_Items[iItem].sBase);
+	}
+
+	if (iWeapon > MaxClients && IsValidEntity(iWeapon))
+	{
+		g_iCelWepRef[iClient] = EntIndexToEntRef(iWeapon);
+	}
+}
+
+//Player models:
+bool OwnsPlayerModel(int iClient, int iModel)
+{
+	char sKey[64];
+
+	Format(sKey, sizeof(sKey), "playermodel_%s", g_PlayerModels[iModel].sId);
+
+	return (g_PlayerModels[iModel].iPrice < 1 || Inv_GetInt(iClient, sKey) == 1);
+}
+
+void ApplyPlayerModel(int iClient)
+{
+	char sModel[PLATFORM_MAX_PATH];
+	int iModel = g_iPlayerModel[iClient];
+
+	if (iModel < 0 || iModel >= g_iPlayerModelCount || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return;
+	}
+
+	GetClientModel(iClient, sModel, sizeof(sModel));
+
+	if (!StrEqual(sModel, g_PlayerModels[iModel].sModel, false))
+	{
+		SetEntityModel(iClient, g_PlayerModels[iModel].sModel);
+	}
+}
+
+int FindPlayerModel(const char[] sSearch)
+{
+	for (int i = 0; i < g_iPlayerModelCount; i++)
+	{
+		if (StrEqual(g_PlayerModels[i].sId, sSearch, false) || StrEqual(g_PlayerModels[i].sName, sSearch, false))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+public Action Command_PlayerModels(int iClient, int iArgs)
+{
+	char sEntry[96], sList[192];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	for (int i = 0; i < g_iPlayerModelCount; i++)
+	{
+		if (OwnsPlayerModel(iClient, i))
+		{
+			Format(sEntry, sizeof(sEntry), "%s {green}(owned)%s{default}", g_PlayerModels[i].sId, g_iPlayerModel[iClient] == i ? " [on]" : "");
+		} else {
+			Format(sEntry, sizeof(sEntry), "%s (%d CL)", g_PlayerModels[i].sId, g_PlayerModels[i].iPrice);
+		}
+
+		if (strlen(sList) + strlen(sEntry) + 2 >= sizeof(sList) - 1)
+		{
+			Cel_ReplyToCommand(iClient, "%s,", sList);
+
+			sList[0] = '\0';
+		}
+
+		if (sList[0] == '\0')
+		{
+			Format(sList, sizeof(sList), "{green}Player models:{default} %s", sEntry);
+		} else {
+			Format(sList, sizeof(sList), "%s, %s", sList, sEntry);
+		}
+	}
+
+	if (g_iPlayerModelCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "There are no player models for sale.");
+	} else {
+		Cel_ReplyToCommand(iClient, "%s", sList);
+		Cel_ReplyToCommand(iClient, "Buy one with {green}[tag]buymodel{default} <name>, wear it with {green}[tag]playermodel{default} <name>.");
+	}
+
+	return Plugin_Handled;
+}
+
+public Action Command_BuyModel(int iClient, int iArgs)
+{
+	char sArg[64], sKey[64];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]buymodel{default} <name>");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sArg, sizeof(sArg));
+
+	int iModel = FindPlayerModel(sArg);
+
+	if (iModel == -1)
+	{
+		Cel_ReplyToCommand(iClient, "There is no player model called {green}%s{default}. Type {green}[tag]playermodels{default} to see them.", sArg);
+		return Plugin_Handled;
+	}
+
+	if (OwnsPlayerModel(iClient, iModel))
+	{
+		Cel_ReplyToCommand(iClient, "You already own the {green}%s{default} player model.", g_PlayerModels[iModel].sName);
+		return Plugin_Handled;
+	}
+
+	if (!Cel_CheckClientBalance(iClient, g_PlayerModels[iModel].iPrice))
+	{
+		Cel_ReplyToCommand(iClient, "The {green}%s{default} player model costs {green}%d CL{default}. You do not have enough.", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].iPrice);
+		return Plugin_Handled;
+	}
+
+	Cel_SubFromClientBalance(iClient, g_PlayerModels[iModel].iPrice);
+
+	Format(sKey, sizeof(sKey), "playermodel_%s", g_PlayerModels[iModel].sId);
+
+	Inv_SetInt(iClient, sKey, 1);
+
+	Cel_ReplyToCommand(iClient, "You bought the {green}%s{default} player model for {green}%d CL{default}. Wear it with {green}[tag]playermodel %s{default}.", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].iPrice, g_PlayerModels[iModel].sId);
+
+	return Plugin_Handled;
+}
+
+public Action Command_PlayerModel(int iClient, int iArgs)
+{
+	char sArg[64];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]playermodel{default} <name/off>");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sArg, sizeof(sArg));
+
+	if (StrEqual(sArg, "off", false) || StrEqual(sArg, "none", false))
+	{
+		g_iPlayerModel[iClient] = -1;
+
+		Inv_SetString(iClient, "active_playermodel", "none");
+
+		Cel_ReplyToCommand(iClient, "You will be back on your own player model when you next respawn.");
+
+		return Plugin_Handled;
+	}
+
+	int iModel = FindPlayerModel(sArg);
+
+	if (iModel == -1)
+	{
+		Cel_ReplyToCommand(iClient, "There is no player model called {green}%s{default}.", sArg);
+		return Plugin_Handled;
+	}
+
+	if (!OwnsPlayerModel(iClient, iModel))
+	{
+		Cel_ReplyToCommand(iClient, "You do not own the {green}%s{default} player model. It costs {green}%d CL{default}.", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].iPrice);
+		return Plugin_Handled;
+	}
+
+	g_iPlayerModel[iClient] = iModel;
+
+	Inv_SetString(iClient, "active_playermodel", g_PlayerModels[iModel].sId);
+
+	ApplyPlayerModel(iClient);
+
+	Cel_ReplyToCommand(iClient, "You are now wearing the {green}%s{default} player model.", g_PlayerModels[iModel].sName);
+
+	return Plugin_Handled;
+}
+
+//Power Booth:
+// A green, flickering suit charger that appears somewhere on every map. Pressing E on it turns several
+// copies of one emblem into a single big emblem.
+public Action Timer_SpawnBooth(Handle hTimer)
+{
+	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
+	float fOrigin[3];
+	int iPoints[128], iCount = 0, iEntity;
+
+	for (int i = 0; i < sizeof(sSpawns); i++)
+	{
+		iEntity = -1;
+
+		while ((iEntity = FindEntityByClassname(iEntity, sSpawns[i])) != -1 && iCount < sizeof(iPoints))
+		{
+			iPoints[iCount++] = iEntity;
+		}
+	}
+
+	if (iCount == 0)
+	{
+		return Plugin_Stop;
+	}
+
+	GetEntPropVector(iPoints[GetRandomInt(0, iCount - 1)], Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+	float fYaw = GetRandomFloat(0.0, 6.28);
+
+	fOrigin[0] += Cosine(fYaw) * 96.0;
+	fOrigin[1] += Sine(fYaw) * 96.0;
+	fOrigin[2] += 48.0;
+
+	SpawnPowerBooth(fOrigin);
+
+	return Plugin_Stop;
+}
+
+void SpawnPowerBooth(float fOrigin[3])
+{
+	int iOld = EntRefToEntIndex(g_iBoothRef);
+
+	if (g_iBoothRef != INVALID_ENT_REFERENCE && iOld != INVALID_ENT_REFERENCE && iOld > MaxClients)
+	{
+		AcceptEntityInput(iOld, "kill");
+	}
+
+	g_iBoothRef = INVALID_ENT_REFERENCE;
+
+	int iBooth = CreateEntityByName("prop_physics_override");
+
+	if (iBooth == -1)
+	{
+		return;
+	}
+
+	DispatchKeyValue(iBooth, "model", BOOTH_MODEL);
+	DispatchKeyValue(iBooth, "classname", "cel_powerbooth");
+	DispatchKeyValue(iBooth, "spawnflags", "264");
+
+	DispatchSpawn(iBooth);
+
+	TeleportEntity(iBooth, fOrigin, NULL_VECTOR, NULL_VECTOR);
+
+	AcceptEntityInput(iBooth, "disablemotion");
+
+	SetEntProp(iBooth, Prop_Data, "m_takedamage", 0, 1);
+
+	// Green, see-through and flickering, as it was on the original server.
+	SetEntityRenderMode(iBooth, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(iBooth, 0, 255, 0, 150);
+	SetEntityRenderFx(iBooth, RENDERFX_DISTORT);
+
+	SDKHook(iBooth, SDKHook_UsePost, Hook_BoothUse);
+
+	g_iBoothRef = EntIndexToEntRef(iBooth);
+}
+
+public Action Command_PowerBooth(int iClient, int iArgs)
+{
+	float fOrigin[3];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+
+	fOrigin[2] += 48.0;
+
+	SpawnPowerBooth(fOrigin);
+
+	Cel_ReplyToCommand(iClient, "The Power Booth has been moved here for this map.");
+
+	return Plugin_Handled;
+}
+
+public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	float fOrigin[3];
+	int iCost = g_cvUpgradeCost.IntValue, iChosen = -1;
+
+	if (!IsRealClient(iActivator))
+	{
+		return;
+	}
+
+	// The enabled emblem is upgraded first, otherwise the first emblem the player has enough of.
+	if (g_iActiveEmblem[iActivator] != -1 && g_Items[g_iActiveEmblem[iActivator]].iBig != -1 && GetOwned(iActivator, g_iActiveEmblem[iActivator]) >= iCost)
+	{
+		iChosen = g_iActiveEmblem[iActivator];
+	}
+
+	for (int i = 0; i < g_iItemCount && iChosen == -1; i++)
+	{
+		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iBig != -1 && GetOwned(iActivator, i) >= iCost)
+		{
+			iChosen = i;
+		}
+	}
+
+	if (iChosen == -1)
+	{
+		EmitSoundToClient(iActivator, SOUND_DENY);
+
+		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} bring {green}%d{default} of the same emblem and I will turn them into one big emblem.", iCost);
+
+		return;
+	}
+
+	int iLeft = GetOwned(iActivator, iChosen) - iCost;
+
+	SetOwned(iActivator, iChosen, iLeft);
+
+	// Spawned copies the player no longer owns are removed.
+	int iSpawned = CountSpawned(iActivator, iChosen);
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES && iSpawned > iLeft; i++)
+	{
+		if (g_iEntItem[i] == iChosen && IsItemEntity(i) && Cel_CheckOwner(iActivator, i))
+		{
+			AcceptEntityInput(i, "kill");
+
+			iSpawned--;
+		}
+	}
+
+	if (iLeft < 1 && g_iActiveEmblem[iActivator] == iChosen)
+	{
+		SetActiveEmblem(iActivator, -1);
+	}
+
+	GiveItem(iActivator, g_Items[iChosen].iBig);
+
+	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+	TE_SetupBeamRingPoint(fOrigin, 10.0, 220.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 10.0, 0.0, g_iGreen, 10, 0);
+	TE_SendToAll();
+
+	EmitSoundToAll(SOUND_REWARD, iEntity);
+
+	Cel_PrintToChatAll("{green}%N{default} used the Power Booth to make a {green}%s{default} emblem!", iActivator, g_Items[g_Items[iChosen].iBig].sName);
+}
+
+// What an item looks like, for plugins that put one on display (the auction above the Guess Booth).
+public int Native_GetCollectibleLook(Handle hPlugin, int iNumParams)
+{
+	char sId[64], sKind[32];
+
+	GetNativeString(1, sKind, sizeof(sKind));
+	GetNativeString(2, sId, sizeof(sId));
+
+	int iItem = FindItem(KindFromName(sKind), sId);
+
+	if (iItem == -1)
+	{
+		return false;
+	}
+
+	SetNativeString(3, g_Items[iItem].sModel, GetNativeCell(4));
+	SetNativeString(5, g_Items[iItem].sName, GetNativeCell(6));
+	SetNativeCellRef(7, g_Items[iItem].iSkin);
+	SetNativeArray(8, g_Items[iItem].iColor, 4);
+
+	return true;
 }

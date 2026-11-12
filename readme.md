@@ -21,12 +21,15 @@ Command | Description | Aliases | Type | Extra
 v_alpha|Changes the transparency on the prop you are looking at.|v_amt|Client|
 v_ammo|Creates a ammo bit that will give ammo when the player touches it.|None|Client|
 v_ammocrate|Creates a ammo crate bit that will give ammo to the player.|None|Client|
+v_auction|Auctions an emblem, hat or weapon above the Guess Booth, or cancels the auction.|None|Admin|
 v_autobuild|Stacks props on the x, y and z axis.|None|Admin|
 v_axis|Creates a marker to the player showing every axis.|v_mark, v_marker|Client|
 v_balance|Gets the players current balance.|None|Client|
+v_bid|Bids on the item being auctioned above the Guess Booth.|None|Client|
 v_blacklist|Adds/removes a prop from the spawn blacklist.|None|Admin|
 v_button|Spawns a button trigger bit.|None|Client|
 v_buy|Purchases the current entity you are looking at or command you specified.|None|Client|
+v_buymodel|Buys a player model.|None|Client|
 v_charger|Creates a health/suit charger bit that will give health/suit to the player.|None|Client|
 v_cl|Shows your balance, or drops an amount of cleers for another player to pick up.|None|Client|
 v_clear|Deletes one of your saved builds.|None|Client|
@@ -36,6 +39,7 @@ v_commandlist|Displays the command list.|v_cmds, v_commands|Client|[Command List
 v_copy|Copies the prop you are looking at into your copy buffer.|None|Client|
 v_delete|Removes the prop you are looking at.|v_del, v_remove|Client|
 v_delreward|Removes the reward pickup you are looking at.|None|Admin|
+v_delzone|Deletes the area you are standing in.|None|Admin|
 v_dm|Changes the deathmatch setting within the land.|v_landdeathmatch|Client|
 v_door|Spawns a working door cel.|None|Client|
 v_drop|Teleports the entity you are looking at to the floor.|None|Client|
@@ -53,6 +57,8 @@ v_give|Gives the entity you are looking at to another player.|None|Client|
 v_giveitem|Gives an emblem or hat to a player.|None|Admin|
 v_god|Enables/disables breakability on the prop you are looking at.|None|Client|
 v_gravity|Changes the gravity within the land.|v_landgravity|Client|
+v_guess|Guesses the winning prop at the Guess Booth. One guess per map.|None|Client|
+v_guessbooth|Moves the Guess Booth to where you are standing and picks new props.|None|Admin|
 v_hat|Spawns a hat you own, or takes off your hat (off).|None|Client|
 v_hide|Hides another player's entities from your view.|None|Client|
 v_internet|Creates a working internet cel.|None|Client|
@@ -74,6 +80,9 @@ v_noclip|Enables/disables noclip on the player.|None|Client|
 v_nokill|Enables/disables godmode on the player.|None|Client|
 v_palette|Colors the prop you are looking at with your own red, green and blue values.|None|Client|
 v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Client|
+v_playermodel|Wears a player model you own, or goes back to your own (off).|None|Client|
+v_playermodels|Lists the player models and their prices.|None|Client|
+v_powerbooth|Moves the Power Booth to where you are looking.|None|Admin|
 v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://delaware.rockzehh.net/props/index.html)
 v_release|Releases the entity you are looking at from a weld.|None|Client|
 v_renderfx|Changes the RenderFX on what prop you are looking at.|None|Client|
@@ -102,9 +111,13 @@ v_turn|Rotates the prop you are looking at.|None|Client|
 v_undo|Removes the last entity you spawned.|None|Client|
 v_unfreeze|Unfreezes the prop you are looking at.|v_unfreezeit|Client|
 v_unlock|Unlocks the cel you are looking at.|None|Client|
+v_weapon|Spawns a weapon cel you own, or puts your celwep away (off).|None|Client|
+v_weapons|Lists the emblems, hats and weapons you own.|None|Client|
 v_weld|Welds one of your entities to another so they move together.|None|Client|
 v_wep|Creates a weapon bit that will give a weapon when the player touches it.|None|Client|
 v_weps|Gives you every weapon.|None|Client|
+v_zone|Creates an event or restricted area. Use it at one corner, then at the opposite corner.|None|Admin|
+v_zones|Lists the event and restricted areas on this map.|None|Client|
 
 ## Developer Commands
 Command | Description | Type

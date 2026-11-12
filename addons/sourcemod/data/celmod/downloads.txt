@@ -58,3 +58,9 @@ models/celmod/santahat.mdl
 models/celmod/santahat.phy
 models/celmod/santahat.sw.vtx
 models/celmod/santahat.vvd
+models/celmod/bhys8.dx80.vtx
+models/celmod/bhys8.dx90.vtx
+models/celmod/bhys8.mdl
+models/celmod/bhys8.phy
+models/celmod/bhys8.sw.vtx
+models/celmod/bhys8.vvd

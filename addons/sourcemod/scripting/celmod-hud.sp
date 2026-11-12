@@ -455,17 +455,17 @@ public Action Timer_HUD(Handle hTimer)
 				
 				if (iEntity != -1)
 				{
-					if (Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM || Cel_GetEntityType(iEntity) == ENTTYPE_HAT)
+					if (Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM || Cel_GetEntityType(iEntity) == ENTTYPE_HAT || Cel_GetEntityType(iEntity) == ENTTYPE_CELWEP)
 					{
 						Cel_GetCollectibleName(iEntity, sPropName, sizeof(sPropName));
 						
 						if (Cel_CheckOwner(i, iEntity))
 						{
-							Format(sHUDMessage, sizeof(sHUDMessage), "%s: %s", Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM ? "Emblem" : "Hat", sPropName);
+							Format(sHUDMessage, sizeof(sHUDMessage), "%s: %s", Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM ? "Emblem" : (Cel_GetEntityType(iEntity) == ENTTYPE_HAT ? "Hat" : "Weapon"), sPropName);
 							
 							Cel_GetHudColor(i, iHUDColor);
 						} else {
-							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\n%s: %s", Cel_GetOwner(iEntity), Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM ? "Emblem" : "Hat", sPropName);
+							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\n%s: %s", Cel_GetOwner(iEntity), Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM ? "Emblem" : (Cel_GetEntityType(iEntity) == ENTTYPE_HAT ? "Hat" : "Weapon"), sPropName);
 							
 							Cel_GetHudColor(Cel_GetOwner(iEntity), iHUDColor);
 						}
