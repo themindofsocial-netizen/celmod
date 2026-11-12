@@ -1402,9 +1402,10 @@ public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)
  * @param fHeight     Height of the box that must fit.
  * @param fSpot       The spot found: the middle of the box's floor.
  * @param fAvoid      A place the spot must stay away from (another booth), with fAvoidRadius.
+ * @param fMaxAir     For spots in the air: the most it can be above the ground.
  * @return            True if a spot was found.
  */
-stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3], const float fAvoid[3] = NULL_VECTOR, float fAvoidRadius = 0.0)
+stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3], const float fAvoid[3] = NULL_VECTOR, float fAvoidRadius = 0.0, float fMaxAir = 480.0)
 {
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
 	float fCamera[3], fGround[3], fMax[3], fMin[3], fOrigin[3], fTry[3];
@@ -1550,7 +1551,7 @@ stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight,
 				continue;
 			}
 
-			fSpot[2] = fGround[2] + GetRandomFloat(64.0, (fRoom < 480.0) ? fRoom : 480.0);
+			fSpot[2] = fGround[2] + GetRandomFloat(64.0, (fRoom < fMaxAir) ? fRoom : fMaxAir);
 		} else {
 			//A flat floor: the ground under every corner is about as high as the middle.
 			bool bFlat = true;

@@ -447,7 +447,8 @@ public void OnMapStart()
 	PrecacheModel(MONEYBOX_MODEL, true);
 	PrecacheSound(SOUND_DIG, true);
 
-	CreateTimer(5.0, Timer_SpawnBooth, _, TIMER_FLAG_NO_MAPCHANGE);
+	// After the Guess Booth (placed at 3 seconds), so it can be kept far away from it.
+	CreateTimer(8.0, Timer_SpawnBooth, _, TIMER_FLAG_NO_MAPCHANGE);
 
 	LoadItems();
 	LoadRewards();
@@ -4940,23 +4941,9 @@ public Action Timer_SpawnBooth(Handle hTimer)
 {
 	float fSpot[3];
 
-	// Anywhere in the map, floating in the air, as it was on the original server, away from the Guess Booth.
-	float fGuessBooth[3];
-	float fAvoid = 0.0;
-
-	int iKleiner = FindEntityByClassname(-1, "cel_booth_kleiner");
-
-	if (iKleiner != -1)
+	// Hidden away: of many open spots in the air, the one furthest from both the Guess Booth and the spawn points.
+	if (FindHiddenBoothSpot(fSpot))
 	{
-		GetEntPropVector(iKleiner, Prop_Data, "m_vecAbsOrigin", fGuessBooth);
-
-		fAvoid = 2000.0;
-	}
-
-	if (Cel_FindRandomMapSpot(false, 24.0, 64.0, fSpot, fGuessBooth, fAvoid))
-	{
-		fSpot[2] += 32.0;
-
 		SpawnPowerBooth(fSpot);
 
 		return Plugin_Stop;
@@ -4994,6 +4981,73 @@ public Action Timer_SpawnBooth(Handle hTimer)
 	SpawnPowerBooth(fOrigin);
 
 	return Plugin_Stop;
+}
+
+bool FindHiddenBoothSpot(float fBest[3])
+{
+	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
+	float fCandidate[3], fGuess[3], fPoint[3], fSpawn[64][3];
+	bool bFound = false, bGuess = false;
+	float fBestScore = -1.0;
+	int iSpawns = 0, iEntity;
+
+	for (int i = 0; i < sizeof(sSpawns); i++)
+	{
+		iEntity = -1;
+
+		while ((iEntity = FindEntityByClassname(iEntity, sSpawns[i])) != -1 && iSpawns < sizeof(fSpawn))
+		{
+			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fSpawn[iSpawns++]);
+		}
+	}
+
+	iEntity = FindEntityByClassname(-1, "cel_booth_kleiner");
+
+	if (iEntity != -1)
+	{
+		GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fGuess);
+
+		bGuess = true;
+	}
+
+	for (int iTry = 0; iTry < 40; iTry++)
+	{
+		// Up to 900 units in the air, so it is often high up out of the way.
+		if (!Cel_FindRandomMapSpot(false, 24.0, 64.0, fCandidate, NULL_VECTOR, 0.0, 900.0))
+		{
+			continue;
+		}
+
+		fCandidate[2] += 32.0;
+
+		// Its distance to the nearest spawn point and to the Guess Booth, whichever is closer.
+		float fScore = 999999.0;
+
+		for (int i = 0; i < iSpawns; i++)
+		{
+			fPoint = fSpawn[i];
+
+			float fDistance = GetVectorDistance(fCandidate, fPoint);
+
+			if (fDistance < fScore) fScore = fDistance;
+		}
+
+		if (bGuess)
+		{
+			float fDistance = GetVectorDistance(fCandidate, fGuess);
+
+			if (fDistance < fScore) fScore = fDistance;
+		}
+
+		if (fScore > fBestScore)
+		{
+			fBestScore = fScore;
+			fBest = fCandidate;
+			bFound = true;
+		}
+	}
+
+	return bFound;
 }
 
 void SpawnPowerBooth(float fOrigin[3])

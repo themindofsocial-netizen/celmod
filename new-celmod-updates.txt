@@ -78,3 +78,4 @@
 		 - The Guess Booth message is shown quietly at the top of the screen.
 		 - The Power Booth tells you how many emblems you brought and how many each upgrade needs; new emblems land under it.
 		 - New celweps: Sunflower, Saw Gun, Melon Launcher and Blade Bow.
+	 - 11/23/26: The Guess Booth shows three props again, is bigger, and Kleiner has his cone. The Power Booth hides as far from spawns and the Guess Booth as it can.

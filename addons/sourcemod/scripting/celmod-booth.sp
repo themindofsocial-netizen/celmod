@@ -14,7 +14,7 @@
  * Admins can hang an item above the booth and auction it: players bid with !bid, the highest bidder gets it.
  */
 
-#define BOOTH_HALF 112.0
+#define BOOTH_HALF 160.0
 #define DISPLAY_SIZE 40.0
 #define KLEINER_MODEL "models/kleiner.mdl"
 #define CONE_MODEL "models/props_junk/trafficcone001a.mdl"
@@ -38,6 +38,7 @@ int g_iAnswer;
 int g_iAuctionRef = INVALID_ENT_REFERENCE;
 int g_iBeam = -1;
 int g_iKleinerRef = INVALID_ENT_REFERENCE;
+int g_iConeRef = INVALID_ENT_REFERENCE;
 
 //Players Dr. Kleiner has already greeted on this map.
 bool g_bGreeted[MAXPLAYERS + 1];
@@ -86,6 +87,7 @@ public void OnMapStart()
 	PrecacheSound(KLEINER_HELLO, true);
 	
 	g_iKleinerRef = INVALID_ENT_REFERENCE;
+	g_iConeRef = INVALID_ENT_REFERENCE;
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
@@ -106,7 +108,8 @@ public void OnMapStart()
 	
 	g_smGuessed.Clear();
 	
-	CreateTimer(6.0, Timer_PlaceBooth, _, TIMER_FLAG_NO_MAPCHANGE);
+	//Placed before the Power Booth, which then keeps far away from it.
+	CreateTimer(3.0, Timer_PlaceBooth, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_PlaceBooth(Handle hTimer)
@@ -194,6 +197,17 @@ void FitDisplay(int iEntity, float fCenter[3])
 	
 	float fScale = DISPLAY_SIZE / fLongest;
 	
+	//A model with no size information would otherwise be blown up to an enormous size.
+	if (fLongest <= 1.0 || fScale > 4.0)
+	{
+		fScale = 1.0;
+		fMins[0] = 0.0; fMins[1] = 0.0; fMins[2] = 0.0;
+		fMaxs[0] = 0.0; fMaxs[1] = 0.0; fMaxs[2] = 0.0;
+	} else if (fScale < 0.05)
+	{
+		fScale = 0.05;
+	}
+	
 	SetEntPropFloat(iEntity, Prop_Send, "m_flModelScale", fScale);
 	
 	float fOrigin[3];
@@ -258,7 +272,8 @@ void PlaceBooth(float fOrigin[3])
 			kvProps.GetSectionName(sAlias, sizeof(sAlias));
 			kvProps.GetString(NULL_STRING, sValue, sizeof(sValue), "");
 			
-			if (ExplodeString(sValue, "|", sBuffer, 2, sizeof(sBuffer[])) == 2 && StrEqual(sBuffer[0], "prop_physics_override"))
+			//Only props the server really has: custom CelMod models that are not installed would show nothing.
+			if (ExplodeString(sValue, "|", sBuffer, 2, sizeof(sBuffer[])) == 2 && StrEqual(sBuffer[0], "prop_physics_override") && FileExists(sBuffer[1], true))
 			{
 				alAliases.PushString(sAlias);
 				alModels.PushString(sBuffer[1]);
@@ -292,7 +307,7 @@ void PlaceBooth(float fOrigin[3])
 			alAliases.Erase(iPick);
 			alModels.Erase(iPick);
 			
-			fPos[0] = fOrigin[0] + (i - 1) * 64.0;
+			fPos[0] = fOrigin[0] + (i - 1) * 80.0;
 			fPos[1] = fOrigin[1];
 			fPos[2] = fOrigin[2] + 72.0;
 			
@@ -316,6 +331,7 @@ void PlaceKleiner(float fCenter[3])
 	float fAngles[3], fPos[3];
 	
 	RemoveRef(g_iKleinerRef);
+	RemoveRef(g_iConeRef);
 	
 	int iKleiner = CreateEntityByName("prop_dynamic_override");
 	
@@ -353,7 +369,13 @@ void PlaceKleiner(float fCenter[3])
 	
 	if (iCone != -1)
 	{
-		float fConeAngles[3], fConeOffset[3] = { -2.0, 0.0, 9.0 };
+		//He never moves, so the cone simply sits at the top of his head: the top of his model, less a little.
+		float fConePos[3], fKleinerMaxs[3];
+		
+		GetEntPropVector(iKleiner, Prop_Send, "m_vecMaxs", fKleinerMaxs);
+		
+		fConePos = fPos;
+		fConePos[2] += (fKleinerMaxs[2] > 40.0 ? fKleinerMaxs[2] : 72.0) - 2.0;
 		
 		DispatchKeyValue(iCone, "model", CONE_MODEL);
 		DispatchKeyValue(iCone, "solid", "0");
@@ -362,13 +384,9 @@ void PlaceKleiner(float fCenter[3])
 		
 		DispatchSpawn(iCone);
 		
-		SetVariantString("!activator");
-		AcceptEntityInput(iCone, "SetParent", iKleiner, iCone);
+		TeleportEntity(iCone, fConePos, fAngles, NULL_VECTOR);
 		
-		SetVariantString("eyes");
-		AcceptEntityInput(iCone, "SetParentAttachment", iCone, iCone);
-		
-		TeleportEntity(iCone, fConeOffset, fConeAngles, NULL_VECTOR);
+		g_iConeRef = EntIndexToEntRef(iCone);
 	}
 }
 
