@@ -753,4 +753,45 @@
 	{
 		"en"			"You have unlocked [type]."
 	}
+
+	"CoopOn"
+	{
+		"en"			"Co-op mode on. Players in your land can't hurt each other."
+	}
+
+	"CoopOff"
+	{
+		"en"			"Co-op mode off."
+	}
+
+	"LandMode_Coop"
+	{
+		"en"			"This land has {green}co-op{default} mode enabled: players here can't hurt each other."
+	}
+
+	"ShopOn"
+	{
+		"en"			"Shop mode on."
+	}
+
+	"ShopOff"
+	{
+		"en"			"Shop mode off."
+	}
+
+	"CMD_Replace"
+	{
+		"en"			"Usage: {green}[tag]replace{default} <prop name>"
+	}
+
+	"CantReplace"
+	{
+		"en"			"That can't be replaced with a different model."
+	}
+
+	"ReplacedModel"
+	{
+		"#format"		"{1:s}"
+		"en"			"Replaced the model of the [type] with {green}{1}{default}."
+	}
 }

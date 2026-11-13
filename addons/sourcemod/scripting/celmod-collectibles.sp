@@ -76,6 +76,7 @@ enum struct Item
 	int iBeamColor[4];
 	int iDamageType;
 	char sFx[16];
+	char sAura[16];
 	char sSecondary[16];
 	float fSecondaryValue;
 	float fSecondaryCooldown;
@@ -128,6 +129,10 @@ char g_sKindTitle[][] = { "Emblems", "Hats", "Weapons" };
 ConVar g_cvUpgradeCost;
 
 int g_iBoothRef = INVALID_ENT_REFERENCE;
+float g_fBoothSpot[3];
+bool g_bBoothPlaced = false;
+char g_sLastBoothMap[PLATFORM_MAX_PATH];
+float g_fLastBoothSpot[3];
 
 char g_sBoothModel[PLATFORM_MAX_PATH];
 char g_sDropModel[PLATFORM_MAX_PATH];
@@ -190,6 +195,8 @@ bool g_bGravityManaged[MAXPLAYERS + 1];
 bool g_bPortal[MAXPLAYERS + 1][2];
 bool g_bSpeedManaged[MAXPLAYERS + 1];
 bool g_bThirdPerson[MAXPLAYERS + 1];
+int g_iCameraRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+float g_fCameraDistance[MAXPLAYERS + 1];
 
 char g_sInvPath[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
 char g_sItemDB[PLATFORM_MAX_PATH];
@@ -197,6 +204,9 @@ char g_sMap[64];
 char g_sRewardDB[PLATFORM_MAX_PATH];
 
 ConVar g_cvDropCount;
+ConVar g_cvDropDelay;
+ConVar g_cvThirdPersonDistance;
+ConVar g_cvThirdPersonSide;
 ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
@@ -245,6 +255,8 @@ native void CG_GetShootPosition(int iClient, float fPos[3], float fForwardOffset
 #define CG_ACT_VM_MISSCENTER 196
 #define CG_PLAYER_ATTACK1 5
 
+#include <celmod_emblemfx>
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("CG_GiveGun");
@@ -258,6 +270,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetCollectibleLook", Native_GetCollectibleLook);
 	CreateNative("Cel_GiveCollectible", Native_GiveCollectible);
 	CreateNative("Cel_IsCollectible", Native_IsCollectible);
+	CreateNative("Cel_GetDropBoxEmblem", Native_GetDropBoxEmblem);
 	CreateNative("Cel_SpawnCollectible", Native_SpawnCollectible);
 	CreateNative("Cel_GetCollectibleCount", Native_GetCollectibleCount);
 	CreateNative("Cel_GetPlayerModelCount", Native_GetPlayerModelCount);
@@ -306,6 +319,10 @@ public void OnPluginStart()
 		ResetClient(i);
 	}
 
+	g_cvThirdPersonDistance = CreateConVar("cm_thirdperson_distance", "110", "How far behind the player the !thirdperson camera sits.", _, true, 30.0, true, 300.0);
+	g_cvThirdPersonSide = CreateConVar("cm_thirdperson_side", "0", "How far to the right of the player the !thirdperson camera sits (over the shoulder).", _, true, -64.0, true, 64.0);
+	g_cvAura = CreateConVar("cm_emblem_aura", "1", "1 = an emblem held out shows its own aura around the player.", _, true, 0.0, true, 1.0);
+	g_cvDropDelay = CreateConVar("cm_drop_delay", "3.0", "Seconds between one emblem box and the next in a drop.", _, true, 0.0, true, 60.0);
 	g_cvDropCount = CreateConVar("cm_drop_count", "5", "Number of crates in one emblem drop.", _, true, 1.0, true, 30.0);
 	g_cvNukeWrecks = CreateConVar("cm_nuke_wrecks_builds", "1", "1: the Nuke emblem unfreezes and scatters props where it lands, as on the original server. 0: builds are safe.", _, true, 0.0, true, 1.0);
 	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
@@ -428,11 +445,13 @@ public void OnPluginEnd()
 
 public void OnMapStart()
 {
+	Fx_Precache();
+
 	GetCurrentMap(g_sMap, sizeof(g_sMap));
 
 	PrecacheModel(GRAVGUN_WORLDMODEL, true);
 	// The emblem box, with the emblem's own skin; a plain crate if the server does not have it.
-	strcopy(g_sDropModel, sizeof(g_sDropModel), FileExists(DROPBOX_MODEL, true) ? DROPBOX_MODEL : DROPBOX_FALLBACK);
+	strcopy(g_sDropModel, sizeof(g_sDropModel), Cel_IsPhysicsModelComplete(DROPBOX_MODEL) ? DROPBOX_MODEL : DROPBOX_FALLBACK);
 
 	PrecacheModel(g_sDropModel, true);
 
@@ -496,7 +515,10 @@ public void OnMapStart()
 	PrecacheSound(SOUND_DIG, true);
 
 	// After the Guess Booth (placed at 3 seconds), so it can be kept far away from it.
+	g_bBoothPlaced = false;
+
 	CreateTimer(8.0, Timer_SpawnBooth, _, TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(5.0, Timer_BoothGuard, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
 	LoadItems();
 	LoadRewards();
@@ -521,6 +543,8 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
+	RemoveThirdPersonCamera(iClient);
+
 	// The items stay in the player's ledger, so they can spawn them again next time.
 	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
 	{
@@ -814,21 +838,149 @@ void SetThirdPerson(int iClient, bool bEnable)
 
 	if (!IsClientInGame(iClient) || !IsPlayerAlive(iClient))
 	{
+		RemoveThirdPersonCamera(iClient);
 		return;
 	}
 
 	if (bEnable)
 	{
+		// The death camera observer mode is what makes the game draw the player's own model (and so their hat and
+		// held emblem). Left alone, its view turns towards the "killer" (the player themself) and stops following
+		// the aim, so the view itself comes from a camera that follows the player's eyes every tick.
 		SetEntPropEnt(iClient, Prop_Send, "m_hObserverTarget", 0);
 		SetEntProp(iClient, Prop_Send, "m_iObserverMode", 1);
 		SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", 0);
-		SetEntProp(iClient, Prop_Send, "m_iFOV", 110);
+		SetEntProp(iClient, Prop_Send, "m_iFOV", 90);
+
+		CreateThirdPersonCamera(iClient);
 	} else {
+		RemoveThirdPersonCamera(iClient);
+
 		SetEntPropEnt(iClient, Prop_Send, "m_hObserverTarget", -1);
 		SetEntProp(iClient, Prop_Send, "m_iObserverMode", 0);
 		SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", 1);
 		SetEntProp(iClient, Prop_Send, "m_iFOV", 0);
 	}
+}
+
+void CreateThirdPersonCamera(int iClient)
+{
+	float fOrigin[3], fAngles[3];
+
+	RemoveThirdPersonCamera(iClient);
+
+	int iCamera = CreateEntityByName("prop_dynamic_override");
+
+	if (iCamera == -1)
+	{
+		return;
+	}
+
+	DispatchKeyValue(iCamera, "model", "models/error.mdl");
+	DispatchKeyValue(iCamera, "solid", "0");
+	DispatchKeyValue(iCamera, "rendermode", "10");
+	DispatchKeyValue(iCamera, "classname", "cel_tpcamera");
+
+	DispatchSpawn(iCamera);
+
+	SetEntityRenderMode(iCamera, RENDER_NONE);
+
+	GetClientEyePosition(iClient, fOrigin);
+	GetClientEyeAngles(iClient, fAngles);
+
+	TeleportEntity(iCamera, fOrigin, fAngles, NULL_VECTOR);
+
+	g_iCameraRef[iClient] = EntIndexToEntRef(iCamera);
+	g_fCameraDistance[iClient] = 16.0;
+
+	SDKHook(iCamera, SDKHook_SetTransmit, Hook_CameraTransmit);
+
+	SetClientViewEntity(iClient, iCamera);
+}
+
+void RemoveThirdPersonCamera(int iClient)
+{
+	int iCamera = EntRefToEntIndex(g_iCameraRef[iClient]);
+
+	g_iCameraRef[iClient] = INVALID_ENT_REFERENCE;
+
+	if (iCamera != INVALID_ENT_REFERENCE && iCamera > MaxClients)
+	{
+		if (IsClientInGame(iClient))
+		{
+			SetClientViewEntity(iClient, iClient);
+		}
+
+		AcceptEntityInput(iCamera, "kill");
+	}
+}
+
+// Only the player the camera belongs to needs it.
+public Action Hook_CameraTransmit(int iEntity, int iClient)
+{
+	if (iClient > 0 && iClient <= MaxClients && EntRefToEntIndex(g_iCameraRef[iClient]) == iEntity)
+	{
+		return Plugin_Continue;
+	}
+
+	return Plugin_Handled;
+}
+
+// Every tick each camera goes behind its player's eyes, looking where they look, pulled in where a wall is in the way.
+void UpdateThirdPersonCameras()
+{
+	float fEye[3], fAngles[3], fForward[3], fRight[3], fUp[3], fWanted[3], fEnd[3];
+	static const float fMins[3] = { -6.0, -6.0, -6.0 }, fMaxs[3] = { 6.0, 6.0, 6.0 };
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_iCameraRef[i] == INVALID_ENT_REFERENCE)
+		{
+			continue;
+		}
+
+		int iCamera = EntRefToEntIndex(g_iCameraRef[i]);
+
+		if (iCamera == INVALID_ENT_REFERENCE || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			RemoveThirdPersonCamera(i);
+			continue;
+		}
+
+		GetClientEyePosition(i, fEye);
+		GetClientEyeAngles(i, fAngles);
+
+		GetAngleVectors(fAngles, fForward, fRight, fUp);
+
+		// Eases out to the full distance after being switched on or pulled in by a wall.
+		g_fCameraDistance[i] += (g_cvThirdPersonDistance.FloatValue - g_fCameraDistance[i]) * 0.2;
+
+		for (int k = 0; k < 3; k++)
+		{
+			fWanted[k] = fEye[k] - fForward[k] * g_fCameraDistance[i] + fRight[k] * g_cvThirdPersonSide.FloatValue + fUp[k] * 6.0;
+		}
+
+		Handle hTrace = TR_TraceHullFilterEx(fEye, fWanted, fMins, fMaxs, MASK_SOLID, Filter_NotPlayers, i);
+
+		TR_GetEndPosition(fEnd, hTrace);
+
+		if (TR_DidHit(hTrace))
+		{
+			g_fCameraDistance[i] = GetVectorDistance(fEye, fEnd);
+		}
+
+		CloseHandle(hTrace);
+
+		TeleportEntity(iCamera, fEnd, fAngles, NULL_VECTOR);
+
+		// No smoothing on the player's screen: it shows where the camera is right now, not a tenth of a second ago.
+		SetEntProp(iCamera, Prop_Send, "m_fEffects", GetEntProp(iCamera, Prop_Send, "m_fEffects") | 8);
+	}
+}
+
+public bool Filter_NotPlayers(int iEntity, int iContentsMask, any aData)
+{
+	return (iEntity > MaxClients);
 }
 
 public Action Command_Inventory(int iClient, int iArgs)
@@ -1265,6 +1417,7 @@ public Action Event_Death(Event eEvent, const char[] sName, bool bDontBroadcast)
 	{
 		RemoveHatEntity(iClient);
 		RestoreWeapon(iClient);
+		RemoveThirdPersonCamera(iClient);
 
 		g_bHoldingGravGun[iClient] = false;
 		g_bPhasing[iClient] = false;
@@ -1690,6 +1843,9 @@ public Action Timer_ApplyHat(Handle hTimer, any iUserId)
 
 	if (iClient > 0 && IsClientInGame(iClient))
 	{
+		// The player model goes on first: the hat is fixed to the model's head.
+		ApplyPlayerModel(iClient);
+
 		CreateHatEntity(iClient);
 
 		// Custom Guns empties the inventory on death and refills it a second after spawning; ours go in after that.
@@ -1940,6 +2096,8 @@ public Action Timer_Think(Handle hTimer)
 	}
 
 	ThinkPortals();
+
+	Fx_ThinkAuras();
 
 	if (g_iTick % 3 == 0)
 	{
@@ -2387,6 +2545,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fKnockback = kvItems.GetFloat("knockback", 0.0);
 
 	kvItems.GetString("fx", g_Items[iItem].sFx, sizeof(Item::sFx), "beam");
+	kvItems.GetString("aura", g_Items[iItem].sAura, sizeof(Item::sAura), "");
 	kvItems.GetString("secondary", g_Items[iItem].sSecondary, sizeof(Item::sSecondary), "none");
 
 	g_Items[iItem].fSecondaryValue = kvItems.GetFloat("secondaryvalue", 50.0);
@@ -3124,6 +3283,12 @@ void DrawShotEffect(int iClient, int iItem, float fStart[3], float fEnd[3], floa
 		return;
 	}
 
+	// Each emblem's own style (see celmod_emblemfx.inc); the simpler styles below are kept for custom emblems.
+	if (DrawStyledShot(iClient, iItem, sFx, fStart, fEnd, fDirection, iColor))
+	{
+		return;
+	}
+
 	if (StrEqual(sFx, "model"))
 	{
 		LaunchModel(iItem, fStart, fEnd, iColor, 1500.0);
@@ -3236,7 +3401,7 @@ void PlayShotSound(int iClient, const char[] sSound)
 }
 
 // A sprite that flies from one point to another and removes itself on arrival.
-void LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], float fSpeed, float fScale, bool bGravity)
+int LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], float fSpeed, float fScale, bool bGravity)
 {
 	char sBuffer[64];
 
@@ -3245,14 +3410,14 @@ void LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], floa
 	// Nothing to show at point blank range, and never spawn sprites when the map is nearly out of entities.
 	if (fDistance < 24.0 || GetEntityCount() > GetMaxEntities() - 200)
 	{
-		return;
+		return -1;
 	}
 
 	int iSprite = CreateEntityByName("env_sprite");
 
 	if (iSprite == -1)
 	{
-		return;
+		return -1;
 	}
 
 	float fLife = fDistance / fSpeed;
@@ -3275,6 +3440,8 @@ void LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], floa
 	TeleportEntity(iSprite, fStart, NULL_VECTOR, NULL_VECTOR);
 
 	StartMover(iSprite, fStart, fEnd, fLife, bGravity, true);
+
+	return iSprite;
 }
 
 // A burst of sprites thrown in a direction, they fall and fade on their own.
@@ -3386,6 +3553,28 @@ void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
 
 		TE_SetupGlowSprite(fFlame, g_Items[iItem].iSpriteIndex, GetRandomFloat(0.1, 0.2), 0.25 + fAlong / g_Items[iItem].fRange * 1.1, 230);
 		TE_SendToAll();
+	}
+
+	// A rippling heat haze through the flames and the glow they throw on the walls around them.
+	float fFar[3], fMid[3];
+	int iHeat[4];
+
+	for (int k = 0; k < 3; k++)
+	{
+		fFar[k] = fMuzzle[k] + fDirection[k] * g_Items[iItem].fRange;
+		fMid[k] = fMuzzle[k] + fDirection[k] * g_Items[iItem].fRange * 0.5;
+	}
+
+	iHeat[0] = g_Items[iItem].iBeamColor[0];
+	iHeat[1] = g_Items[iItem].iBeamColor[1];
+	iHeat[2] = g_Items[iItem].iBeamColor[2];
+	iHeat[3] = 160;
+
+	Fx_Beam(fMuzzle, fFar, g_iBmPhys, 6.0, 40.0, 0.15, 4.0, iHeat, 0, 30);
+
+	if (GetRandomInt(0, 2) == 0)
+	{
+		Fx_Light(fMid, iHeat, 200.0, 0.4, 5);
 	}
 
 	PlayShotSound(iClient, SOUND_FLAME);
@@ -3510,6 +3699,8 @@ public void OnGameFrame()
 {
 	float fPos[3];
 	float fNow = GetGameTime();
+
+	UpdateThirdPersonCameras();
 
 	for (int i = 0; i < MAX_MOVERS; i++)
 	{
@@ -4740,6 +4931,16 @@ void CreateHatEntity(int iClient)
 		return;
 	}
 
+	// A hat whose model the server does not have would be invisible: say so instead of failing quietly.
+	if (!FileExists(g_Items[iItem].sModel, true))
+	{
+		LogError("|CelMod| The hat '%s' uses the model '%s', which is not on the server.", g_Items[iItem].sId, g_Items[iItem].sModel);
+
+		Cel_PrintToChat(iClient, "The {green}%s{default} hat cannot be shown: its model is missing on the server.", g_Items[iItem].sName);
+
+		return;
+	}
+
 	int iHat = CreateEntityByName("prop_dynamic_override");
 
 	if (iHat == -1)
@@ -4806,59 +5007,150 @@ void CreateHatEntity(int iClient)
 	SDKHook(iHat, SDKHook_SetTransmit, Hook_HatTransmit);
 }
 
-//Emblem drops:
+//Emblem drops: the boxes fall one after another, a few seconds apart.
 int StartDrop(int iCount)
 {
-	float fOrigin[3];
-	int iBox, iItem, iSpawned = 0;
+	int iAlive = 0;
 
 	g_iMinutesSinceDrop = 0;
 
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && IsPlayerAlive(i))
+		{
+			iAlive++;
+		}
+	}
+
+	if (iAlive == 0 || iCount < 1)
+	{
+		return 0;
+	}
+
 	for (int i = 0; i < iCount; i++)
 	{
-		iItem = PickRandomItem(KIND_EMBLEM);
-
-		if (iItem == -1 || !FindDropPosition(fOrigin))
-		{
-			continue;
-		}
-
-		iBox = CreateEntityByName("prop_physics_override");
-
-		if (iBox == -1 || iBox > MAXENTITIES)
-		{
-			continue;
-		}
-
-		DispatchKeyValue(iBox, "model", g_sDropModel);
-		DispatchKeyValue(iBox, "classname", "cel_dropbox");
-
-		DispatchSpawn(iBox);
-
-		TeleportEntity(iBox, fOrigin, NULL_VECTOR, NULL_VECTOR);
-
-		// The box shows which emblem is inside: the emblem's skin, in the emblem's color.
-		SetEntProp(iBox, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
-		SetEntityRenderColor(iBox, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
-
-		// It must survive the fall and being thrown around with the gravity gun until the map changes.
-		SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
-
-		g_bDropBox[iBox] = true;
-		g_iEntItem[iBox] = iItem;
-		g_iRewardId[iBox] = -1;
-
-		iSpawned++;
+		CreateTimer(0.1 + i * g_cvDropDelay.FloatValue, Timer_DropOne, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
 
-	if (iSpawned > 0)
+	Cel_PrintToChatAll("{green}Emblem drop!{default} %d emblem box%s about to fall from the sky. Hold one with your gravity gun when the map changes, or get it into your land, to keep the emblem inside.", iCount, iCount == 1 ? " is" : "es are");
+
+	return iCount;
+}
+
+public Action Timer_DropOne(Handle hTimer)
+{
+	SpawnDropBox();
+
+	return Plugin_Stop;
+}
+
+int SpawnDropBox()
+{
+	float fOrigin[3];
+
+	int iItem = PickRandomItem(KIND_EMBLEM);
+
+	if (iItem == -1 || !FindDropPosition(fOrigin))
 	{
-		EmitSoundToAll(SOUND_DROP);
-
-		Cel_PrintToChatAll("{green}Emblem drop!{default} %d emblem box%s falling from the sky. Grab one with your gravity gun: the box you are holding when the map changes is yours.", iSpawned, iSpawned == 1 ? " is" : "es are");
+		return -1;
 	}
 
-	return iSpawned;
+	int iBox = CreateEntityByName("prop_physics_override");
+
+	if (iBox == -1)
+	{
+		return -1;
+	}
+
+	if (iBox > MAXENTITIES)
+	{
+		AcceptEntityInput(iBox, "kill");
+		return -1;
+	}
+
+	DispatchKeyValue(iBox, "model", g_sDropModel);
+	DispatchKeyValue(iBox, "classname", "cel_dropbox");
+
+	DispatchSpawn(iBox);
+
+	TeleportEntity(iBox, fOrigin, NULL_VECTOR, NULL_VECTOR);
+
+	// The box shows which emblem is inside: the emblem's skin, in the emblem's color.
+	if (StrEqual(g_sDropModel, DROPBOX_MODEL))
+	{
+		SetEntProp(iBox, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
+	}
+
+	SetEntityRenderColor(iBox, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+
+	// It must survive the fall and being thrown around with the gravity gun until the map changes.
+	SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
+
+	g_bDropBox[iBox] = true;
+	g_iEntItem[iBox] = iItem;
+	g_iRewardId[iBox] = -1;
+
+	SDKHook(iBox, SDKHook_UsePost, Hook_DropBoxUse);
+
+	EmitAmbientSound(SOUND_DROP, fOrigin, iBox, SNDLEVEL_SCREAMING);
+
+	return iBox;
+}
+
+// Pressing E on an emblem box that is inside your own land opens it.
+public void Hook_DropBoxUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	float fOrigin[3];
+
+	if (!IsRealClient(iActivator) || iEntity > MAXENTITIES || !g_bDropBox[iEntity])
+	{
+		return;
+	}
+
+	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+	if (Cel_GetLandOwnerFromPosition(fOrigin) != iActivator)
+	{
+		Cel_PrintToChat(iActivator, "Get this emblem box into {green}your land{default} and press {green}E{default} on it to open it, or hold it with your gravity gun when the map changes.");
+		return;
+	}
+
+	ClaimDropBox(iActivator, iEntity, "You opened the emblem box");
+
+	Cel_DissolveEntity(iEntity);
+}
+
+void ClaimDropBox(int iClient, int iBox, const char[] sHow)
+{
+	int iItem = g_iEntItem[iBox];
+
+	// One box can only be won once.
+	g_bDropBox[iBox] = false;
+
+	if (iItem < 0 || iItem >= g_iItemCount)
+	{
+		return;
+	}
+
+	SetOwned(iClient, iItem, GetOwned(iClient, iItem) + 1);
+
+	EmitSoundToClient(iClient, SOUND_REWARD);
+
+	Cel_PrintToChat(iClient, "%s: a {green}%s{default} emblem is yours! Type {green}!emblem %s{default} to spawn it.", sHow, g_Items[iItem].sName, g_Items[iItem].sId);
+}
+
+public int Native_GetDropBoxEmblem(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1);
+
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !g_bDropBox[iEntity] || g_iEntItem[iEntity] < 0 || g_iEntItem[iEntity] >= g_iItemCount || !IsValidEntity(iEntity))
+	{
+		return false;
+	}
+
+	SetNativeString(2, g_Items[g_iEntItem[iEntity]].sName, GetNativeCell(3));
+
+	return true;
 }
 
 // Picks a point in open air high above a random spot near a random living player.
@@ -5207,6 +5499,12 @@ void ApplyPlayerModel(int iClient)
 	if (!StrEqual(sModel, g_PlayerModels[iModel].sModel, false))
 	{
 		SetEntityModel(iClient, g_PlayerModels[iModel].sModel);
+
+		// A hat is fixed to an attachment of the old model, so it goes on again on the new one.
+		if (g_iActiveHat[iClient] != -1)
+		{
+			CreateHatEntity(iClient);
+		}
 	}
 }
 
@@ -5422,7 +5720,7 @@ public Action Timer_SpawnBooth(Handle hTimer)
 
 	fOrigin[0] += Cosine(fYaw) * 96.0;
 	fOrigin[1] += Sine(fYaw) * 96.0;
-	fOrigin[2] += 48.0;
+	fOrigin[2] += 1.0;
 
 	SpawnPowerBooth(fOrigin);
 
@@ -5485,15 +5783,22 @@ bool CanSeeSpot(float fFrom[3], float fSpot[3])
 	return bSeen;
 }
 
-// Of many open spots in the air, the best hidden one: tucked away (little open space around it), out of sight of
-// every spawn point and the Guess Booth, and far from them.
+// A hard-to-reach spot that changes from map to map and game to game. Many random spots are tried, on ledges,
+// rooftops and floors as well as up in the air; each is scored for being high up, tucked away, out of sight of the
+// spawn points and the Guess Booth, and far from them. One of the best few is picked at random, never the place
+// it was last time on this map.
 bool FindHiddenBoothSpot(float fBest[3])
 {
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
-	float fCandidate[3], fGuess[3], fSpawn[64][3];
-	bool bFound = false, bGuess = false;
-	float fBestScore = -1.0;
-	int iSpawns = 0, iEntity;
+	char sMap[PLATFORM_MAX_PATH];
+	float fCandidate[3], fGuess[3], fSpawn[64][3], fSpots[96][3], fScores[96];
+	bool bGuess = false;
+	float fLowest = 999999.0;
+	int iSpawns = 0, iSpots = 0, iEntity;
+
+	GetCurrentMap(sMap, sizeof(sMap));
+
+	bool bSameMap = StrEqual(sMap, g_sLastBoothMap);
 
 	for (int i = 0; i < sizeof(sSpawns); i++)
 	{
@@ -5501,9 +5806,15 @@ bool FindHiddenBoothSpot(float fBest[3])
 
 		while ((iEntity = FindEntityByClassname(iEntity, sSpawns[i])) != -1 && iSpawns < sizeof(fSpawn))
 		{
-			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fSpawn[iSpawns++]);
+			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fSpawn[iSpawns]);
+
+			if (fSpawn[iSpawns][2] < fLowest) fLowest = fSpawn[iSpawns][2];
+
+			iSpawns++;
 		}
 	}
+
+	if (iSpawns == 0) fLowest = 0.0;
 
 	iEntity = FindEntityByClassname(-1, "cel_booth_kleiner");
 
@@ -5514,14 +5825,20 @@ bool FindHiddenBoothSpot(float fBest[3])
 		bGuess = true;
 	}
 
-	for (int iTry = 0; iTry < 60; iTry++)
+	for (int iTry = 0; iTry < sizeof(fSpots); iTry++)
 	{
-		if (!Cel_FindRandomMapSpot(false, 24.0, 64.0, fCandidate, NULL_VECTOR, 0.0, 900.0))
+		// Mostly standing on something (a ledge, a roof, a hidden floor), sometimes floating.
+		bool bFloor = (GetRandomInt(0, 9) < 7);
+
+		if (!Cel_FindRandomMapSpot(bFloor, 28.0, 72.0, fCandidate, NULL_VECTOR, 0.0, 700.0))
 		{
 			continue;
 		}
 
-		fCandidate[2] += 32.0;
+		if (bSameMap && GetVectorDistance(fCandidate, g_fLastBoothSpot) < 1200.0)
+		{
+			continue;
+		}
 
 		float fNearest = 999999.0;
 		int iSeenBy = 0;
@@ -5548,18 +5865,73 @@ bool FindHiddenBoothSpot(float fBest[3])
 			if (CanSeeSpot(fGuess, fCandidate)) iSeenBy += 3;
 		}
 
-		// Far away is good, enclosed is better, and every spawn point that can see it counts heavily against it.
-		float fScore = fNearest / (SpotOpenness(fCandidate) + 150.0) / (1.0 + iSeenBy * 2.0);
+		float fMiddle[3];
 
-		if (fScore > fBestScore)
-		{
-			fBestScore = fScore;
-			fBest = fCandidate;
-			bFound = true;
-		}
+		fMiddle = fCandidate;
+		fMiddle[2] += 36.0;
+
+		// Height above the lowest spawn point: climbing up to it is what makes it hard to reach.
+		float fHeight = fCandidate[2] - fLowest;
+
+		if (fHeight < 0.0) fHeight = 0.0;
+
+		float fScore = (fNearest + fHeight * 3.0) / (SpotOpenness(fMiddle) + 150.0) / (1.0 + iSeenBy * 2.0);
+
+		fSpots[iSpots] = fCandidate;
+		fScores[iSpots] = fScore;
+		iSpots++;
 	}
 
-	return bFound;
+	if (iSpots == 0)
+	{
+		return false;
+	}
+
+	// The best few, then one of them at random.
+	int iTop[5], iTopCount = 0;
+
+	for (int k = 0; k < sizeof(iTop); k++)
+	{
+		int iBest = -1;
+
+		for (int i = 0; i < iSpots; i++)
+		{
+			if (fScores[i] >= 0.0 && (iBest == -1 || fScores[i] > fScores[iBest]))
+			{
+				iBest = i;
+			}
+		}
+
+		if (iBest == -1)
+		{
+			break;
+		}
+
+		iTop[iTopCount++] = iBest;
+		fScores[iBest] = -1.0;
+	}
+
+	fBest = fSpots[iTop[GetRandomInt(0, iTopCount - 1)]];
+
+	strcopy(g_sLastBoothMap, sizeof(g_sLastBoothMap), sMap);
+	g_fLastBoothSpot = fBest;
+
+	return true;
+}
+
+// The booth can't be broken, but if anything ever removes it, it comes back where it was.
+public Action Timer_BoothGuard(Handle hTimer)
+{
+	if (g_bBoothPlaced && EntRefToEntIndex(g_iBoothRef) == INVALID_ENT_REFERENCE)
+	{
+		float fSpot[3];
+
+		fSpot = g_fBoothSpot;
+
+		SpawnPowerBooth(fSpot);
+	}
+
+	return Plugin_Continue;
 }
 
 void SpawnPowerBooth(float fOrigin[3])
@@ -5587,7 +5959,27 @@ void SpawnPowerBooth(float fOrigin[3])
 
 	DispatchSpawn(iBooth);
 
-	TeleportEntity(iBooth, fOrigin, NULL_VECTOR, NULL_VECTOR);
+	// Its base rests on the spot, facing a random way.
+	float fMins[3], fPlace[3], fAngles[3];
+
+	GetEntPropVector(iBooth, Prop_Send, "m_vecMins", fMins);
+
+	fPlace = fOrigin;
+
+	if (fMins[2] < 0.0)
+	{
+		fPlace[2] -= fMins[2];
+	}
+
+	fAngles[1] = GetRandomFloat(0.0, 360.0);
+
+	TeleportEntity(iBooth, fPlace, fAngles, NULL_VECTOR);
+
+	// Nothing can break it: no damage, no physics.
+	SetEntProp(iBooth, Prop_Data, "m_takedamage", 0, 1);
+
+	g_fBoothSpot = fOrigin;
+	g_bBoothPlaced = true;
 
 	// Green, see-through and flickering, as it was on the original server.
 	SetEntityRenderMode(iBooth, RENDER_TRANSCOLOR);
@@ -5608,7 +6000,7 @@ public Action Command_PowerBooth(int iClient, int iArgs)
 
 	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
 
-	fOrigin[2] += 48.0;
+	fOrigin[2] += 1.0;
 
 	SpawnPowerBooth(fOrigin);
 
@@ -5816,7 +6208,14 @@ void UpgradeAtBooth(int iClient, int iBooth, int iFrom, int iTo)
 		TE_SetupBeamPoints(fOrigin, fBooth, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.5, 4.0, 4.0, 1, 2.0, g_iGreen, 10);
 		TE_SendToAll();
 
-		Cel_DissolveEntity(i);
+		// Drawn into the booth: a green spark where it was, then it is gone. (The CelMod dissolver's energy-core
+		// burst looked like the booth blowing up.)
+		float fUp[3] = { 0.0, 0.0, 1.0 };
+
+		TE_SetupEnergySplash(fOrigin, fUp, false);
+		TE_SendToAll();
+
+		AcceptEntityInput(i, "kill");
 
 		// Marked so it is not counted twice while it dissolves.
 		g_iEntItem[i] = -1;
@@ -6130,13 +6529,19 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 
 	if (fRoll < g_cvDigEmblemChance.FloatValue + g_cvDigMoneyChance.FloatValue)
 	{
-		char sMoneyBox[PLATFORM_MAX_PATH];
+		int iMoney = GetRandomInt(g_cvDigMoneyMin.IntValue, g_cvDigMoneyMax.IntValue);
 
-		Cel_GetMoneyBoxModel(sMoneyBox, sizeof(sMoneyBox));
+		//A cleers box that already belongs to the digger: E opens it, !give hands it over.
+		int iBox = Cel_CreateCleerBox(iClient, iMoney, fSpot);
 
-		SpawnDugUp(sMoneyBox, fSpot, GetRandomInt(g_cvDigMoneyMin.IntValue, g_cvDigMoneyMax.IntValue));
+		if (iBox != -1)
+		{
+			ThrowOutOfGround(iBox);
 
-		Cel_PrintToChat(iClient, "You dug up a {green}money box{default}! Press {green}E{default} on it.");
+			EmitSoundToAll(SOUND_REWARD, iClient);
+
+			Cel_PrintToChat(iClient, "You dug up a {green}cleers box{default} with {green}%d CL{default}! Press {green}E{default} on it.", iMoney);
+		}
 
 		return;
 	}
@@ -6564,18 +6969,26 @@ public void OnMapEnd()
 			continue;
 		}
 
-		int iItem = g_iEntItem[iBox];
+		ClaimDropBox(i, iBox, "You kept your emblem box");
+	}
 
-		// One box can only be won once.
-		g_bDropBox[iBox] = false;
+	// Boxes left lying in someone's land belong to that land's owner.
+	float fOrigin[3];
 
-		if (iItem < 0 || iItem >= g_iItemCount)
+	for (int iBox = MaxClients + 1; iBox <= MAXENTITIES && iBox < GetMaxEntities(); iBox++)
+	{
+		if (!g_bDropBox[iBox] || !IsValidEntity(iBox))
 		{
 			continue;
 		}
 
-		SetOwned(i, iItem, GetOwned(i, iItem) + 1);
+		GetEntPropVector(iBox, Prop_Data, "m_vecAbsOrigin", fOrigin);
 
-		Cel_PrintToChat(i, "You kept your emblem box: a {green}%s{default} emblem is yours! Type {green}!emblem %s{default} to spawn it.", g_Items[iItem].sName, g_Items[iItem].sId);
+		int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+
+		if (iOwner > 0 && IsRealClient(iOwner))
+		{
+			ClaimDropBox(iOwner, iBox, "An emblem box was left in your land");
+		}
 	}
 }

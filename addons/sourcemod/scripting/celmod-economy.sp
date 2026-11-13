@@ -20,6 +20,7 @@ enum struct Economy
 }
 
 int g_iCleerAmount[MAXENTITIES + 1];
+int g_iCleerOwner[MAXENTITIES + 1];
 int g_iTacticsLevel[MAXPLAYERS + 1];
 int g_iTacticsXP[MAXPLAYERS + 1];
 
@@ -49,6 +50,8 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetClientPurchaseStatus", Native_GetClientPurchaseStatus);
 	CreateNative("Cel_GetEntityPrice", Native_GetEntityPrice);
 	CreateNative("Cel_GiveEntity", Native_GiveEntity);
+	CreateNative("Cel_CreateCleerBox", Native_CreateCleerBox);
+	CreateNative("Cel_GetCleerBoxAmount", Native_GetCleerBoxAmount);
 	CreateNative("Cel_IsEntityForSale", Native_IsEntityForSale);
 	CreateNative("Cel_SetClientBalance", Native_SetClientBalance);
 	CreateNative("Cel_StartSale", Native_StartSale);
@@ -114,6 +117,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_tacticxp", Command_TacticsLevel, "|CelMod| Shows your tactics experience towards the next level.");
 	
 	RegAdminCmd("v_setbalance", Command_SetBalance, ADMFLAG_SLAY, "|CelMod| Sets the balance of the client you are specifing.");
+	RegAdminCmd("v_givemoney", Command_GiveMoney, ADMFLAG_SLAY, "|CelMod| Adds cleers to a player's balance: v_givemoney <player> <amount>.");
+	RegAdminCmd("v_takemoney", Command_TakeMoney, ADMFLAG_SLAY, "|CelMod| Takes cleers from a player's balance: v_takemoney <player> <amount>.");
 	RegConsoleCmd("v_balance", Command_Balance, "|CelMod| Gets the players current balance.");
 	RegConsoleCmd("v_buy", Command_Buy, "|CelMod| Purchases the current entity you are looking at or command you specified.");
 	RegConsoleCmd("v_give", Command_Give, "|CelMod| Gives the entity you are looking at to another player.");
@@ -168,7 +173,19 @@ public void OnEntityDestroyed(int iEntity)
 {
 	if (iEntity > 0 && iEntity <= MAXENTITIES)
 	{
+		//A cleers box that is deleted or cleaned up gives its money back to whoever owns it.
+		if (g_iCleerAmount[iEntity] > 0)
+		{
+			int iOwner = GetClientOfUserId(g_iCleerOwner[iEntity]);
+			
+			if (iOwner > 0 && IsClientInGame(iOwner))
+			{
+				Cel_AddToClientBalance(iOwner, g_iCleerAmount[iEntity]);
+			}
+		}
+		
 		g_iCleerAmount[iEntity] = 0;
+		g_iCleerOwner[iEntity] = 0;
 		g_iEntityPrice[iEntity] = 0;
 	}
 }
@@ -180,6 +197,78 @@ public void CMEconomy_OnConVarChanged(ConVar cvConVar, const char[] sOldValue, c
 		g_cvCleerModel.GetString(g_sCleerModel, sizeof(g_sCleerModel));
 		PrintToServer("|CelMod| Cleer model updated to %s.", sNewValue);
 	}
+}
+
+public Action Command_GiveMoney(int iClient, int iArgs)
+{
+	return ChangeMoney(iClient, iArgs, true);
+}
+
+public Action Command_TakeMoney(int iClient, int iArgs)
+{
+	return ChangeMoney(iClient, iArgs, false);
+}
+
+//Admins add to or take from one or more players' balances (@all, @me, names...). Balances never go below 0.
+Action ChangeMoney(int iClient, int iArgs, bool bGive)
+{
+	char sAmount[32], sTarget[MAX_NAME_LENGTH], sTargetName[MAX_TARGET_LENGTH];
+	int iTargets[MAXPLAYERS + 1];
+	bool bTnIsMl;
+	
+	if (iArgs < 2)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]%s{default} <player> <amount>", bGive ? "givemoney" : "takemoney");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	GetCmdArg(2, sAmount, sizeof(sAmount));
+	
+	int iAmount = StringToInt(sAmount);
+	
+	if (iAmount < 1)
+	{
+		Cel_ReplyToCommand(iClient, "The amount must be a whole number above 0.");
+		return Plugin_Handled;
+	}
+	
+	int iCount = ProcessTargetString(sTarget, iClient, iTargets, sizeof(iTargets), COMMAND_FILTER_NO_BOTS, sTargetName, sizeof(sTargetName), bTnIsMl);
+	
+	if (iCount <= 0)
+	{
+		ReplyToTargetError(iClient, iCount);
+		return Plugin_Handled;
+	}
+	
+	for (int i = 0; i < iCount; i++)
+	{
+		int iTarget = iTargets[i];
+		
+		if (bGive)
+		{
+			Cel_AddToClientBalance(iTarget, iAmount);
+			
+			Cel_PrintToChat(iTarget, "An admin gave you {green}%d CL{default}. You now have {green}%d CL{default}.", iAmount, Cel_GetClientBalance(iTarget));
+		} else {
+			int iTaken = (Cel_GetClientBalance(iTarget) < iAmount) ? Cel_GetClientBalance(iTarget) : iAmount;
+			
+			Cel_SetClientBalance(iTarget, Cel_GetClientBalance(iTarget) - iTaken);
+			
+			Cel_PrintToChat(iTarget, "An admin took {green}%d CL{default} from you. You now have {green}%d CL{default}.", iTaken, Cel_GetClientBalance(iTarget));
+		}
+	}
+	
+	if (bTnIsMl)
+	{
+		Cel_ReplyToCommand(iClient, "%s {green}%d CL{default} %s %t.", bGive ? "Gave" : "Took", iAmount, bGive ? "to" : "from", sTargetName);
+	} else {
+		Cel_ReplyToCommand(iClient, "%s {green}%d CL{default} %s %s.", bGive ? "Gave" : "Took", iAmount, bGive ? "to" : "from", sTargetName);
+	}
+	
+	LogAction(iClient, -1, "\"%L\" %s %d cleers %s %s.", iClient, bGive ? "gave" : "took", iAmount, bGive ? "to" : "from", sTargetName);
+	
+	return Plugin_Handled;
 }
 
 public Action Command_SetBalance(int iClient, int iArgs)
@@ -354,10 +443,10 @@ public Action Command_Sell(int iClient, int iArgs)
 	}
 }
 
-//Drops money as a box. Whoever presses E on it first gets the cleers.
+//Drops money as an owned cleers box. The owner opens it with E, or gives it to someone with !give.
 public Action Command_Cleer(int iClient, int iArgs)
 {
-	char sAmount[32], sModel[PLATFORM_MAX_PATH];
+	char sAmount[32];
 	float fAngles[3], fDirection[3], fOrigin[3];
 	
 	if (iClient < 1 || !IsClientInGame(iClient))
@@ -387,28 +476,11 @@ public Action Command_Cleer(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	strcopy(sModel, sizeof(sModel), g_sCleerModel);
-	
-	//The cleers money box, unless the server sets another model.
-	if (sModel[0] == '\0')
+	if (!Cel_CheckPropCount(iClient))
 	{
-		Cel_GetMoneyBoxModel(sModel, sizeof(sModel));
-	}
-	
-	int iBox = CreateEntityByName("prop_physics_override");
-	
-	if (iBox == -1 || iBox > MAXENTITIES)
-	{
+		Cel_PrintToChat(iClient, "%t", "MaxPropLimit", Cel_GetPropCount(iClient));
 		return Plugin_Handled;
 	}
-	
-	PrecacheModel(sModel);
-	
-	DispatchKeyValue(iBox, "model", sModel);
-	DispatchKeyValue(iBox, "classname", "cel_cleerdrop");
-	DispatchKeyValue(iBox, "spawnflags", "256");
-	
-	DispatchSpawn(iBox);
 	
 	GetClientEyePosition(iClient, fOrigin);
 	GetClientEyeAngles(iClient, fAngles);
@@ -421,20 +493,136 @@ public Action Command_Cleer(int iClient, int iArgs)
 	fOrigin[1] += fDirection[1] * 48.0;
 	fOrigin[2] -= 16.0;
 	
+	if (CreateCleerBox(iClient, iAmount, fOrigin, true) == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	Cel_ReplyToCommand(iClient, "You dropped a box with {green}%s CL{default}. Only you can open it ({green}E{default}); look at it and type {green}[tag]give <player>{default} to hand it to someone.", FormatCleers(iAmount));
+	
+	return Plugin_Handled;
+}
+
+char[] FormatCleers(int iAmount)
+{
+	char sAmount[32];
+	
+	IntToString(iAmount, sAmount, sizeof(sAmount));
+	
+	//1234567 -> 1,234,567
+	int iLength = strlen(sAmount), iStart = (sAmount[0] == '-') ? 1 : 0;
+	
+	for (int i = iLength - 3; i > iStart; i -= 3)
+	{
+		int iEnd = strlen(sAmount);
+		
+		for (int k = iEnd; k >= i; k--)
+		{
+			sAmount[k + 1] = sAmount[k];
+		}
+		
+		sAmount[i] = ',';
+	}
+	
+	return sAmount;
+}
+
+int CreateCleerBox(int iOwner, int iAmount, const float fOrigin[3], bool bTakeMoney)
+{
+	char sModel[PLATFORM_MAX_PATH];
+	float fAngles[3];
+	
+	if (iAmount < 1 || iOwner < 1 || iOwner > MaxClients || !IsClientInGame(iOwner))
+	{
+		return -1;
+	}
+	
+	if (bTakeMoney && !Cel_CheckClientBalance(iOwner, iAmount))
+	{
+		return -1;
+	}
+	
+	strcopy(sModel, sizeof(sModel), g_sCleerModel);
+	
+	//The cleers money box, unless the server sets another model.
+	if (sModel[0] == '\0')
+	{
+		Cel_GetMoneyBoxModel(sModel, sizeof(sModel));
+	}
+	
+	int iBox = CreateEntityByName("prop_physics_override");
+	
+	if (iBox == -1)
+	{
+		return -1;
+	}
+	
+	if (iBox > MAXENTITIES)
+	{
+		AcceptEntityInput(iBox, "kill");
+		return -1;
+	}
+	
+	PrecacheModel(sModel);
+	
+	DispatchKeyValue(iBox, "model", sModel);
+	DispatchKeyValue(iBox, "classname", "cel_cleerbox");
+	DispatchKeyValue(iBox, "spawnflags", "256");
+	DispatchKeyValueInt(iBox, "skin", Cel_GetMoneyBoxSkin(iAmount));
+	
+	DispatchSpawn(iBox);
+	
+	GetClientEyeAngles(iOwner, fAngles);
+	
+	fAngles[0] = 0.0;
+	fAngles[2] = 0.0;
+	
 	TeleportEntity(iBox, fOrigin, fAngles, NULL_VECTOR);
 	
 	SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
 	SetEntProp(iBox, Prop_Send, "m_nSkin", Cel_GetMoneyBoxSkin(iAmount));
 	
-	g_iCleerAmount[iBox] = iAmount;
+	//A normal owned CelMod prop: it counts towards the owner's props and can be given, traded or deleted.
+	Cel_AddToPropCount(iOwner);
+	Cel_SetEntity(iBox, true);
+	Cel_SetOwner(iOwner, iBox);
+	Cel_SetPropName(iBox, "cleers");
 	
-	Cel_SubFromClientBalance(iClient, iAmount);
+	if (bTakeMoney)
+	{
+		Cel_SubFromClientBalance(iOwner, iAmount);
+	}
+	
+	g_iCleerAmount[iBox] = iAmount;
+	g_iCleerOwner[iBox] = GetClientUserId(iOwner);
 	
 	SDKHook(iBox, SDKHook_UsePost, Hook_CleerUse);
 	
-	Cel_ReplyToCommand(iClient, "You dropped {green}%d CL{default}. Anyone can pick it up by pressing {green}E{default} on it.", iAmount);
+	return iBox;
+}
+
+public int Native_CreateCleerBox(Handle hPlugin, int iNumParams)
+{
+	float fOrigin[3];
 	
-	return Plugin_Handled;
+	GetNativeArray(3, fOrigin, 3);
+	
+	return CreateCleerBox(GetNativeCell(1), GetNativeCell(2), fOrigin, view_as<bool>(GetNativeCell(4)));
+}
+
+public int Native_GetCleerBoxAmount(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1);
+	
+	return (iEntity > 0 && iEntity <= MAXENTITIES) ? g_iCleerAmount[iEntity] : 0;
+}
+
+public void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES && g_iCleerAmount[iEntity] > 0 && iNewOwner > 0 && iNewOwner <= MaxClients && IsClientInGame(iNewOwner))
+	{
+		g_iCleerOwner[iEntity] = GetClientUserId(iNewOwner);
+	}
 }
 
 public void Hook_CleerUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
@@ -444,15 +632,27 @@ public void Hook_CleerUse(int iEntity, int iActivator, int iCaller, UseType utTy
 		return;
 	}
 	
+	//Only the owner can open it; it can be handed to someone else with !give.
+	if (!Cel_CheckOwner(iActivator, iEntity))
+	{
+		if (Cel_IsPlayer(Cel_GetOwner(iEntity)))
+		{
+			Cel_PrintToChat(iActivator, "This cleers box belongs to {green}%N{default}. They can give it to you with {green}[tag]give{default}.", Cel_GetOwner(iEntity));
+		}
+		
+		return;
+	}
+	
 	int iAmount = g_iCleerAmount[iEntity];
 	
 	g_iCleerAmount[iEntity] = 0;
+	g_iCleerOwner[iEntity] = 0;
 	
 	Cel_AddToClientBalance(iActivator, iAmount);
 	
 	AcceptEntityInput(iEntity, "kill");
 	
-	Cel_PrintToChat(iActivator, "You picked up {green}%d CL{default}.", iAmount);
+	Cel_PrintToChat(iActivator, "You opened the box: {green}+%s CL{default}.", FormatCleers(iAmount));
 }
 
 public Action Command_Give(int iClient, int iArgs)

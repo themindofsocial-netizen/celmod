@@ -542,6 +542,13 @@ native bool Cel_GiveCollectible(int iClient, const char[] sKind, const char[] sI
 native bool Cel_IsCollectible(int iEntity);
 
 /**
+ * The emblem inside an emblem drop box.
+ *
+ * @return  False when the entity is not an emblem drop box.
+ */
+native bool Cel_GetDropBoxEmblem(int iEntity, char[] sName, int iMaxLength);
+
+/**
  * How many of an emblem, hat or weapon a client owns.
  *
  * @return  The count, or -1 if there is no such item.
@@ -1422,6 +1429,22 @@ native int Cel_GetTacticsXPNeeded(int iClient);
 native void Cel_AddTacticsXP(int iClient, int iAmount);
 
 /**
+ * Spawns a cleers box: an owned money box only its owner can open (E). It can be given away with !give.
+ *
+ * @param iOwner     Player who owns the box.
+ * @param iAmount    Cleers inside. The box's skin shows the amount's unit.
+ * @param fOrigin    Where the box appears.
+ * @param bTakeMoney Whether the cleers come out of the owner's balance.
+ * @return           The box, or -1.
+ */
+native int Cel_CreateCleerBox(int iOwner, int iAmount, const float fOrigin[3], bool bTakeMoney = false);
+
+/**
+ * Cleers inside a cleers box, or 0 when the entity is not one.
+ */
+native int Cel_GetCleerBoxAmount(int iEntity);
+
+/**
  * Subtracts one from the Cel entity count for a client.
  *
  * @param iClient  The client index.
@@ -1488,25 +1511,70 @@ stock void Cel_ActivateEffect(int iEntity)
  */
 stock void Cel_GetMoneyBoxModel(char[] sModel, int iMaxLength)
 {
-	strcopy(sModel, iMaxLength, FileExists(CEL_MONEYBOX_MODEL, true) ? CEL_MONEYBOX_MODEL : "models/props_lab/box01a.mdl");
+	strcopy(sModel, iMaxLength, Cel_IsPhysicsModelComplete(CEL_MONEYBOX_MODEL) ? CEL_MONEYBOX_MODEL : "models/props_lab/box01a.mdl");
 }
 
 /**
- * The money box skin for an amount: bigger amounts look richer. The cleers box has 7 skins.
+ * Whether a model can be used as a physics prop: the .mdl alone draws nothing and has no collision,
+ * it also needs its .vvd, .dx90.vtx and .phy files.
+ */
+stock bool Cel_IsPhysicsModelComplete(const char[] sModel)
+{
+	char sBase[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+
+	if (!FileExists(sModel, true))
+	{
+		return false;
+	}
+
+	strcopy(sBase, sizeof(sBase), sModel);
+
+	int iDot = FindCharInString(sBase, '.', true);
+
+	if (iDot != -1)
+	{
+		sBase[iDot] = '\0';
+	}
+
+	Format(sFile, sizeof(sFile), "%s.vvd", sBase);
+
+	if (!FileExists(sFile, true))
+	{
+		return false;
+	}
+
+	Format(sFile, sizeof(sFile), "%s.dx90.vtx", sBase);
+
+	if (!FileExists(sFile, true))
+	{
+		return false;
+	}
+
+	Format(sFile, sizeof(sFile), "%s.phy", sBase);
+
+	return FileExists(sFile, true);
+}
+
+/**
+ * The money box skin for an amount. The cleers box's 7 skins are labelled with the amount's unit:
+ * CL (under a thousand), K (thousands), M (millions), B (billions), T, QD and QN.
  */
 stock int Cel_GetMoneyBoxSkin(int iAmount)
 {
-	static const int iSteps[] = { 100, 500, 1000, 5000, 25000, 100000 };
-
-	for (int i = 0; i < sizeof(iSteps); i++)
+	if (iAmount >= 1000000000)
 	{
-		if (iAmount < iSteps[i])
-		{
-			return i;
-		}
+		return 3;
+	}
+	else if (iAmount >= 1000000)
+	{
+		return 2;
+	}
+	else if (iAmount >= 1000)
+	{
+		return 1;
 	}
 
-	return 6;
+	return 0;
 }
 
 public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)

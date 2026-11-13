@@ -455,7 +455,20 @@ public Action Timer_HUD(Handle hTimer)
 				
 				if (iEntity != -1)
 				{
-					if (Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM || Cel_GetEntityType(iEntity) == ENTTYPE_HAT || Cel_GetEntityType(iEntity) == ENTTYPE_CELWEP)
+					if (Cel_GetEntityType(iEntity) == ENTTYPE_CLEER && Cel_GetCleerBoxAmount(iEntity) > 0)
+					{
+						//Cleers box: who it belongs to and how much is inside.
+						if (Cel_CheckOwner(i, iEntity))
+						{
+							Format(sHUDMessage, sizeof(sHUDMessage), "Cleers box: %d CL\nPress E to open", Cel_GetCleerBoxAmount(iEntity));
+							
+							Cel_GetHudColor(i, iHUDColor);
+						} else {
+							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\nCleers box: %d CL", Cel_GetOwner(iEntity), Cel_GetCleerBoxAmount(iEntity));
+							
+							Cel_GetHudColor(Cel_GetOwner(iEntity), iHUDColor);
+						}
+					} else if (Cel_GetEntityType(iEntity) == ENTTYPE_EMBLEM || Cel_GetEntityType(iEntity) == ENTTYPE_HAT || Cel_GetEntityType(iEntity) == ENTTYPE_CELWEP)
 					{
 						Cel_GetCollectibleName(iEntity, sPropName, sizeof(sPropName));
 						
@@ -622,6 +635,11 @@ public Action Timer_HUD(Handle hTimer)
 					{
 						Format(sHUDMessage, sizeof(sHUDMessage), "%s\nPrice: %d CL%s", sHUDMessage, Cel_GetEntityPrice(iEntity), Cel_CheckOwner(i, iEntity) ? "" : " (!buy)");
 					}
+				} else if (GetClientAimTarget(i, false) > MaxClients && Cel_GetDropBoxEmblem(GetClientAimTarget(i, false), sPropName, sizeof(sPropName))) {
+					//Emblem drop boxes are nobody's until the map changes, but everyone can see what is inside.
+					Format(sHUDMessage, sizeof(sHUDMessage), "Emblem box: %s\nHold it at map change, or open it (E) in your land", sPropName);
+					
+					Cel_GetHudColor(i, iHUDColor);
 				} else if(Cel_IsClientCrosshairInLand(i)){
 					Cel_GetCrosshairHitOrigin(i, fCrosshairOrigin);
 					

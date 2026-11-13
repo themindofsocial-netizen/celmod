@@ -95,3 +95,13 @@
 		 - New Phantom emblem: hold right click to phase through walls.
 		 - Tactics level: earn experience by playing, building and fighting. The HUD shows Money, Tactics Lvl and an EXP bar. !tacticlvl, !tacticxp.
 	 - 12/02/26: !landskin <1-26> covers the floor of your land with a land skin (bought once in the shop). !landskin off removes it.
+	 - 12/03/26: Land, money, emblem and camera fixes, and every emblem has a new look.
+		 - !coop now works: players in a co-op land can't hurt each other (missing messages added too).
+		 - !gravity takes a multiplier from 0.05 to 4 (or game units, e.g. 300 = half), never negative, and applies at once.
+		 - Dropped cleers are owned cleers boxes with the right skin (CL, K, M, B). Only the owner opens one (E); !give hands it over. The HUD shows the owner and amount.
+		 - Emblem drops fall one at a time (cm_drop_delay). Looking at an emblem box shows its emblem; boxes left in your land at map change are yours, and E opens one inside your land.
+		 - Boxes fall back to stock models when their .vvd/.vtx/.phy files are missing, so they can always be picked up.
+		 - !thirdperson now follows the player and their aim smoothly (cm_thirdperson_distance, cm_thirdperson_side). Hats go back on after a player model change.
+		 - New admin commands: !givemoney and !takemoney <player> <amount>.
+		 - The Power Booth no longer blows up when used, comes back if removed, and is hidden somewhere different and harder to reach each map.
+		 - Every emblem has its own shot style and its own aura while held (cm_emblem_aura).

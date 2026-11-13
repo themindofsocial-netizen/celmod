@@ -113,6 +113,8 @@ v_s - Client - Spawns a prop by name.
 v_save - Client - Saves all server entities that are in your land.
 v_sell - Client - Sells the entity you are looking at.
 v_setbalance - Admin - Sets the balance of the client you are specifing.
+v_givemoney - Admin - Adds cleers to a player's balance: v_givemoney <player> <amount>.
+v_takemoney - Admin - Takes cleers from a player's balance: v_takemoney <player> <amount>.
 v_setowner - Admin - Sets the owner of the prop you are looking at.
 v_seturl - Client - Sets the url of the internet cel you are looking at.
 v_shop - Client - Changes the mode to shop (merchant) within the land.

@@ -148,6 +148,8 @@ public void OnClientPutInServer(int iClient)
 	
 	g_bLandColor[iClient] = false;
 	
+	SDKHook(iClient, SDKHook_OnTakeDamage, Hook_CoopDamage);
+	
 	g_iLandSkin[iClient] = Cel_GetClientSettingInt(iClient, "landskin");
 	
 	if (g_iLandSkin[iClient] < 1 || g_iLandSkin[iClient] > LANDSKIN_COUNT)
@@ -316,7 +318,32 @@ public Action Command_LandGravity(int iClient, int iArgs)
 	
 	GetCmdArg(1, sGravity, sizeof(sGravity));
 	
-	Cel_SetLandGravity(iClient, StringToFloat(sGravity));
+	float fGravity = StringToFloat(sGravity);
+	
+	//Either a multiplier (0.5 = half) or the game's own gravity units (600 is normal, 300 is half).
+	if (fGravity > 10.0)
+	{
+		fGravity /= 600.0;
+	}
+	
+	if (fGravity < 0.05 || fGravity > 4.0)
+	{
+		Cel_ReplyToCommand(iClient, "Gravity goes from {green}0.05{default} (almost none) to {green}4{default} (four times normal); {green}1{default} is normal. Game units such as {green}300{default} work too.");
+		return Plugin_Handled;
+	}
+	
+	Cel_SetLandGravity(iClient, fGravity);
+	
+	//Everyone already standing in the land feels it straight away.
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && IsPlayerAlive(i) && g_liLand[i].bInsideLand && Cel_GetCurrentLandOwner(i) == iClient)
+		{
+			SetEntityGravity(i, fGravity);
+		}
+	}
+	
+	Cel_ReplyToCommand(iClient, "Your land's gravity is now {green}%.2f{default} times normal.", fGravity);
 	
 	return Plugin_Handled;
 }
@@ -948,15 +975,29 @@ public void EntOut_LandOnTrigger(const char[] sOutput, int iCaller, int iActivat
 				Cel_PrintToChat(iActivator, "%t", "LandMode_Deathmatch");
 			}
 			
-			//Update land modes.
+			//Co-op: players can be hurt (by the world, NPCs and falls) but not by other players.
+			if(g_liLand[iOwner].bModeCoop && !g_liLand[iActivator].bInCoopMode)
+			{
+				SetEntProp(iActivator, Prop_Data, "m_takedamage", 2, 1);
+				
+				g_liLand[iActivator].bInCoopMode = true;
+				
+				Cel_PrintToChat(iActivator, "%t", "LandMode_Coop");
+			}
+			
+			//Update land modes; a mode that was switched off gives the player their own god mode back.
 			if(!g_liLand[iOwner].bModeCoop && g_liLand[iActivator].bInCoopMode)
 			{
 				g_liLand[iActivator].bInCoopMode = false;
+				
+				Cel_SetNoKill(iActivator, Cel_GetNoKill(iActivator));
 			}
 			
 			if(!g_liLand[iOwner].bModeDeathmatch && g_liLand[iActivator].bInDeathmatchMode)
 			{
 				g_liLand[iActivator].bInDeathmatchMode = false;
+				
+				Cel_SetNoKill(iActivator, Cel_GetNoKill(iActivator));
 			}
 			
 			if(!g_liLand[iOwner].bModeShop && g_liLand[iActivator].bInShopMode)
@@ -981,11 +1022,12 @@ public void EntOut_LandOnEndTouch(const char[] sOutput, int iCaller, int iActiva
 		
 		SetEntityGravity(iActivator, 1.0);
 		
-		if(g_liLand[iActivator].bInDeathmatchMode)
+		if(g_liLand[iActivator].bInDeathmatchMode || g_liLand[iActivator].bInCoopMode)
 		{
 			Cel_SetNoKill(iActivator, Cel_GetNoKill(iActivator));
 			
 			g_liLand[iActivator].bInDeathmatchMode = false;
+			g_liLand[iActivator].bInCoopMode = false;
 		}
 	}
 }
@@ -1025,6 +1067,32 @@ public Action Timer_GettingTop(Handle hTimer, any iPlayer)
 				g_liLand[iClient].fLandPosTop[x] = g_liLand[iClient].fLandPosBottom[x] - g_fMaxLandSize;
 			}
 		}
+	}
+	
+	return Plugin_Continue;
+}
+
+//In a co-op land, damage from another player does nothing.
+public Action Hook_CoopDamage(int iVictim, int &iAttacker, int &iInflictor, float &fDamage, int &iDamageType)
+{
+	if (iVictim < 1 || iVictim > MaxClients || !g_liLand[iVictim].bInCoopMode)
+	{
+		return Plugin_Continue;
+	}
+	
+	int iFrom = iAttacker;
+	
+	//Thrown props and grenades count as the player who threw them.
+	if (iFrom > MaxClients && iInflictor > 0 && iInflictor <= MaxClients)
+	{
+		iFrom = iInflictor;
+	}
+	
+	if (iFrom > 0 && iFrom <= MaxClients && iFrom != iVictim)
+	{
+		fDamage = 0.0;
+		
+		return Plugin_Handled;
 	}
 	
 	return Plugin_Continue;

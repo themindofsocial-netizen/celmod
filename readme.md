@@ -94,6 +94,8 @@ v_rotate|Rotates the prop you are looking at.|None|Client|
 v_save|Saves all server entties that are in your land.|None|Client|
 v_sell|Sells the entity you are looking at.|None|Client|
 v_setbalance|Sets the balance of the client you are specifing.|None|Admin|
+v_givemoney|Adds cleers to a player's balance (also @all, @me).|<player> <amount>|Admin|
+v_takemoney|Takes cleers from a player's balance (never below 0).|<player> <amount>|Admin|
 v_setowner|Sets the owner of the prop you are looking at.|None|Admin|
 v_seturl|Sets the url of the internet cel you are looking at|None|Client|
 v_show|Shows a hidden player's entities again.|None|Client|
