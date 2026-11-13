@@ -101,7 +101,7 @@
 		 - Dropped cleers are owned cleers boxes with the right skin (CL, K, M, B). Only the owner opens one (E); !give hands it over. The HUD shows the owner and amount.
 		 - Emblem drops fall one at a time (cm_drop_delay). Looking at an emblem box shows its emblem; boxes left in your land at map change are yours, and E opens one inside your land.
 		 - Boxes fall back to stock models when their .vvd/.vtx/.phy files are missing, so they can always be picked up.
-		 - !thirdperson now follows the player and their aim smoothly (cm_thirdperson_distance, cm_thirdperson_side). Hats go back on after a player model change.
+		 - !thirdperson keeps following the player's aim (cm_thirdperson_aimfix). Hats go back on after a player model change.
 		 - New admin commands: !givemoney and !takemoney <player> <amount>.
 		 - The Power Booth works once per map, then overloads and explodes (harmlessly) and is gone until the next map. It is hidden somewhere different and harder to reach each map.
 		 - Every emblem has its own shot style and its own aura while held (cm_emblem_aura).

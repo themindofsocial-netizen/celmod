@@ -197,7 +197,6 @@ bool g_bPortal[MAXPLAYERS + 1][2];
 bool g_bSpeedManaged[MAXPLAYERS + 1];
 bool g_bThirdPerson[MAXPLAYERS + 1];
 int g_iCameraRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
-float g_fCameraDistance[MAXPLAYERS + 1];
 
 char g_sInvPath[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
 char g_sItemDB[PLATFORM_MAX_PATH];
@@ -206,9 +205,8 @@ char g_sRewardDB[PLATFORM_MAX_PATH];
 
 ConVar g_cvDropCount;
 ConVar g_cvDropDelay;
-ConVar g_cvThirdPersonDistance;
+ConVar g_cvThirdPersonAimFix;
 ConVar g_cvBoothAlpha;
-ConVar g_cvThirdPersonSide;
 ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
@@ -327,8 +325,7 @@ public void OnPluginStart()
 		ResetClient(i);
 	}
 
-	g_cvThirdPersonDistance = CreateConVar("cm_thirdperson_distance", "110", "How far behind the player the !thirdperson camera sits.", _, true, 30.0, true, 300.0);
-	g_cvThirdPersonSide = CreateConVar("cm_thirdperson_side", "0", "How far to the right of the player the !thirdperson camera sits (over the shoulder).", _, true, -64.0, true, 64.0);
+	g_cvThirdPersonAimFix = CreateConVar("cm_thirdperson_aimfix", "1", "1 = keep the !thirdperson view following the player's aim. Set 0 if the view acts strangely.", _, true, 0.0, true, 1.0);
 	g_cvBoothAlpha = CreateConVar("cm_powerbooth_alpha", "90", "How see-through the Power Booth is (0 invisible, 255 solid). Lower is harder to spot.", _, true, 0.0, true, 255.0);
 	g_cvAura = CreateConVar("cm_emblem_aura", "1", "1 = an emblem held out shows its own aura around the player.", _, true, 0.0, true, 1.0);
 	g_cvDropDelay = CreateConVar("cm_drop_delay", "3.0", "Seconds between one emblem box and the next in a drop.", _, true, 0.0, true, 60.0);
@@ -862,15 +859,12 @@ void SetThirdPerson(int iClient, bool bEnable)
 
 	if (bEnable)
 	{
-		// The death camera observer mode is what makes the game draw the player's own model (and so their hat and
-		// held emblem). Left alone, its view turns towards the "killer" (the player themself) and stops following
-		// the aim, so the view itself comes from a camera that follows the player's eyes every tick.
+		// The death camera observer mode: the game itself draws the view behind the player, smoothly, and draws the
+		// player's own model (and so their hat and held emblem).
 		SetEntPropEnt(iClient, Prop_Send, "m_hObserverTarget", 0);
 		SetEntProp(iClient, Prop_Send, "m_iObserverMode", 1);
 		SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", 0);
-		SetEntProp(iClient, Prop_Send, "m_iFOV", 90);
-
-		CreateThirdPersonCamera(iClient);
+		SetEntProp(iClient, Prop_Send, "m_iFOV", 110);
 	} else {
 		RemoveThirdPersonCamera(iClient);
 
@@ -879,41 +873,6 @@ void SetThirdPerson(int iClient, bool bEnable)
 		SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", 1);
 		SetEntProp(iClient, Prop_Send, "m_iFOV", 0);
 	}
-}
-
-void CreateThirdPersonCamera(int iClient)
-{
-	float fOrigin[3], fAngles[3];
-
-	RemoveThirdPersonCamera(iClient);
-
-	int iCamera = CreateEntityByName("prop_dynamic_override");
-
-	if (iCamera == -1)
-	{
-		return;
-	}
-
-	DispatchKeyValue(iCamera, "model", "models/error.mdl");
-	DispatchKeyValue(iCamera, "solid", "0");
-	DispatchKeyValue(iCamera, "rendermode", "10");
-	DispatchKeyValue(iCamera, "classname", "cel_tpcamera");
-
-	DispatchSpawn(iCamera);
-
-	SetEntityRenderMode(iCamera, RENDER_NONE);
-
-	GetClientEyePosition(iClient, fOrigin);
-	GetClientEyeAngles(iClient, fAngles);
-
-	TeleportEntity(iCamera, fOrigin, fAngles, NULL_VECTOR);
-
-	g_iCameraRef[iClient] = EntIndexToEntRef(iCamera);
-	g_fCameraDistance[iClient] = 16.0;
-
-	SDKHook(iCamera, SDKHook_SetTransmit, Hook_CameraTransmit);
-
-	SetClientViewEntity(iClient, iCamera);
 }
 
 void RemoveThirdPersonCamera(int iClient)
@@ -933,72 +892,23 @@ void RemoveThirdPersonCamera(int iClient)
 	}
 }
 
-// Only the player the camera belongs to needs it.
-public Action Hook_CameraTransmit(int iEntity, int iClient)
-{
-	if (iClient > 0 && iClient <= MaxClients && EntRefToEntIndex(g_iCameraRef[iClient]) == iEntity)
-	{
-		return Plugin_Continue;
-	}
-
-	return Plugin_Handled;
-}
-
-// Every tick each camera goes behind its player's eyes, looking where they look, pulled in where a wall is in the way.
+// The death camera turns the view towards the "killer" a while after the death time, and for a living player that is
+// the player themself, so the view stops following the aim. Keeping the death time at "just now" every frame keeps
+// the camera on the player's own aim. (cm_thirdperson_aimfix 0 turns this off.)
 void UpdateThirdPersonCameras()
 {
-	float fEye[3], fAngles[3], fForward[3], fRight[3], fUp[3], fWanted[3], fEnd[3];
-	static const float fMins[3] = { -6.0, -6.0, -6.0 }, fMaxs[3] = { 6.0, 6.0, 6.0 };
+	if (!g_cvThirdPersonAimFix.BoolValue)
+	{
+		return;
+	}
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (g_iCameraRef[i] == INVALID_ENT_REFERENCE)
+		if (g_bThirdPerson[i] && IsClientInGame(i) && IsPlayerAlive(i) && HasEntProp(i, Prop_Send, "m_flDeathTime"))
 		{
-			continue;
+			SetEntPropFloat(i, Prop_Send, "m_flDeathTime", GetGameTime());
 		}
-
-		int iCamera = EntRefToEntIndex(g_iCameraRef[i]);
-
-		if (iCamera == INVALID_ENT_REFERENCE || !IsClientInGame(i) || !IsPlayerAlive(i))
-		{
-			RemoveThirdPersonCamera(i);
-			continue;
-		}
-
-		GetClientEyePosition(i, fEye);
-		GetClientEyeAngles(i, fAngles);
-
-		GetAngleVectors(fAngles, fForward, fRight, fUp);
-
-		// Eases out to the full distance after being switched on or pulled in by a wall.
-		g_fCameraDistance[i] += (g_cvThirdPersonDistance.FloatValue - g_fCameraDistance[i]) * 0.2;
-
-		for (int k = 0; k < 3; k++)
-		{
-			fWanted[k] = fEye[k] - fForward[k] * g_fCameraDistance[i] + fRight[k] * g_cvThirdPersonSide.FloatValue + fUp[k] * 6.0;
-		}
-
-		Handle hTrace = TR_TraceHullFilterEx(fEye, fWanted, fMins, fMaxs, MASK_SOLID, Filter_NotPlayers, i);
-
-		TR_GetEndPosition(fEnd, hTrace);
-
-		if (TR_DidHit(hTrace))
-		{
-			g_fCameraDistance[i] = GetVectorDistance(fEye, fEnd);
-		}
-
-		CloseHandle(hTrace);
-
-		TeleportEntity(iCamera, fEnd, fAngles, NULL_VECTOR);
-
-		// No smoothing on the player's screen: it shows where the camera is right now, not a tenth of a second ago.
-		SetEntProp(iCamera, Prop_Send, "m_fEffects", GetEntProp(iCamera, Prop_Send, "m_fEffects") | 8);
 	}
-}
-
-public bool Filter_NotPlayers(int iEntity, int iContentsMask, any aData)
-{
-	return (iEntity > MaxClients);
 }
 
 public Action Command_Inventory(int iClient, int iArgs)
