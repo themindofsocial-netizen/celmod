@@ -109,7 +109,8 @@ int g_iSkullRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
 bool g_bTeam[MAXPLAYERS + 1][MAXPLAYERS + 1];
 char g_sTeamIds[MAXPLAYERS + 1][1024];
 int g_iSkullMode[MAXPLAYERS + 1];
-ConVar g_cvSkullScale;
+ConVar g_cvSkullSize;
+int g_iSkullPixels[3];
 ConVar g_cvSkullHeight;
 
 public void OnPluginStart()
@@ -135,7 +136,8 @@ public void OnPluginStart()
 	
 	AutoExecConfig(true, "celmod.land");
 	
-	g_cvSkullScale = CreateConVar("cm_land_skull_scale", "0.25", "Size of the co-op and deathmatch skulls shown over players' heads in a land.", _, true, 0.01, true, 4.0);
+	g_cvSkullSize = CreateConVar("cm_land_skull_size", "16", "How big (in units) the co-op and deathmatch skulls over players' heads are. A player is about 72 units tall.", _, true, 2.0, true, 128.0);
+	g_cvSkullSize.AddChangeHook(CMLand_OnSkullSizeChanged);
 	g_cvSkullHeight = CreateConVar("cm_land_skull_height", "90", "How high above a player's feet the land skull floats.", _, true, 60.0, true, 200.0);
 	
 	CreateTimer(0.25, Timer_Skulls, _, TIMER_REPEAT);
@@ -452,8 +454,8 @@ public void OnMapStart()
 	g_iLaser = PrecacheModel("materials/sprites/laser.vmt");
 	g_iPhys = PrecacheModel("materials/sprites/physbeam.vmt");
 	
-	PrecacheSkull(SKULL_COOP);
-	PrecacheSkull(SKULL_DM);
+	g_iSkullPixels[1] = PrecacheSkull(SKULL_COOP);
+	g_iSkullPixels[2] = PrecacheSkull(SKULL_DM);
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
@@ -463,9 +465,12 @@ public void OnMapStart()
 }
 
 //Sent to players along with its texture, when the server has the files.
-void PrecacheSkull(const char[] sMaterial)
+//Precaches the skull, sends its files to players, and returns the texture's width in pixels (a sprite is drawn
+//one unit per pixel at scale 1, so this is what the scale is worked out from).
+int PrecacheSkull(const char[] sMaterial)
 {
 	char sFile[PLATFORM_MAX_PATH];
+	int iWidth = 0;
 	
 	PrecacheModel(sMaterial, true);
 	
@@ -481,6 +486,42 @@ void PrecacheSkull(const char[] sMaterial)
 	if (FileExists(sFile, false))
 	{
 		AddFileToDownloadsTable(sFile);
+	}
+	
+	//The VTF header holds the width as a 16-bit number 16 bytes in.
+	File fTexture = OpenFile(sFile, "rb", true);
+	
+	if (fTexture != null)
+	{
+		int iValue;
+		
+		if (fTexture.Seek(16, SEEK_SET) && fTexture.ReadInt16(iValue))
+		{
+			iWidth = iValue & 0xFFFF;
+		}
+		
+		delete fTexture;
+	}
+	
+	return (iWidth > 0) ? iWidth : 128;
+}
+
+float SkullScale(int iMode)
+{
+	return g_cvSkullSize.FloatValue / float(g_iSkullPixels[iMode] > 0 ? g_iSkullPixels[iMode] : 128);
+}
+
+//A new size applies to every skull already showing, straight away.
+public void CMLand_OnSkullSizeChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		int iSkull = EntRefToEntIndex(g_iSkullRef[i]);
+		
+		if (g_iSkullRef[i] != INVALID_ENT_REFERENCE && iSkull != INVALID_ENT_REFERENCE && g_iSkullMode[i] > 0)
+		{
+			SetEntPropFloat(iSkull, Prop_Send, "m_flSpriteScale", SkullScale(g_iSkullMode[i]));
+		}
 	}
 }
 
@@ -540,7 +581,7 @@ void CreateSkull(int iClient, int iMode)
 	DispatchKeyValue(iSkull, "rendercolor", "255 255 255");
 	DispatchKeyValue(iSkull, "spawnflags", "1");
 	DispatchKeyValue(iSkull, "classname", "cel_landskull");
-	DispatchKeyValueFloat(iSkull, "scale", g_cvSkullScale.FloatValue);
+	DispatchKeyValueFloat(iSkull, "scale", SkullScale(iMode));
 	
 	DispatchSpawn(iSkull);
 	
