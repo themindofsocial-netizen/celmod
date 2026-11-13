@@ -19,7 +19,8 @@ StringMap g_smLoadIds[MAXPLAYERS + 1];
 bool g_bHide[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bHideHooked[MAXENTITIES + 1];
 bool g_bLandBan[MAXPLAYERS + 1][MAXPLAYERS + 1];
-bool g_bBlockLands[MAXPLAYERS + 1];
+bool g_bBlockLand[MAXPLAYERS + 1][MAXPLAYERS + 1];
+char g_sBlockIds[MAXPLAYERS + 1][1024];
 bool g_bOutsideKnown[MAXPLAYERS + 1];
 float g_fLastOutside[MAXPLAYERS + 1][3];
 float g_fNextBlockNotice[MAXPLAYERS + 1];
@@ -83,7 +84,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_palette", Command_Palette, "|CelMod| Colors the prop you are looking at with your own red, green and blue values.");
 	RegConsoleCmd("v_teleport", Command_Teleport, "|CelMod| Spawns a teleport pad. Use it twice: the first pad sends players to the second.");
 	RegConsoleCmd("v_hide", Command_Hide, "|CelMod| Hides another player's entities from your view.");
-	RegConsoleCmd("v_block", Command_Block, "|CelMod| Stops you from entering other players' lands (toggle, or on/off).");
+	RegConsoleCmd("v_block", Command_Block, "|CelMod| Stops you from entering a player's land (use again to allow it). With no name, lists who you have blocked.");
+	RegConsoleCmd("v_unblock", Command_Unblock, "|CelMod| Lets you enter a player's land again.");
 	CreateTimer(0.1, Timer_BlockLands, _, TIMER_REPEAT);
 	RegConsoleCmd("v_landban", Command_LandBan, "|CelMod| Bans a player from your land.");
 	RegConsoleCmd("v_landunban", Command_LandUnban, "|CelMod| Lets a banned player back into your land.");
@@ -113,8 +115,14 @@ public void OnClientPutInServer(int iClient)
 	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
 	g_fNextBanNotice[iClient] = 0.0;
 	g_fNextTeleport[iClient] = 0.0;
-	g_bBlockLands[iClient] = false;
 	g_bOutsideKnown[iClient] = false;
+	g_sBlockIds[iClient][0] = '\0';
+	
+	for (int i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_bBlockLand[iClient][i] = false;
+		g_bBlockLand[i][iClient] = false;
+	}
 	g_fNextBlockNotice[iClient] = 0.0;
 	
 	g_alUndo[iClient].Clear();
@@ -260,66 +268,180 @@ public Action Hook_HideTransmit(int iEntity, int iClient)
 }
 
 //Banned and recently kicked players are sent back to a spawn point when they step into the land.
-//!block: the player keeps themselves out of every other player's land (their own land is fine).
+//!block <player>: keeps yourself out of that player's land. Remembered (by Steam ID) between visits.
 public void OnClientPostAdminCheck(int iClient)
 {
-	g_bBlockLands[iClient] = (Cel_GetClientSettingInt(iClient, "blocklands") == 1);
+	char sId[32];
+	
+	Cel_GetClientSettingString(iClient, "blockedlands", g_sBlockIds[iClient], sizeof(g_sBlockIds[]));
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i == iClient || !IsClientInGame(i) || IsFakeClient(i))
+		{
+			continue;
+		}
+		
+		if (GetClientAuthId(i, AuthId_SteamID64, sId, sizeof(sId)) && IdListHas(g_sBlockIds[iClient], sId))
+		{
+			g_bBlockLand[iClient][i] = true;
+		}
+		
+		if (GetClientAuthId(iClient, AuthId_SteamID64, sId, sizeof(sId)) && IdListHas(g_sBlockIds[i], sId))
+		{
+			g_bBlockLand[i][iClient] = true;
+		}
+	}
+}
+
+bool IdListHas(const char[] sList, const char[] sId)
+{
+	char sFind[40], sWrapped[1100];
+	
+	Format(sFind, sizeof(sFind), ",%s,", sId);
+	Format(sWrapped, sizeof(sWrapped), ",%s,", sList);
+	
+	return (StrContains(sWrapped, sFind) != -1);
+}
+
+//Saves the Steam IDs: blocked players who are here now, plus saved ones who are not.
+void SaveBlocks(int iClient)
+{
+	char sOld[1024], sParts[32][32], sId[32], sOther[32];
+	
+	Cel_GetClientSettingString(iClient, "blockedlands", sOld, sizeof(sOld));
+	
+	g_sBlockIds[iClient][0] = '\0';
+	
+	int iParts = ExplodeString(sOld, ",", sParts, sizeof(sParts), sizeof(sParts[]));
+	
+	for (int k = 0; k < iParts; k++)
+	{
+		if (sParts[k][0] == '\0')
+		{
+			continue;
+		}
+		
+		bool bHere = false;
+		
+		for (int i = 1; i <= MaxClients && !bHere; i++)
+		{
+			bHere = (IsClientInGame(i) && !IsFakeClient(i) && GetClientAuthId(i, AuthId_SteamID64, sOther, sizeof(sOther)) && StrEqual(sOther, sParts[k]));
+		}
+		
+		if (!bHere)
+		{
+			Format(g_sBlockIds[iClient], sizeof(g_sBlockIds[]), "%s%s%s", g_sBlockIds[iClient], g_sBlockIds[iClient][0] == '\0' ? "" : ",", sParts[k]);
+		}
+	}
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_bBlockLand[iClient][i] && IsClientInGame(i) && GetClientAuthId(i, AuthId_SteamID64, sId, sizeof(sId)))
+		{
+			Format(g_sBlockIds[iClient], sizeof(g_sBlockIds[]), "%s%s%s", g_sBlockIds[iClient], g_sBlockIds[iClient][0] == '\0' ? "" : ",", sId);
+		}
+	}
+	
+	Cel_SetClientSettingString(iClient, "blockedlands", g_sBlockIds[iClient]);
 }
 
 public Action Command_Block(int iClient, int iArgs)
 {
-	char sArg[8];
+	return SetBlock(iClient, iArgs, true);
+}
+
+public Action Command_Unblock(int iClient, int iArgs)
+{
+	return SetBlock(iClient, iArgs, false);
+}
+
+Action SetBlock(int iClient, int iArgs, bool bBlockCommand)
+{
+	char sTarget[MAX_NAME_LENGTH], sList[512];
 	
 	if (iClient < 1 || !IsClientInGame(iClient))
 	{
 		return Plugin_Handled;
 	}
 	
-	bool bBlock = !g_bBlockLands[iClient];
-	
-	if (iArgs > 0)
+	//No name: who is blocked.
+	if (iArgs < 1)
 	{
-		GetCmdArg(1, sArg, sizeof(sArg));
+		sList[0] = '\0';
 		
-		bBlock = (StrEqual(sArg, "on", false) || StrEqual(sArg, "1"));
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (g_bBlockLand[iClient][i] && IsClientInGame(i))
+			{
+				Format(sList, sizeof(sList), "%s%s{green}%N{default}", sList, sList[0] == '\0' ? "" : ", ", i);
+			}
+		}
+		
+		if (sList[0] == '\0')
+		{
+			Cel_ReplyToCommand(iClient, "Usage: {green}[tag]block{default} <player> keeps you out of their land. You have not blocked anyone who is here.");
+		} else {
+			Cel_ReplyToCommand(iClient, "You are keeping yourself out of the lands of: %s.", sList);
+		}
+		
+		return Plugin_Handled;
 	}
 	
-	g_bBlockLands[iClient] = bBlock;
+	GetCmdArg(1, sTarget, sizeof(sTarget));
 	
-	Cel_SetClientSettingInt(iClient, "blocklands", bBlock ? 1 : 0);
+	int iTarget = FindTarget(iClient, sTarget, true, false);
 	
-	Cel_ReplyToCommand(iClient, bBlock ? "Block {green}on{default}: you can no longer enter other players' lands." : "Block {green}off{default}: you can enter other players' lands again.");
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
 	
-	//Turned on while standing in someone's land: put outside it straight away.
+	if (iTarget == iClient)
+	{
+		Cel_ReplyToCommand(iClient, "You can't block yourself from your own land.");
+		return Plugin_Handled;
+	}
+	
+	//!block on someone already blocked lets you back in, like a toggle; !unblock always lets you back in.
+	bool bBlock = bBlockCommand ? !g_bBlockLand[iClient][iTarget] : false;
+	
+	g_bBlockLand[iClient][iTarget] = bBlock;
+	
+	SaveBlocks(iClient);
+	
 	if (bBlock)
 	{
+		Cel_ReplyToCommand(iClient, "You can no longer enter {green}%N{default}'s land. Type {green}[tag]block %N{default} again to undo it.", iTarget, iTarget);
+		
+		//Already inside it: put outside straight away.
 		float fOrigin[3];
 		
 		GetClientAbsOrigin(iClient, fOrigin);
 		
 		fOrigin[2] += 16.0;
 		
-		int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
-		
-		if (iOwner > 0 && iOwner <= MaxClients && iOwner != iClient && IsPlayerAlive(iClient))
+		if (IsPlayerAlive(iClient) && Cel_GetLandOwnerFromPosition(fOrigin) == iTarget)
 		{
 			g_bOutsideKnown[iClient] = false;
 			
 			DispatchSpawn(iClient);
 		}
+	} else {
+		Cel_ReplyToCommand(iClient, "You can enter {green}%N{default}'s land again.", iTarget);
 	}
 	
 	return Plugin_Handled;
 }
 
-//Players with !block on are stopped at the edge of other players' lands: put back where they last stood outside.
+//Players are stopped at the edge of lands they blocked themselves from: put back where they last stood outside.
 public Action Timer_BlockLands(Handle hTimer)
 {
 	float fOrigin[3], fZero[3];
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (!g_bBlockLands[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+		if (!IsClientInGame(i) || !IsPlayerAlive(i))
 		{
 			g_bOutsideKnown[i] = false;
 			continue;
@@ -334,7 +456,7 @@ public Action Timer_BlockLands(Handle hTimer)
 		
 		int iOwner = Cel_GetLandOwnerFromPosition(fCheck);
 		
-		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
+		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || !g_bBlockLand[i][iOwner] || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
 		{
 			g_fLastOutside[i] = fOrigin;
 			g_bOutsideKnown[i] = true;
@@ -352,7 +474,7 @@ public Action Timer_BlockLands(Handle hTimer)
 		{
 			g_fNextBlockNotice[i] = GetGameTime() + 3.0;
 			
-			Cel_PrintToChat(i, "You have {green}block{default} on, so you can't enter {green}%N{default}'s land. Type {green}[tag]block{default} to turn it off.", iOwner);
+			Cel_PrintToChat(i, "You blocked yourself from {green}%N{default}'s land. Type {green}[tag]block %N{default} to undo it.", iOwner, iOwner);
 		}
 	}
 	

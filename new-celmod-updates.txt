@@ -114,7 +114,7 @@
 	 - 12/06/26: The Power Booth now hangs as high as each map goes (just under the ceiling or sky), preferably tucked into a corner and out of sight of spawns, picked at random from the best few spots.
 	 - 12/07/26: Players inside a co-op land show the co-op skull above their head, and players inside a deathmatch land show the deathmatch skull. Everyone can see them, from anywhere (cm_land_skull_scale, cm_land_skull_height).
 	 - 12/08/26: Tapping the walk key (left Alt) changes your walking speed: normal, slow, very slow, super slow, fast, and round again. Fast is capped to normal inside event areas.
-		 - !block stops you from entering other players' lands: you are stopped at the edge. Type it again (or !block off) to turn it off. It is remembered between visits.
+		 - !block <player> stops you from entering that player's land: you are stopped at the edge. !block <player> again (or !unblock <player>) undoes it; !block on its own lists who you blocked. Remembered between visits.
 	 - 12/09/26: !music <song> [speed 50-200] spawns a music cel (E plays the song, E again stops it; saved with builds). !celmusic lists the songs, from the "Music" section of data/celmod/sounds.txt.
 	 - 12/10/26: Build teams: !addteam <player> lets them build in your land and edit the props in it (as the original Team Build did). !delteam <player> removes them; !delteam on its own lists your team. Teams are remembered between visits.
 		 - Teammates' props stay theirs (their prop limit; only the real owner can sell, give or trade them), but the land owner's !save includes everything the team built in the land, and !load gives it all to the land owner.
