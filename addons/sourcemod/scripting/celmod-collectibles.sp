@@ -49,6 +49,8 @@
 #define SOUND_CANISTER "weapons/mortar/mortar_shell_incomming1.wav"
 #define SOUND_DIG "physics/surfaces/sand_impact_bullet1.wav"
 #define MONEYBOX_MODEL "models/props_junk/cardboard_box004a.mdl"
+#define TRASHCAN_MODEL "models/props_junk/trashbin01a.mdl"
+#define SOUND_TRASH "physics/metal/metal_solid_impact_soft1.wav"
 #define SOUND_HEAL "items/medshot4.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
 #define SOUND_BLINK "ambient/machines/teleport1.wav"
@@ -136,6 +138,14 @@ int g_iFireballItem[MAXENTITIES + 1];
 int g_iFireballOwner[MAXENTITIES + 1];
 int g_iMoneyBox[MAXENTITIES + 1];
 bool g_bDugUp[MAXENTITIES + 1];
+int g_iDugBy[MAXENTITIES + 1];
+int g_iDigger;
+int g_iTrashCans[64];
+int g_iTrashCanCount;
+
+ConVar g_cvTrashMax;
+ConVar g_cvTrashMin;
+ConVar g_cvTrashSpawn;
 float g_fNextCough[MAXPLAYERS + 1];
 float g_fNextDig[MAXPLAYERS + 1];
 int g_iSmogItem[MAXPLAYERS + 1][3];
@@ -296,6 +306,9 @@ public void OnPluginStart()
 	g_cvDigChance = CreateConVar("cm_dig_chance", "0.35", "Chance a shovel hit on the ground digs something up.", _, true, 0.0, true, 1.0);
 	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.04", "Share of finds that are a Black or White emblem.", _, true, 0.0, true, 1.0);
 	g_cvDigMoneyChance = CreateConVar("cm_dig_money_chance", "0.12", "Share of finds that are a money box. The rest is junk.", _, true, 0.0, true, 1.0);
+	g_cvTrashMin = CreateConVar("cm_trash_reward_min", "10", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
+	g_cvTrashMax = CreateConVar("cm_trash_reward_max", "60", "Most cleers for putting dug up junk in a trash can.", _, true, 0.0);
+	g_cvTrashSpawn = CreateConVar("cm_trash_cans", "4", "Trash cans placed around each map for dug up junk.", _, true, 0.0, true, 16.0);
 	g_cvDigMoneyMin = CreateConVar("cm_dig_money_min", "100", "Least cleers in a dug up money box.", _, true, 0.0);
 	g_cvDigMoneyMax = CreateConVar("cm_dig_money_max", "1500", "Most cleers in a dug up money box.", _, true, 0.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
@@ -448,6 +461,10 @@ public void OnMapStart()
 	}
 
 	PrecacheModel(MONEYBOX_MODEL, true);
+	PrecacheModel(TRASHCAN_MODEL, true);
+	PrecacheSound(SOUND_TRASH, true);
+
+	CreateTimer(4.0, Timer_PlaceTrashCans, _, TIMER_FLAG_NO_MAPCHANGE);
 	PrecacheSound(SOUND_DIG, true);
 
 	// After the Guess Booth (placed at 3 seconds), so it can be kept far away from it.
@@ -1538,33 +1555,29 @@ public Action Timer_RestoreClient(Handle hTimer, any iUserId)
 	// Emblems start switched off on every join: the player presses E on one again to use it.
 	Inv_SetString(iClient, "active_emblem", "none");
 
-	int iItem;
-
-	// Custom Guns celweps the player had taken.
+	// Celweps are not carried over a rejoin: the player takes them from their weapon cels again.
 	for (int i = 0; i < g_iItemCount; i++)
 	{
 		char sKey[64];
 
-		if (g_Items[i].iKind != KIND_WEAPON || g_Items[i].sCustomGun[0] == '\0')
+		if (g_Items[i].iKind != KIND_WEAPON)
 		{
 			continue;
 		}
 
+		g_bCelWepTaken[iClient][i] = false;
+
 		Format(sKey, sizeof(sKey), "taken_%s", g_Items[i].sId);
 
-		g_bCelWepTaken[iClient][i] = (Inv_GetInt(iClient, sKey) == 1 && GetOwned(iClient, i) > 0);
+		if (Inv_GetInt(iClient, sKey) == 1)
+		{
+			Inv_SetInt(iClient, sKey, 0);
+		}
 	}
 
-	CreateTimer(1.5, Timer_GiveCelWeps, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
+	Inv_SetString(iClient, "active_weapon", "none");
 
-	Inv_GetString(iClient, "active_weapon", sId, sizeof(sId));
-
-	iItem = FindItem(KIND_WEAPON, sId);
-
-	if (iItem != -1 && GetOwned(iClient, iItem) > 0 && IsPlayerAlive(iClient))
-	{
-		SetActiveCelWep(iClient, iItem);
-	}
+	int iItem;
 
 	Inv_GetString(iClient, "active_playermodel", sId, sizeof(sId));
 
@@ -1694,8 +1707,6 @@ public Action Timer_Think(Handle hTimer)
 			if (g_iShownGunRef[i] != EntIndexToEntRef(iWeapon))
 			{
 				g_iShownGunRef[i] = EntIndexToEntRef(iWeapon);
-
-				Cel_SendHudMessage(i, 5, -1.0, 0.82, 255, 220, 0, 255, 0, 0.1, 0.4, 2.0, 0.0, g_Items[iGun].sName);
 			}
 		} else {
 			g_iShownGunRef[i] = INVALID_ENT_REFERENCE;
@@ -1824,6 +1835,11 @@ public Action Timer_Think(Handle hTimer)
 	}
 
 	ThinkPortals();
+
+	if (g_iTick % 3 == 0)
+	{
+		ThinkTrash();
+	}
 
 	if (g_iTick % 5 == 0)
 	{
@@ -5844,6 +5860,8 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 
 	g_fNextDig[iClient] = GetGameTime() + 1.5;
 
+	g_iDigger = GetClientUserId(iClient);
+
 	float fSpot[3];
 
 	fSpot = fHit;
@@ -5909,6 +5927,10 @@ void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
 
 	g_bDugUp[iProp] = true;
 	g_iMoneyBox[iProp] = iMoney;
+	g_iDugBy[iProp] = g_iDigger;
+
+	// Nothing that is dug up can be broken: junk is meant to be carried to a trash can.
+	SetEntProp(iProp, Prop_Data, "m_takedamage", 0, 1);
 
 	if (iMoney > 0)
 	{
@@ -5919,7 +5941,7 @@ void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
 
 		KillAfter(iProp, 90.0);
 	} else {
-		KillAfter(iProp, 30.0);
+		KillAfter(iProp, 180.0);
 	}
 
 	ThrowOutOfGround(iProp);
@@ -6179,6 +6201,148 @@ void CelWepShoot(int iClient, int iItem)
 			g_bFrozenTint[iHit] = true;
 
 			SetEntityRenderColor(iHit, 90, 160, 255, 255);
+		}
+	}
+}
+
+//Trash cans: dug up junk dropped into one is cleared away and pays a little.
+static const char g_sTrashModels[][] =
+{
+	"models/props_junk/trashbin01a.mdl", "models/props_junk/trashdumpster01a.mdl", "models/props_junk/trashdumpster02.mdl",
+	"models/props_lab/scrapyarddumpster.mdl", "models/props_trainstation/trashcan_indoor001a.mdl", "models/props_trainstation/trashcan_indoor001b.mdl"
+};
+
+public Action Timer_PlaceTrashCans(Handle hTimer)
+{
+	float fSpot[3];
+
+	for (int i = 0; i < g_cvTrashSpawn.IntValue; i++)
+	{
+		if (!Cel_FindRandomMapSpot(true, 20.0, 48.0, fSpot))
+		{
+			continue;
+		}
+
+		int iCan = CreateEntityByName("prop_physics_override");
+
+		if (iCan == -1)
+		{
+			continue;
+		}
+
+		DispatchKeyValue(iCan, "model", TRASHCAN_MODEL);
+		DispatchKeyValue(iCan, "classname", "cel_trashcan");
+
+		DispatchSpawn(iCan);
+
+		TeleportEntity(iCan, fSpot, NULL_VECTOR, NULL_VECTOR);
+
+		Cel_FixSpawnPosition(iCan, fSpot);
+
+		AcceptEntityInput(iCan, "DisableMotion");
+
+		SetEntProp(iCan, Prop_Data, "m_takedamage", 0, 1);
+	}
+
+	return Plugin_Stop;
+}
+
+// Every trash can in the map: the ones placed above, any the map has as props, and any a player spawned.
+void FindTrashCans()
+{
+	char sModel[PLATFORM_MAX_PATH];
+
+	g_iTrashCanCount = 0;
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES && g_iTrashCanCount < sizeof(g_iTrashCans); i++)
+	{
+		if (!IsValidEntity(i) || !HasEntProp(i, Prop_Data, "m_ModelName"))
+		{
+			continue;
+		}
+
+		GetEntPropString(i, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+
+		for (int m = 0; m < sizeof(g_sTrashModels); m++)
+		{
+			if (StrEqual(sModel, g_sTrashModels[m], false))
+			{
+				g_iTrashCans[g_iTrashCanCount++] = EntIndexToEntRef(i);
+
+				break;
+			}
+		}
+	}
+}
+
+void ThinkTrash()
+{
+	float fJunk[3], fCan[3], fMaxs[3], fMins[3];
+
+	// The list of cans is refreshed every few seconds, as players spawn and remove them.
+	if (g_iTick % 15 == 0)
+	{
+		FindTrashCans();
+	}
+
+	for (int iJunk = MaxClients + 1; iJunk <= MAXENTITIES; iJunk++)
+	{
+		if (!g_bDugUp[iJunk] || g_iMoneyBox[iJunk] > 0 || !IsValidEntity(iJunk))
+		{
+			continue;
+		}
+
+		GetEntPropVector(iJunk, Prop_Data, "m_vecAbsOrigin", fJunk);
+
+		for (int c = 0; c < g_iTrashCanCount; c++)
+		{
+			int iCan = EntRefToEntIndex(g_iTrashCans[c]);
+
+			if (iCan == INVALID_ENT_REFERENCE)
+			{
+				continue;
+			}
+
+			GetEntPropVector(iCan, Prop_Data, "m_vecAbsOrigin", fCan);
+			GetEntPropVector(iCan, Prop_Send, "m_vecMins", fMins);
+			GetEntPropVector(iCan, Prop_Send, "m_vecMaxs", fMaxs);
+
+			// Inside the can: within its sides, and below its rim (a little above, while falling in).
+			if (fJunk[0] < fCan[0] + fMins[0] || fJunk[0] > fCan[0] + fMaxs[0] || fJunk[1] < fCan[1] + fMins[1] || fJunk[1] > fCan[1] + fMaxs[1]
+				|| fJunk[2] < fCan[2] + fMins[2] || fJunk[2] > fCan[2] + fMaxs[2] + 8.0)
+			{
+				continue;
+			}
+
+			// Whoever threw it in with the gravity gun gets the money, otherwise whoever dug it up.
+			int iClient = -1;
+
+			if (HasEntProp(iJunk, Prop_Data, "m_hPhysicsAttacker"))
+			{
+				iClient = GetEntPropEnt(iJunk, Prop_Data, "m_hPhysicsAttacker");
+			}
+
+			if (!IsRealClient(iClient))
+			{
+				iClient = GetClientOfUserId(g_iDugBy[iJunk]);
+			}
+
+			g_bDugUp[iJunk] = false;
+
+			AcceptEntityInput(iJunk, "kill");
+
+			EmitSoundToAll(SOUND_TRASH, iCan);
+
+			if (IsRealClient(iClient))
+			{
+				int iReward = GetRandomInt(g_cvTrashMin.IntValue, g_cvTrashMax.IntValue);
+
+				Cel_AddToClientBalance(iClient, iReward);
+
+				Cel_PrintToChat(iClient, "Thanks for keeping the place clean! {green}+%d CL{default}", iReward);
+			}
+
+			break;
 		}
 	}
 }
