@@ -119,6 +119,7 @@ v_roll - Client - Rolls the prop you are looking at.
 v_rotate - Client - Flips, rotates and rolls the prop you are looking at.
 v_s - Client - Spawns a prop by name.
 v_save - Client - Saves all server entities that are in your land.
+v_seasons - Client - Lists the seasonal shops and when they open.
 v_sell - Client - Sells the entity you are looking at.
 v_setbalance - Admin - Sets the balance of the client you are specifing.
 v_givemoney - Admin - Adds cleers to a player's balance: v_givemoney <player> <amount>.

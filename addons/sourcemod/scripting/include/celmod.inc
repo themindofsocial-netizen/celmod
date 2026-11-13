@@ -1607,6 +1607,159 @@ stock int Cel_GetMoneyBoxSkin(int iAmount)
 	return 0;
 }
 
+/**
+ * Adds a custom model to the downloads table: its .mdl, .vvd, .vtx and .phy files, and every material it uses
+ * (read from the model's texture list) with the textures those materials name. Only files that are on the
+ * server's own disk are added, so stock models add nothing.
+ */
+stock void Cel_AddModelDownloads(const char[] sModel)
+{
+	static const char sExtensions[][] = { ".mdl", ".vvd", ".phy", ".dx80.vtx", ".dx90.vtx", ".sw.vtx", ".vtx" };
+	char sBase[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+	
+	if (!FileExists(sModel, false))
+	{
+		return;
+	}
+	
+	PrecacheModel(sModel, true);
+	
+	strcopy(sBase, sizeof(sBase), sModel);
+	
+	int iDot = FindCharInString(sBase, '.', true);
+	
+	if (iDot != -1)
+	{
+		sBase[iDot] = '\0';
+	}
+	
+	for (int i = 0; i < sizeof(sExtensions); i++)
+	{
+		Format(sFile, sizeof(sFile), "%s%s", sBase, sExtensions[i]);
+		
+		if (FileExists(sFile, false))
+		{
+			AddFileToDownloadsTable(sFile);
+		}
+	}
+	
+	//The model's texture names and the folders they are looked for in.
+	File fModel = OpenFile(sModel, "rb");
+	
+	if (fModel == null)
+	{
+		return;
+	}
+	
+	int iTextures = Cel_ReadIntAt(fModel, 204), iTextureIndex = Cel_ReadIntAt(fModel, 208);
+	int iFolders = Cel_ReadIntAt(fModel, 212), iFolderIndex = Cel_ReadIntAt(fModel, 216);
+	
+	if (iTextures < 0 || iTextures > 64 || iFolders < 0 || iFolders > 16)
+	{
+		delete fModel;
+		return;
+	}
+	
+	char sTexture[64][PLATFORM_MAX_PATH], sFolder[16][PLATFORM_MAX_PATH];
+	
+	for (int i = 0; i < iTextures; i++)
+	{
+		int iEntry = iTextureIndex + i * 64;
+		
+		Cel_ReadStringAt(fModel, iEntry + Cel_ReadIntAt(fModel, iEntry), sTexture[i], sizeof(sTexture[]));
+	}
+	
+	for (int i = 0; i < iFolders; i++)
+	{
+		Cel_ReadStringAt(fModel, Cel_ReadIntAt(fModel, iFolderIndex + i * 4), sFolder[i], sizeof(sFolder[]));
+	}
+	
+	delete fModel;
+	
+	for (int t = 0; t < iTextures; t++)
+	{
+		for (int f = 0; f < iFolders; f++)
+		{
+			Format(sFile, sizeof(sFile), "materials/%s%s.vmt", sFolder[f], sTexture[t]);
+			ReplaceString(sFile, sizeof(sFile), "\\", "/");
+			
+			if (FileExists(sFile, false))
+			{
+				AddFileToDownloadsTable(sFile);
+				Cel_AddMaterialTextures(sFile);
+				break;
+			}
+		}
+	}
+}
+
+//The .vtf textures a material names ($basetexture, $bumpmap, ...).
+stock void Cel_AddMaterialTextures(const char[] sMaterial)
+{
+	char sLine[256], sKey[64], sValue[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+	
+	File fMaterial = OpenFile(sMaterial, "r");
+	
+	if (fMaterial == null)
+	{
+		return;
+	}
+	
+	while (fMaterial.ReadLine(sLine, sizeof(sLine)))
+	{
+		TrimString(sLine);
+		
+		int iPos = BreakString(sLine, sKey, sizeof(sKey));
+		
+		if (iPos == -1 || sKey[0] != '$')
+		{
+			continue;
+		}
+		
+		BreakString(sLine[iPos], sValue, sizeof(sValue));
+		
+		if (sValue[0] == '\0' || StrContains(sValue, "_rt_") == 0)
+		{
+			continue;
+		}
+		
+		Format(sFile, sizeof(sFile), "materials/%s.vtf", sValue);
+		ReplaceString(sFile, sizeof(sFile), "\\", "/");
+		ReplaceString(sFile, sizeof(sFile), ".vtf.vtf", ".vtf");
+		
+		if (FileExists(sFile, false))
+		{
+			AddFileToDownloadsTable(sFile);
+		}
+	}
+	
+	delete fMaterial;
+}
+
+stock int Cel_ReadIntAt(File fFile, int iOffset)
+{
+	int iValue = 0;
+	
+	if (!fFile.Seek(iOffset, SEEK_SET) || !fFile.ReadInt32(iValue))
+	{
+		return -1;
+	}
+	
+	return iValue;
+}
+
+stock void Cel_ReadStringAt(File fFile, int iOffset, char[] sOut, int iMaxLength)
+{
+	sOut[0] = '\0';
+	
+	if (iOffset <= 0 || !fFile.Seek(iOffset, SEEK_SET))
+	{
+		return;
+	}
+	
+	fFile.ReadString(sOut, iMaxLength, -1);
+}
+
 public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)
 {
 	return (iEntity == 0);

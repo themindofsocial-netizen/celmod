@@ -12,6 +12,8 @@
 //     description  Optional one-liner shown in the web shop.
 //     spawn        "classname|model". Leave it out if the alias is already in spawns.txt; it then
 //                  stops being free for everyone and becomes buy-only.
+//     season       Optional: a key from "Seasons" (at the bottom). The prop is only sold while that season
+//                  is on; players who bought it can spawn it all year.
 //
 // Collectibles: emblems, hats or weapons from collectibles.txt for sale.
 //     "key" { "kind" "hat" "id" "<collectible id>" "price" "..." }  plus stock, category, description,
@@ -110,6 +112,265 @@
 			"stock"			"3"
 			"description"	"Rise and shine."
 			"spawn"			"cycler|models/gman_high.mdl"
+		}
+
+		// CelMod's own props, for sale all year.
+		"album"
+		{
+			"name"			"Album"
+			"category"		"CelMod Props"
+			"price"			"25000"
+			"description"	"A record album to hang on your wall."
+			"spawn"			"prop_physics_override|models/celmod/album.mdl"
+		}
+		"album3"
+		{
+			"name"			"Album (Volume 3)"
+			"category"		"CelMod Props"
+			"price"			"25000"
+			"spawn"			"prop_physics_override|models/celmod/album3.mdl"
+		}
+		"cake"
+		{
+			"name"			"Cake"
+			"category"		"CelMod Props"
+			"price"			"30000"
+			"description"	"The cake is not a lie."
+			"spawn"			"prop_physics_override|models/celmod/cake.mdl"
+		}
+		"coreball"
+		{
+			"name"			"Core Ball"
+			"category"		"CelMod Props"
+			"price"			"60000"
+			"spawn"			"prop_physics_override|models/celmod/coreball.mdl"
+		}
+		"coreballsmall"
+		{
+			"name"			"Small Core Ball"
+			"category"		"CelMod Props"
+			"price"			"40000"
+			"spawn"			"prop_physics_override|models/celmod/coreball_small.mdl"
+		}
+		"delaware"
+		{
+			"name"			"Delaware"
+			"category"		"CelMod Props"
+			"price"			"75000"
+			"description"	"A CelMod classic."
+			"spawn"			"prop_physics_override|models/celmod/delaware.mdl"
+		}
+		"hoopie"
+		{
+			"name"			"Hoopie"
+			"category"		"CelMod Props"
+			"price"			"30000"
+			"spawn"			"prop_physics_override|models/celmod/hoopie.mdl"
+		}
+		"piano"
+		{
+			"name"			"Piano"
+			"category"		"CelMod Props"
+			"price"			"120000"
+			"spawn"			"prop_physics_override|models/celmod/piano.mdl"
+		}
+		"pineapple"
+		{
+			"name"			"Pineapple"
+			"category"		"CelMod Props"
+			"price"			"20000"
+			"spawn"			"prop_physics_override|models/celmod/pineapple.mdl"
+		}
+		"sign"
+		{
+			"name"			"Sign"
+			"category"		"CelMod Props"
+			"price"			"15000"
+			"spawn"			"prop_physics_override|models/celmod/sign2.mdl"
+		}
+		"sign1"
+		{
+			"name"			"Wooden Sign"
+			"category"		"CelMod Props"
+			"price"			"15000"
+			"spawn"			"prop_physics_override|models/celmod/sign.mdl"
+		}
+		"sotora"
+		{
+			"name"			"Sotora"
+			"category"		"CelMod Props"
+			"price"			"50000"
+			"spawn"			"prop_physics_override|models/celmod/sotora.mdl"
+		}
+		"spprop"
+		{
+			"name"			"SP Prop"
+			"category"		"CelMod Props"
+			"price"			"40000"
+			"spawn"			"prop_physics_override|models/celmod/sp_prop.mdl"
+		}
+		"flatscreen"
+		{
+			"name"			"Flatscreen TV"
+			"category"		"CelMod Props"
+			"price"			"60000"
+			"spawn"			"prop_physics_override|models/celmod/tv_large.mdl"
+		}
+		"tvscreen"
+		{
+			"name"			"Small TV"
+			"category"		"CelMod Props"
+			"price"			"35000"
+			"spawn"			"prop_physics_override|models/celmod/tv_small.mdl"
+		}
+
+		// Seasonal shops: sold only while their season (in "Seasons" below) is on. Bought ones can be spawned all year.
+		"candycane"
+		{
+			"name"			"Candy Cane"
+			"category"		"Christmas Shop"
+			"price"			"40000"
+			"season"			"christmas"
+			"description"	"Only sold around Christmas."
+			"spawn"			"prop_physics_override|models/celmod/candycane.mdl"
+		}
+		"present"
+		{
+			"name"			"Present"
+			"category"		"Christmas Shop"
+			"price"			"50000"
+			"season"			"christmas"
+			"description"	"Only sold around Christmas."
+			"spawn"			"prop_physics_override|models/celmod/present02.mdl"
+		}
+		"santahat"
+		{
+			"name"			"Santa Hat"
+			"category"		"Christmas Shop"
+			"price"			"40000"
+			"season"			"christmas"
+			"description"	"Only sold around Christmas."
+			"spawn"			"prop_physics_override|models/celmod/santahat.mdl"
+		}
+		"xmastree"
+		{
+			"name"			"Christmas Tree"
+			"category"		"Christmas Shop"
+			"price"			"100000"
+			"season"			"christmas"
+			"description"	"Only sold around Christmas."
+			"spawn"			"prop_physics_override|models/celmod/xmastree.mdl"
+		}
+		"gift"
+		{
+			"name"			"Halloween Gift"
+			"category"		"Halloween Shop"
+			"price"			"50000"
+			"season"			"halloween"
+			"description"	"Only sold around Halloween."
+			"spawn"			"prop_physics_override|models/props_halloween/halloween_gift.mdl"
+		}
+		"jackolanternbig"
+		{
+			"name"			"Big Jack-o'-Lantern"
+			"category"		"Halloween Shop"
+			"price"			"80000"
+			"season"			"halloween"
+			"description"	"Only sold around Halloween."
+			"spawn"			"prop_physics_override|models/props_halloween/jackolantern_big.mdl"
+		}
+		"jackolantern"
+		{
+			"name"			"Jack-o'-Lantern"
+			"category"		"Halloween Shop"
+			"price"			"50000"
+			"season"			"halloween"
+			"description"	"Only sold around Halloween."
+			"spawn"			"prop_physics_override|models/props2halloween/jackolantern_01.mdl"
+		}
+		"pumpkin1"
+		{
+			"name"			"Pumpkin"
+			"category"		"Halloween Shop"
+			"price"			"30000"
+			"season"			"halloween"
+			"description"	"Only sold around Halloween."
+			"spawn"			"prop_physics_override|models/props_halloween/pumpkin_01.mdl"
+		}
+		"pumpkin2"
+		{
+			"name"			"Pumpkin (Tall)"
+			"category"		"Halloween Shop"
+			"price"			"30000"
+			"season"			"halloween"
+			"description"	"Only sold around Halloween."
+			"spawn"			"prop_physics_override|models/props_halloween/pumpkin_02.mdl"
+		}
+		"pumpkin3"
+		{
+			"name"			"Pumpkin (Small)"
+			"category"		"Halloween Shop"
+			"price"			"30000"
+			"season"			"halloween"
+			"description"	"Only sold around Halloween."
+			"spawn"			"prop_physics_override|models/props_halloween/pumpkin_03.mdl"
+		}
+		"partyhat"
+		{
+			"name"			"Party Hat"
+			"category"		"New Year Shop"
+			"price"			"30000"
+			"season"			"newyears"
+			"description"	"Only sold around New Year."
+			"spawn"			"prop_physics_override|models/celmod/partyhat.mdl"
+		}
+		"yearhat"
+		{
+			"name"			"Year Hat"
+			"category"		"New Year Shop"
+			"price"			"40000"
+			"season"			"newyears"
+			"description"	"Only sold around New Year."
+			"spawn"			"prop_physics_override|models/celmod/yearhat.mdl"
+		}
+		"sbc"
+		{
+			"name"			"Strawberry Clock"
+			"category"		"Clock Day Shop"
+			"price"			"100000"
+			"season"			"clockday"
+			"description"	"Happy Clock Day! Only sold around August 15th."
+			"spawn"			"prop_physics_override|models/celmod/sbc.mdl"
+		}
+	}
+
+	// Seasonal shops: "start" and "end" are month/day, both days included. The shop opens and closes on
+	// the first map change on or after those days (server time). A season can run over New Year.
+	"Seasons"
+	{
+		"halloween"
+		{
+			"name"	"Halloween Shop"
+			"start"	"10/24"
+			"end"	"11/01"
+		}
+		"christmas"
+		{
+			"name"	"Christmas Shop"
+			"start"	"12/18"
+			"end"	"12/26"
+		}
+		"newyears"
+		{
+			"name"	"New Year Shop"
+			"start"	"12/31"
+			"end"	"01/02"
+		}
+		"clockday"
+		{
+			"name"	"Clock Day Shop"
+			"start"	"08/14"
+			"end"	"08/16"
 		}
 	}
 

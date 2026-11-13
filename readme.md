@@ -100,6 +100,7 @@ v_renderfx|Changes the RenderFX on what prop you are looking at.|None|Client|
 v_reward|Creates a reward pickup that gives an emblem or hat once per player.|None|Admin|
 v_rotate|Rotates the prop you are looking at.|None|Client|
 v_save|Saves all server entties that are in your land.|None|Client|
+v_seasons|Lists the seasonal shops (Halloween, Christmas, New Year, Clock Day) and when they open.|None|Client|
 v_sell|Sells the entity you are looking at.|None|Client|
 v_setbalance|Sets the balance of the client you are specifing.|None|Admin|
 v_givemoney|Adds cleers to a player's balance (also @all, @me).|<player> <amount>|Admin|

@@ -1002,7 +1002,7 @@ public Action Command_Replace(int iClient, int iArgs)
 	
 	if (iShopProp == -1)
 	{
-		Cel_ReplyToCommand(iClient, "{green}%s{default} is a rare prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop.", sAlias, sAlias);
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is a shop prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop. Seasonal props are only sold in their season ({green}[tag]seasons{default}).", sAlias, sAlias);
 		return Plugin_Handled;
 	}
 	

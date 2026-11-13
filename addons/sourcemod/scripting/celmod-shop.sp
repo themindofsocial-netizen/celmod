@@ -39,6 +39,8 @@ enum struct ShopItem
 }
 
 ArrayList g_alItems;
+StringMap g_smSeasonOpen;
+char g_sOpenShops[256];
 KeyValues g_kvStock;
 
 char g_sShopDB[PLATFORM_MAX_PATH];
@@ -71,6 +73,7 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	g_alItems = new ArrayList(sizeof(ShopItem));
+	g_smSeasonOpen = new StringMap();
 
 	BuildPath(Path_SM, g_sShopDB, sizeof(g_sShopDB), "data/celmod/shop.txt");
 	BuildPath(Path_SM, g_sStockDB, sizeof(g_sStockDB), "data/celmod/shopstock.txt");
@@ -80,6 +83,7 @@ public void OnPluginStart()
 
 	RegConsoleCmd("v_catalog", Command_Catalog, "|CelMod| Lists everything in the shop: commands, rare props, player models, emblems and hats.");
 	RegConsoleCmd("v_shopitems", Command_Catalog, "|CelMod| Lists everything in the shop: commands, rare props, player models, emblems and hats.");
+	RegConsoleCmd("v_seasons", Command_Seasons, "|CelMod| Lists the seasonal shops and when they open.");
 	RegAdminCmd("cm_shop_reload", Command_Reload, ADMFLAG_ROOT, "|CelMod| Reloads the shop catalog from shop.txt and collectibles.txt.");
 }
 
@@ -124,6 +128,9 @@ void LoadCatalog()
 		return;
 	}
 
+	LoadSeasons(kvShop);
+	kvShop.Rewind();
+
 	// Commands: "key" "price|display"
 	if (kvShop.JumpToKey("Commands") && kvShop.GotoFirstSubKey(false))
 	{
@@ -153,6 +160,17 @@ void LoadCatalog()
 			kvShop.GetSectionName(sValue, sizeof(sValue));
 			StringToLowerCase(sValue);
 			FormatEx(sKey, sizeof(sKey), "prop_%s", sValue);
+
+			// Seasonal props are only for sale while their season is on.
+			char sSeason[32];
+			bool bOpen;
+
+			kvShop.GetString("season", sSeason, sizeof(sSeason), "");
+
+			if (sSeason[0] != '\0' && (!g_smSeasonOpen.GetValue(sSeason, bOpen) || !bOpen))
+			{
+				continue;
+			}
 
 			ResetItem(eItem, TYPE_PROP, sKey, "Rare Props");
 			strcopy(eItem.sTarget, sizeof(eItem.sTarget), sValue);
@@ -224,6 +242,124 @@ void LoadCatalog()
 	}
 
 	delete kvShop;
+}
+
+//Seasons: "key" { "name" "start" "MM/DD" "end" "MM/DD" }. Works out which are open today.
+void LoadSeasons(KeyValues kvShop)
+{
+	char sKey[32], sName[64], sStart[8], sEnd[8], sToday[8];
+
+	g_smSeasonOpen.Clear();
+	g_sOpenShops[0] = '\0';
+
+	FormatTime(sToday, sizeof(sToday), "%m%d", GetTime());
+
+	int iToday = StringToInt(sToday);
+
+	if (!kvShop.JumpToKey("Seasons") || !kvShop.GotoFirstSubKey())
+	{
+		return;
+	}
+
+	do
+	{
+		kvShop.GetSectionName(sKey, sizeof(sKey));
+		kvShop.GetString("name", sName, sizeof(sName), sKey);
+		kvShop.GetString("start", sStart, sizeof(sStart), "");
+		kvShop.GetString("end", sEnd, sizeof(sEnd), "");
+
+		int iStart = MonthDay(sStart), iEnd = MonthDay(sEnd);
+		bool bOpen = false;
+
+		if (iStart > 0 && iEnd > 0)
+		{
+			//A season like New Year runs over the end of the year.
+			bOpen = (iStart <= iEnd) ? (iToday >= iStart && iToday <= iEnd) : (iToday >= iStart || iToday <= iEnd);
+		}
+
+		g_smSeasonOpen.SetValue(sKey, bOpen);
+
+		if (bOpen)
+		{
+			Format(g_sOpenShops, sizeof(g_sOpenShops), "%s%s{green}%s{default}", g_sOpenShops, g_sOpenShops[0] == '\0' ? "" : " and the ", sName);
+		}
+	}
+	while (kvShop.GotoNextKey());
+}
+
+// "12/25" -> 1225, or 0 if it is not a date.
+int MonthDay(const char[] sDate)
+{
+	char sParts[2][4];
+
+	if (ExplodeString(sDate, "/", sParts, 2, sizeof(sParts[])) != 2)
+	{
+		return 0;
+	}
+
+	int iMonth = StringToInt(sParts[0]), iDay = StringToInt(sParts[1]);
+
+	if (iMonth < 1 || iMonth > 12 || iDay < 1 || iDay > 31)
+	{
+		return 0;
+	}
+
+	return iMonth * 100 + iDay;
+}
+
+//Players hear about an open seasonal shop when they join.
+public void OnClientPostAdminCheck(int iClient)
+{
+	if (g_sOpenShops[0] != '\0' && !IsFakeClient(iClient))
+	{
+		CreateTimer(20.0, Timer_SeasonNotice, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
+public Action Timer_SeasonNotice(Handle hTimer, any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+
+	if (iClient > 0 && IsClientInGame(iClient) && g_sOpenShops[0] != '\0')
+	{
+		Cel_PrintToChat(iClient, "The %s is open! See what's for sale with {green}[tag]catalog{default} or in the web shop.", g_sOpenShops);
+	}
+
+	return Plugin_Stop;
+}
+
+public Action Command_Seasons(int iClient, int iArgs)
+{
+	char sKey[32], sName[64], sStart[8], sEnd[8];
+	bool bOpen;
+
+	KeyValues kvShop = new KeyValues("Shop");
+
+	if (!kvShop.ImportFromFile(g_sShopDB) || !kvShop.JumpToKey("Seasons") || !kvShop.GotoFirstSubKey())
+	{
+		delete kvShop;
+		Cel_ReplyToCommand(iClient, "There are no seasonal shops on this server.");
+		return Plugin_Handled;
+	}
+
+	Cel_ReplyToCommand(iClient, "Seasonal shops:");
+
+	do
+	{
+		kvShop.GetSectionName(sKey, sizeof(sKey));
+		kvShop.GetString("name", sName, sizeof(sName), sKey);
+		kvShop.GetString("start", sStart, sizeof(sStart), "?");
+		kvShop.GetString("end", sEnd, sizeof(sEnd), "?");
+
+		g_smSeasonOpen.GetValue(sKey, bOpen);
+
+		Cel_ReplyToCommand(iClient, "{green}%s{default}: %s to %s%s", sName, sStart, sEnd, bOpen ? " ({green}open now{default})" : "");
+	}
+	while (kvShop.GotoNextKey());
+
+	delete kvShop;
+
+	return Plugin_Handled;
 }
 
 void ResetItem(ShopItem eItem, int iType, const char[] sKey, const char[] sCategory)

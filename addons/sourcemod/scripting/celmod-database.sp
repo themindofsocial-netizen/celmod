@@ -21,7 +21,7 @@
  * created automatically.
  */
 
-#define SCHEMA_QUERIES 12
+#define SCHEMA_QUERIES 13
 #define MIGRATION_QUERIES 6
 
 Database g_dbCelMod;
@@ -62,6 +62,17 @@ int g_iTick;
 
 StringMap g_smRecentlyLeft;
 
+//Announcements from the website's admin panel (cm_announcements), checked every cm_db_announce_poll seconds.
+#define MAX_ANNOUNCEMENTS 32
+int g_iAnnounceCount;
+int g_iAnnounceID[MAX_ANNOUNCEMENTS];
+int g_iAnnounceRepeat[MAX_ANNOUNCEMENTS];
+bool g_bAnnounceOnJoin[MAX_ANNOUNCEMENTS];
+char g_sAnnounce[MAX_ANNOUNCEMENTS][256];
+StringMap g_smAnnounceShown;
+ConVar g_cvAnnouncePoll;
+Handle g_hAnnounceTimer;
+
 char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_players (steamid64 VARCHAR(20) NOT NULL, name VARCHAR(128) NOT NULL DEFAULT '', avatar_url VARCHAR(255) NOT NULL DEFAULT '', balance BIGINT NOT NULL DEFAULT 0, playtime_seconds INT UNSIGNED NOT NULL DEFAULT 0, connections INT UNSIGNED NOT NULL DEFAULT 0, props_spawned INT UNSIGNED NOT NULL DEFAULT 0, cels_spawned INT UNSIGNED NOT NULL DEFAULT 0, effects_spawned INT UNSIGNED NOT NULL DEFAULT 0, entities_removed INT UNSIGNED NOT NULL DEFAULT 0, is_online TINYINT(1) NOT NULL DEFAULT 0, first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (steamid64), KEY idx_balance (balance), KEY idx_playtime (playtime_seconds), KEY idx_props (props_spawned)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_purchases (steamid64 VARCHAR(20) NOT NULL, item VARCHAR(64) NOT NULL, source VARCHAR(8) NOT NULL DEFAULT 'game', purchased_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (steamid64, item)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
@@ -74,7 +85,8 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_stats_daily (day DATE NOT NULL, server_id INT NOT NULL, connections INT UNSIGNED NOT NULL DEFAULT 0, peak_players INT UNSIGNED NOT NULL DEFAULT 0, props_spawned INT UNSIGNED NOT NULL DEFAULT 0, cels_spawned INT UNSIGNED NOT NULL DEFAULT 0, effects_spawned INT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (day, server_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_player_samples (server_id INT NOT NULL, recorded_at DATETIME NOT NULL, players INT NOT NULL, PRIMARY KEY (server_id, recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_emblem_suggestions (id INT UNSIGNED NOT NULL AUTO_INCREMENT, steamid64 VARCHAR(20) NOT NULL, player_name VARCHAR(128) NOT NULL DEFAULT '', emblem_id VARCHAR(64) NOT NULL, title VARCHAR(64) NOT NULL DEFAULT '', kv TEXT NOT NULL, note VARCHAR(500) NOT NULL DEFAULT '', status VARCHAR(12) NOT NULL DEFAULT 'pending', admin_note VARCHAR(255) NOT NULL DEFAULT '', reviewed_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at DATETIME NULL, PRIMARY KEY (id), KEY idx_status (status), KEY idx_player (steamid64)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_announcements (id INT UNSIGNED NOT NULL AUTO_INCREMENT, message VARCHAR(255) NOT NULL, server_id INT NULL, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, show_on_join TINYINT(1) NOT NULL DEFAULT 0, active TINYINT(1) NOT NULL DEFAULT 1, starts_at DATETIME NULL, ends_at DATETIME NULL, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
 };
 
 // Columns added after the first release. Run one by one; "duplicate column" (1060) means already done.
@@ -101,12 +113,14 @@ public void OnPluginStart()
 
 	g_alShopItems = new ArrayList(ByteCountToCells(64));
 	g_smRecentlyLeft = new StringMap();
+	g_smAnnounceShown = new StringMap();
 
 	g_cvConfig = CreateConVar("cm_db_config", "celmod", "Name of the databases.cfg entry shared with the website.");
 	g_cvServerID = CreateConVar("cm_db_server_id", "1", "Unique ID for this server in the shared database (match the website config).", _, true, 1.0);
 	g_cvAddress = CreateConVar("cm_db_address", "", "Public ip:port shown on the website. Leave empty to detect it.");
 	g_cvHeartbeat = CreateConVar("cm_db_heartbeat", "15.0", "Seconds between live status updates.", _, true, 5.0);
 	g_cvOrderPoll = CreateConVar("cm_db_order_poll", "5.0", "Seconds between checks for new web shop orders.", _, true, 2.0);
+	g_cvAnnouncePoll = CreateConVar("cm_db_announce_poll", "30.0", "Seconds between checks for announcements made on the website.", _, true, 10.0);
 	g_cvSample = CreateConVar("cm_db_sample", "300.0", "Seconds between player count samples for the activity chart.", _, true, 60.0);
 
 	AutoExecConfig(true, "celmod.database");
@@ -149,10 +163,120 @@ void RestartTimers()
 	delete g_hHeartbeatTimer;
 	delete g_hOrderTimer;
 	delete g_hSampleTimer;
+	delete g_hAnnounceTimer;
 
 	g_hHeartbeatTimer = CreateTimer(g_cvHeartbeat.FloatValue, Timer_Heartbeat, _, TIMER_REPEAT);
 	g_hOrderTimer = CreateTimer(g_cvOrderPoll.FloatValue, Timer_PollOrders, _, TIMER_REPEAT);
 	g_hSampleTimer = CreateTimer(g_cvSample.FloatValue, Timer_Sample, _, TIMER_REPEAT);
+	g_hAnnounceTimer = CreateTimer(g_cvAnnouncePoll.FloatValue, Timer_PollAnnouncements, _, TIMER_REPEAT);
+}
+
+//Announcements:
+public Action Timer_PollAnnouncements(Handle hTimer)
+{
+	char sQuery[512];
+
+	if (g_dbCelMod == null)
+	{
+		return Plugin_Continue;
+	}
+
+	FormatEx(sQuery, sizeof(sQuery), "SELECT id, message, repeat_minutes, show_on_join, UNIX_TIMESTAMP() - UNIX_TIMESTAMP(created_at) FROM cm_announcements WHERE active = 1 AND (starts_at IS NULL OR starts_at <= NOW()) AND (ends_at IS NULL OR ends_at > NOW()) AND (server_id IS NULL OR server_id = %d) ORDER BY id LIMIT %d", g_cvServerID.IntValue, MAX_ANNOUNCEMENTS);
+
+	g_dbCelMod.Query(SQL_OnAnnouncements, sQuery);
+
+	return Plugin_Continue;
+}
+
+public void SQL_OnAnnouncements(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
+{
+	char sKey[16];
+	float fLast;
+
+	if (rsResults == null)
+	{
+		LogError("|CelMod| Could not read announcements: %s", sError);
+		return;
+	}
+
+	g_iAnnounceCount = 0;
+
+	while (rsResults.FetchRow() && g_iAnnounceCount < MAX_ANNOUNCEMENTS)
+	{
+		int i = g_iAnnounceCount++;
+
+		g_iAnnounceID[i] = rsResults.FetchInt(0);
+		rsResults.FetchString(1, g_sAnnounce[i], sizeof(g_sAnnounce[]));
+		g_iAnnounceRepeat[i] = rsResults.FetchInt(2);
+		g_bAnnounceOnJoin[i] = (rsResults.FetchInt(3) == 1);
+
+		int iAge = rsResults.FetchInt(4);
+
+		Format(sKey, sizeof(sKey), "a%d", g_iAnnounceID[i]);
+
+		bool bSeen = g_smAnnounceShown.GetValue(sKey, fLast);
+
+		//New on the website (or just started): everyone sees it now. Ones this server has not seen yet but
+		//that are old (e.g. after a restart) only show again when their repeat comes round.
+		if (!bSeen)
+		{
+			if (iAge < 600 || g_iAnnounceRepeat[i] > 0)
+			{
+				Announce(i);
+			}
+
+			g_smAnnounceShown.SetValue(sKey, GetEngineTime());
+			continue;
+		}
+
+		if (g_iAnnounceRepeat[i] > 0 && GetEngineTime() - fLast >= g_iAnnounceRepeat[i] * 60.0)
+		{
+			Announce(i);
+
+			g_smAnnounceShown.SetValue(sKey, GetEngineTime());
+		}
+	}
+}
+
+void Announce(int iIndex)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i))
+		{
+			Cel_PrintToChat(i, "{green}Announcement:{default} %s", g_sAnnounce[iIndex]);
+		}
+	}
+}
+
+//Players joining see the announcements marked "show on join".
+public Action Timer_JoinAnnouncements(Handle hTimer, any iUserID)
+{
+	char sKey[16];
+	int iClient = GetClientOfUserId(iUserID);
+
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Stop;
+	}
+
+	//Once per visit, not again at every map change (a player keeps their user id across map changes).
+	IntToString(iUserID, sKey, sizeof(sKey));
+
+	if (!g_smAnnounceShown.SetValue(sKey, 0.0, false))
+	{
+		return Plugin_Stop;
+	}
+
+	for (int i = 0; i < g_iAnnounceCount; i++)
+	{
+		if (g_bAnnounceOnJoin[i])
+		{
+			Cel_PrintToChat(iClient, "{green}Announcement:{default} %s", g_sAnnounce[i]);
+		}
+	}
+
+	return Plugin_Stop;
 }
 
 //Connection:
@@ -341,6 +465,7 @@ public void OnClientPostAdminCheck(int iClient)
 
 	// Give the economy plugin a moment to load the player's balance.
 	CreateTimer(3.0, Timer_TrackClient, GetClientUserId(iClient));
+	CreateTimer(15.0, Timer_JoinAnnouncements, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_TrackClient(Handle hTimer, int iUserID)

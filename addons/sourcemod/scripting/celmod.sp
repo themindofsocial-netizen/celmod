@@ -307,6 +307,14 @@ void LoadShopProps()
 			kvShop.GetString("spawn", sSpawn, sizeof(sSpawn), "");
 			StringToLower(sAlias);
 			g_smShopProps.SetString(sAlias, sSpawn);
+			
+			//Custom models: players are sent the model and its materials, worked out from the model itself.
+			char sParts[2][PLATFORM_MAX_PATH];
+			
+			if (ExplodeString(sSpawn, "|", sParts, 2, sizeof(sParts[])) == 2 && sParts[1][0] != '\0')
+			{
+				Cel_AddModelDownloads(sParts[1]);
+			}
 		} while (kvShop.GotoNextKey());
 	}
 	
@@ -556,7 +564,7 @@ public Action Command_Spawn(int iClient, int iArgs)
 	
 	if (iShopProp == -1)
 	{
-		Cel_ReplyToCommand(iClient, "{green}%s{default} is a rare prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop.", sAlias, sAlias);
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is a shop prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop. Seasonal props are only sold in their season ({green}[tag]seasons{default}).", sAlias, sAlias);
 		return Plugin_Handled;
 	}
 	
@@ -650,7 +658,7 @@ public Action Handle_Spawn(int iClient, char[] sCommand, int iArgs)
 			return Plugin_Continue;
 		}
 		
-		Cel_ReplyToCommand(iClient, "{green}%s{default} is a rare prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop.", sPropAlias, sPropAlias);
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is a shop prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop. Seasonal props are only sold in their season ({green}[tag]seasons{default}).", sPropAlias, sPropAlias);
 		return Plugin_Handled;
 	}
 	
@@ -1273,7 +1281,7 @@ public int Native_SetPropLimit(Handle hPlugin, int iNumParams)
 
 public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 {
-	char sAlias[64], sModel[64], sEntityType[64];
+	char sAlias[64], sModel[PLATFORM_MAX_PATH], sEntityType[64];
 	float fAngles[3], fOrigin[3];
 	int iClient = GetNativeCell(1), iColor[4];
 	
@@ -1289,6 +1297,16 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	iColor[2] = GetNativeCell(9);
 	iColor[3] = GetNativeCell(10);
 	
+	//A physics prop needs the model's .phy file. Without one it would not spawn at all, so it becomes a solid
+	//prop that does not move instead.
+	bool bNoPhysics = false;
+	
+	if (StrContains(sEntityType, "prop_physics", false) == 0 && !Cel_IsPhysicsModelComplete(sModel) && FileExists(sModel, true))
+	{
+		bNoPhysics = true;
+		strcopy(sEntityType, sizeof(sEntityType), "prop_dynamic_override");
+	}
+	
 	int iProp = CreateEntityByName(sEntityType);
 	
 	if (iProp == -1)
@@ -1297,9 +1315,14 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	PrecacheModel(sModel);
 	
 	DispatchKeyValue(iProp, "model", sModel);
-	DispatchKeyValue(iProp, "classname", "cel_physics");
+	DispatchKeyValue(iProp, "classname", bNoPhysics ? "cel_dynamic" : "cel_physics");
 	
-	Entity_SetSolidType(iProp, SOLID_VPHYSICS);
+	if (bNoPhysics)
+	{
+		DispatchKeyValue(iProp, "solid", "2");
+	}
+	
+	Entity_SetSolidType(iProp, bNoPhysics ? SOLID_BBOX : SOLID_VPHYSICS);
 	Entity_SetCollisionGroup(iProp, COLLISION_GROUP_NONE);
 	
 	if (StrEqual(sEntityType, "cycler"))

@@ -2,6 +2,8 @@
 
 #include <celmod>
 
+#define BUTTON_MODEL "models/dav0r/buttons/switch.mdl"
+
 #pragma newdecls required
 
 bool g_bLate;
@@ -871,6 +873,12 @@ public int Native_SpawnAmmoCrate(Handle hPlugin, int iNumParams)
 	return iBase;
 }
 
+//The switch model (and its materials) are sent to players when the server has them.
+public void OnMapStart()
+{
+	Cel_AddModelDownloads(BUTTON_MODEL);
+}
+
 public int Native_SpawnButton(Handle hPlugin, int iNumParams)
 {
 	float fAngles[3], fOrigin[3];
@@ -885,9 +893,14 @@ public int Native_SpawnButton(Handle hPlugin, int iNumParams)
 	
 	iBase = CreateEntityByName("prop_physics_override");
 	
-	PrecacheModel("models/props_combine/combinebutton.mdl");
+	//The CelMod switch when the server has it, otherwise the Combine button.
+	char sButtonModel[PLATFORM_MAX_PATH];
 	
-	DispatchKeyValue(iBase, "model", "models/props_combine/combinebutton.mdl");
+	strcopy(sButtonModel, sizeof(sButtonModel), Cel_IsPhysicsModelComplete(BUTTON_MODEL) ? BUTTON_MODEL : "models/props_combine/combinebutton.mdl");
+	
+	PrecacheModel(sButtonModel);
+	
+	DispatchKeyValue(iBase, "model", sButtonModel);
 	DispatchKeyValue(iBase, "classname", "bit_trigger_button");
 	DispatchKeyValue(iBase, "spawnflags", "256");
 	
