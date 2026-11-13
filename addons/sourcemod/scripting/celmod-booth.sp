@@ -166,28 +166,39 @@ public Action Timer_PlaceBooth(Handle hTimer)
 	return Plugin_Stop;
 }
 
-//Shows a model at its normal size with its middle on the given point (some props have their origin at a corner
-//or far below). Models are never scaled: scaled models do not show in this game.
-//With bCheckSize, models the server does not have (no size) or that are too big or too small to display are
-//refused and -1 is returned.
+//Shows a model frozen in the air with its middle on the given point (some props have their origin at a corner
+//or far below). It is made the same way as an ordinary CelMod prop, which is known to show, then frozen and
+//made non-solid. Models are never scaled: scaled models do not show in this game.
+//With bCheckSize, a model the server does not have, or one too big to float in the booth, is refused (-1).
 int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false)
 {
 	float fMaxs[3], fMins[3], fOrigin[3];
 	
-	int iEntity = CreateEntityByName("prop_dynamic_override");
+	PrecacheModel(sModel);
+	
+	int iEntity = CreateEntityByName("prop_physics_override");
 	
 	if (iEntity == -1)
 	{
 		return -1;
 	}
 	
-	PrecacheModel(sModel);
-	
 	DispatchKeyValue(iEntity, "model", sModel);
-	DispatchKeyValue(iEntity, "solid", "0");
 	DispatchKeyValue(iEntity, "classname", "cel_boothdisplay");
 	
-	DispatchSpawn(iEntity);
+	//A physics prop whose model is missing or has no physics removes itself while spawning.
+	if (!DispatchSpawn(iEntity) || !IsValidEntity(iEntity))
+	{
+		return -1;
+	}
+	
+	AcceptEntityInput(iEntity, "DisableMotion");
+	
+	SetEntProp(iEntity, Prop_Data, "m_takedamage", 0, 1);
+	
+	//Players and shots pass straight through it.
+	SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", 1);
+	SetEntProp(iEntity, Prop_Send, "m_nSolidType", 0);
 	
 	GetEntPropVector(iEntity, Prop_Send, "m_vecMins", fMins);
 	GetEntPropVector(iEntity, Prop_Send, "m_vecMaxs", fMaxs);
@@ -204,7 +215,8 @@ int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false)
 			}
 		}
 		
-		if (fLongest < 8.0 || fLongest > 72.0)
+		//Only too big is refused: a size of 0 means the size is unknown, and the prop is shown anyway.
+		if (fLongest > 96.0)
 		{
 			AcceptEntityInput(iEntity, "kill");
 			
@@ -312,7 +324,7 @@ void PlaceBooth(float fOrigin[3])
 		{
 			PrintToServer("|CelMod| Guess Booth props: %s, %s, %s.", g_sPropAlias[0], g_sPropAlias[1], g_sPropAlias[2]);
 		} else {
-			LogError("|CelMod| The Guess Booth could not find three props of a usable size that the server has.");
+			LogError("|CelMod| The Guess Booth could only show %d of its three props. Check that the models in '%s' are on the server.", iShown, g_sSpawnDB);
 		}
 		
 		g_iAnswer = GetRandomInt(0, 2);
