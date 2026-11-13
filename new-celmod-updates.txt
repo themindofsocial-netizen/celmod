@@ -105,3 +105,5 @@
 		 - New admin commands: !givemoney and !takemoney <player> <amount>.
 		 - The Power Booth works once per map, then overloads and explodes (harmlessly) and is gone until the next map. It is hidden somewhere different and harder to reach each map.
 		 - Every emblem has its own shot style and its own aura while held (cm_emblem_aura).
+	 - 12/04/26: The Guess Booth has a fixed spot per map: stand there and type !setguessbooth (saved in data/celmod/guessbooth.txt). !delguessbooth removes it. Maps without a spot have no Guess Booth.
+		 - The Power Booth hides much better: only spots no spawn point or Guess Booth can see, far from spawns and boxed in, chosen at random, never near last time's spot. It is also fainter (cm_powerbooth_alpha).

@@ -1,0 +1,12 @@
+// |CelMod| Guess Booth spots, one per map.
+//
+// An admin stands where the booth should be and types !setguessbooth; it is saved here and the booth appears
+// there on that map every time. !delguessbooth removes a map's spot. Maps not listed have no Guess Booth.
+//
+// "dm_lockdown"
+// {
+//     "origin"    "-1024.0 512.0 -64.0"
+// }
+"GuessBooth"
+{
+}

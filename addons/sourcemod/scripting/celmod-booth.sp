@@ -7,7 +7,8 @@
 /*
  * |CelMod| Guess Booth
  *
- * A small yellow square that appears near a spawn point on every map, with three props floating in it.
+ * A small yellow square at a spot an admin chose for the map (!setguessbooth, saved in data/celmod/guessbooth.txt),
+ * with three props floating in it. Maps without a saved spot have no Guess Booth.
  * One of the three is the winner. A player standing in the booth gets one guess per map; a right guess pays out.
  *
  * Admins can hang an item above the booth and auction it: players bid with !bid, the highest bidder gets it.
@@ -31,6 +32,7 @@ char g_sAuctionKind[32];
 char g_sAuctionName[64];
 char g_sPropAlias[3][64];
 char g_sSpawnDB[PLATFORM_MAX_PATH];
+char g_sBoothDB[PLATFORM_MAX_PATH];
 
 ConVar g_cvReward;
 
@@ -66,6 +68,7 @@ public void OnPluginStart()
 	LoadTranslations("common.phrases");
 	
 	BuildPath(Path_SM, g_sSpawnDB, sizeof(g_sSpawnDB), "data/celmod/spawns.txt");
+	BuildPath(Path_SM, g_sBoothDB, sizeof(g_sBoothDB), "data/celmod/guessbooth.txt");
 	
 	g_smGuessed = new StringMap();
 	
@@ -74,7 +77,9 @@ public void OnPluginStart()
 	AutoExecConfig(true, "celmod.booth");
 	
 	RegAdminCmd("v_auction", Command_Auction, ADMFLAG_SLAY, "|CelMod| Auctions an emblem, hat or weapon above the Guess Booth, or cancels the auction.");
-	RegAdminCmd("v_guessbooth", Command_GuessBooth, ADMFLAG_SLAY, "|CelMod| Moves the Guess Booth to where you are standing and picks new props.");
+	RegAdminCmd("v_guessbooth", Command_GuessBooth, ADMFLAG_SLAY, "|CelMod| Moves the Guess Booth to where you are standing for this map only, with new props.");
+	RegAdminCmd("v_setguessbooth", Command_SetGuessBooth, ADMFLAG_SLAY, "|CelMod| Saves where you are standing as this map's Guess Booth spot and puts the booth there.");
+	RegAdminCmd("v_delguessbooth", Command_DelGuessBooth, ADMFLAG_SLAY, "|CelMod| Removes this map's saved Guess Booth spot and the booth with it.");
 	RegConsoleCmd("v_bid", Command_Bid, "|CelMod| Bids on the item being auctioned above the Guess Booth.");
 	RegConsoleCmd("v_guess", Command_Guess, "|CelMod| Guesses the winning prop at the Guess Booth. One guess per map.");
 	
@@ -112,69 +117,134 @@ public void OnMapStart()
 	
 	g_smGuessed.Clear();
 	
-	//Placed before the Power Booth, which then keeps far away from it.
+	//Placed before the Power Booth, which then keeps out of its sight.
 	CreateTimer(3.0, Timer_PlaceBooth, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
+//The Guess Booth goes where an admin saved it for this map. Without a saved spot the map has no Guess Booth.
 public Action Timer_PlaceBooth(Handle hTimer)
 {
 	float fSpot[3];
 	
-	//Somewhere random in the map, on clear flat ground big enough for the square, well away from the Power Booth.
-	float fPowerBooth[3];
-	float fAvoid = 0.0;
-	
-	int iPowerBooth = FindEntityByClassname(-1, "cel_powerbooth");
-	
-	if (iPowerBooth != -1)
-	{
-		GetEntPropVector(iPowerBooth, Prop_Data, "m_vecAbsOrigin", fPowerBooth);
-		
-		fAvoid = 2000.0;
-	}
-	
-	if (Cel_FindRandomMapSpot(true, BOOTH_HALF, 96.0, fSpot, fPowerBooth, fAvoid) || (fAvoid > 0.0 && Cel_FindRandomMapSpot(true, BOOTH_HALF, 96.0, fSpot, fPowerBooth, 800.0)))
+	if (GetSavedSpot(fSpot))
 	{
 		PlaceBooth(fSpot);
-		
-		return Plugin_Stop;
-	}
-	
-	LogError("|CelMod| No flat open spot was found for the Guess Booth on this map. It is placed near a spawn point instead.");
-	
-	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
-	float fOrigin[3];
-	int iPoints[128], iCount = 0, iEntity;
-	
-	for (int i = 0; i < sizeof(sSpawns); i++)
-	{
-		iEntity = -1;
-		
-		while ((iEntity = FindEntityByClassname(iEntity, sSpawns[i])) != -1 && iCount < sizeof(iPoints))
-		{
-			iPoints[iCount++] = iEntity;
-		}
-	}
-	
-	if (iCount > 0)
-	{
-		GetEntPropVector(iPoints[GetRandomInt(0, iCount - 1)], Prop_Data, "m_vecAbsOrigin", fOrigin);
-		
-		float fYaw = GetRandomFloat(0.0, 6.28);
-		
-		fOrigin[0] += Cosine(fYaw) * 180.0;
-		fOrigin[1] += Sine(fYaw) * 180.0;
-		
-		PlaceBooth(fOrigin);
+	} else {
+		LogMessage("|CelMod| This map has no Guess Booth spot. An admin can stand where it should go and type !setguessbooth.");
 	}
 	
 	return Plugin_Stop;
 }
 
-//Shows a model frozen in the air with its middle on the given point (some props have their origin at a corner
-//or far below). It is made the same way as an ordinary CelMod prop, which is known to show, then frozen and
-//made non-solid. Models are never scaled: scaled models do not show in this game.
-//With bCheckSize, a model the server does not have, or one too big to float in the booth, is refused (-1).
+bool GetSavedSpot(float fSpot[3])
+{
+	char sMap[PLATFORM_MAX_PATH];
+	bool bFound = false;
+	
+	GetCurrentMap(sMap, sizeof(sMap));
+	
+	KeyValues kvSpots = new KeyValues("GuessBooth");
+	
+	if (kvSpots.ImportFromFile(g_sBoothDB) && kvSpots.JumpToKey(sMap, false))
+	{
+		kvSpots.GetVector("origin", fSpot);
+		
+		bFound = true;
+	}
+	
+	delete kvSpots;
+	
+	return bFound;
+}
+
+void SetSavedSpot(const float fSpot[3], bool bRemove)
+{
+	char sMap[PLATFORM_MAX_PATH];
+	
+	GetCurrentMap(sMap, sizeof(sMap));
+	
+	KeyValues kvSpots = new KeyValues("GuessBooth");
+	
+	kvSpots.ImportFromFile(g_sBoothDB);
+	
+	if (bRemove)
+	{
+		if (kvSpots.JumpToKey(sMap, false))
+		{
+			kvSpots.DeleteThis();
+		}
+	} else {
+		kvSpots.JumpToKey(sMap, true);
+		kvSpots.SetVector("origin", fSpot);
+	}
+	
+	kvSpots.Rewind();
+	kvSpots.ExportToFile(g_sBoothDB);
+	
+	delete kvSpots;
+}
+
+void RemoveBooth()
+{
+	for (int i = 0; i < 3; i++)
+	{
+		RemoveRef(g_iPropRef[i]);
+	}
+	
+	RemoveRef(g_iKleinerRef);
+	RemoveRef(g_iConeRef);
+	
+	g_bBooth = false;
+}
+
+public Action Command_SetGuessBooth(int iClient, int iArgs)
+{
+	char sMap[PLATFORM_MAX_PATH];
+	float fOrigin[3];
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	GetClientAbsOrigin(iClient, fOrigin);
+	GetCurrentMap(sMap, sizeof(sMap));
+	
+	SetSavedSpot(fOrigin, false);
+	
+	MoveBooth(fOrigin);
+	
+	Cel_ReplyToCommand(iClient, "The Guess Booth on {green}%s{default} will now always be here.", sMap);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_DelGuessBooth(int iClient, int iArgs)
+{
+	char sMap[PLATFORM_MAX_PATH];
+	float fNone[3];
+	
+	GetCurrentMap(sMap, sizeof(sMap));
+	
+	SetSavedSpot(fNone, true);
+	
+	if (g_bAuction)
+	{
+		//The auction hangs above the booth, so it is called off and the top bid returned.
+		RefundTopBidder();
+		
+		g_bAuction = false;
+		
+		RemoveRef(g_iAuctionRef);
+	}
+	
+	RemoveBooth();
+	
+	Cel_ReplyToCommand(iClient, "{green}%s{default} no longer has a Guess Booth.", sMap);
+	
+	return Plugin_Handled;
+}
+
 int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false)
 {
 	float fMaxs[3], fMins[3], fOrigin[3];
@@ -565,6 +635,17 @@ public Action Command_GuessBooth(int iClient, int iArgs)
 	
 	GetClientAbsOrigin(iClient, fOrigin);
 	
+	MoveBooth(fOrigin);
+	
+	Cel_ReplyToCommand(iClient, "The Guess Booth has been moved here for this map, with new props. Use {green}[tag]setguessbooth{default} to keep it here every time.");
+	
+	return Plugin_Handled;
+}
+
+void MoveBooth(float fOrigin[3])
+{
+	float fDisplay[3];
+	
 	PlaceBooth(fOrigin);
 	
 	//An auction display moves with the booth.
@@ -572,15 +653,12 @@ public Action Command_GuessBooth(int iClient, int iArgs)
 	
 	if (g_bAuction && iDisplay != INVALID_ENT_REFERENCE && iDisplay <= MAXENTITIES)
 	{
-		fOrigin[2] += 130.0;
+		fDisplay = fOrigin;
+		fDisplay[2] += 130.0;
 		
 		//The spin keeps it turning around its new spot.
-		g_fSpinCenter[iDisplay] = fOrigin;
+		g_fSpinCenter[iDisplay] = fDisplay;
 	}
-	
-	Cel_ReplyToCommand(iClient, "The Guess Booth has been moved here for this map, with new props.");
-	
-	return Plugin_Handled;
 }
 
 public Action Command_Guess(int iClient, int iArgs)

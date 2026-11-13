@@ -207,6 +207,7 @@ char g_sRewardDB[PLATFORM_MAX_PATH];
 ConVar g_cvDropCount;
 ConVar g_cvDropDelay;
 ConVar g_cvThirdPersonDistance;
+ConVar g_cvBoothAlpha;
 ConVar g_cvThirdPersonSide;
 ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
@@ -322,6 +323,7 @@ public void OnPluginStart()
 
 	g_cvThirdPersonDistance = CreateConVar("cm_thirdperson_distance", "110", "How far behind the player the !thirdperson camera sits.", _, true, 30.0, true, 300.0);
 	g_cvThirdPersonSide = CreateConVar("cm_thirdperson_side", "0", "How far to the right of the player the !thirdperson camera sits (over the shoulder).", _, true, -64.0, true, 64.0);
+	g_cvBoothAlpha = CreateConVar("cm_powerbooth_alpha", "90", "How see-through the Power Booth is (0 invisible, 255 solid). Lower is harder to spot.", _, true, 0.0, true, 255.0);
 	g_cvAura = CreateConVar("cm_emblem_aura", "1", "1 = an emblem held out shows its own aura around the player.", _, true, 0.0, true, 1.0);
 	g_cvDropDelay = CreateConVar("cm_drop_delay", "3.0", "Seconds between one emblem box and the next in a drop.", _, true, 0.0, true, 60.0);
 	g_cvDropCount = CreateConVar("cm_drop_count", "5", "Number of crates in one emblem drop.", _, true, 1.0, true, 30.0);
@@ -5785,17 +5787,17 @@ bool CanSeeSpot(float fFrom[3], float fSpot[3])
 	return bSeen;
 }
 
-// A hard-to-reach spot that changes from map to map and game to game. Many random spots are tried, on ledges,
-// rooftops and floors as well as up in the air; each is scored for being high up, tucked away, out of sight of the
-// spawn points and the Guess Booth, and far from them. One of the best few is picked at random, never the place
-// it was last time on this map.
+// A well hidden spot, picked at random. Many spots are tried all over the map: on ledges, rooftops, in corners
+// and up in the air. Only the most hidden ones are kept (no spawn point or Guess Booth can see them, far from
+// every spawn, boxed in by walls), and the booth goes to any one of those at random, never near where it was last
+// time on this map. If a map has no such spots, the rules are eased a step at a time.
 bool FindHiddenBoothSpot(float fBest[3])
 {
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
 	char sMap[PLATFORM_MAX_PATH];
-	float fCandidate[3], fGuess[3], fSpawn[64][3], fSpots[96][3], fScores[96];
+	float fCandidate[3], fGuess[3], fSpawn[64][3], fSpots[160][3], fNearest[160], fOpen[160];
+	int iSeen[160];
 	bool bGuess = false;
-	float fLowest = 999999.0;
 	int iSpawns = 0, iSpots = 0, iEntity;
 
 	GetCurrentMap(sMap, sizeof(sMap));
@@ -5810,13 +5812,9 @@ bool FindHiddenBoothSpot(float fBest[3])
 		{
 			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fSpawn[iSpawns]);
 
-			if (fSpawn[iSpawns][2] < fLowest) fLowest = fSpawn[iSpawns][2];
-
 			iSpawns++;
 		}
 	}
-
-	if (iSpawns == 0) fLowest = 0.0;
 
 	iEntity = FindEntityByClassname(-1, "cel_booth_kleiner");
 
@@ -5827,23 +5825,26 @@ bool FindHiddenBoothSpot(float fBest[3])
 		bGuess = true;
 	}
 
-	for (int iTry = 0; iTry < sizeof(fSpots); iTry++)
+	for (int iTry = 0; iTry < 400 && iSpots < sizeof(fSpots); iTry++)
 	{
-		// Mostly standing on something (a ledge, a roof, a hidden floor), sometimes floating.
-		bool bFloor = (GetRandomInt(0, 9) < 7);
-
-		if (!Cel_FindRandomMapSpot(bFloor, 28.0, 72.0, fCandidate, NULL_VECTOR, 0.0, 700.0))
+		// More often on something (a ledge, a roof, a hidden floor), sometimes floating high up.
+		if (!Cel_FindRandomMapSpot(GetRandomInt(0, 9) < 6, 28.0, 72.0, fCandidate, NULL_VECTOR, 0.0, 900.0))
 		{
 			continue;
 		}
 
-		if (bSameMap && GetVectorDistance(fCandidate, g_fLastBoothSpot) < 1200.0)
+		if (bSameMap && GetVectorDistance(fCandidate, g_fLastBoothSpot) < 1500.0)
 		{
 			continue;
 		}
 
-		float fNearest = 999999.0;
-		int iSeenBy = 0;
+		float fMiddle[3];
+
+		fMiddle = fCandidate;
+		fMiddle[2] += 36.0;
+
+		fNearest[iSpots] = 999999.0;
+		iSeen[iSpots] = 0;
 
 		for (int i = 0; i < iSpawns; i++)
 		{
@@ -5853,34 +5854,23 @@ bool FindHiddenBoothSpot(float fBest[3])
 
 			float fDistance = GetVectorDistance(fCandidate, fPoint);
 
-			if (fDistance < fNearest) fNearest = fDistance;
+			if (fDistance < fNearest[iSpots]) fNearest[iSpots] = fDistance;
 
-			if (CanSeeSpot(fPoint, fCandidate)) iSeenBy++;
+			if (CanSeeSpot(fPoint, fMiddle)) iSeen[iSpots]++;
 		}
 
 		if (bGuess)
 		{
 			float fDistance = GetVectorDistance(fCandidate, fGuess);
 
-			if (fDistance < fNearest) fNearest = fDistance;
+			if (fDistance < fNearest[iSpots]) fNearest[iSpots] = fDistance;
 
-			if (CanSeeSpot(fGuess, fCandidate)) iSeenBy += 3;
+			if (CanSeeSpot(fGuess, fMiddle)) iSeen[iSpots]++;
 		}
 
-		float fMiddle[3];
-
-		fMiddle = fCandidate;
-		fMiddle[2] += 36.0;
-
-		// Height above the lowest spawn point: climbing up to it is what makes it hard to reach.
-		float fHeight = fCandidate[2] - fLowest;
-
-		if (fHeight < 0.0) fHeight = 0.0;
-
-		float fScore = (fNearest + fHeight * 3.0) / (SpotOpenness(fMiddle) + 150.0) / (1.0 + iSeenBy * 2.0);
-
+		fOpen[iSpots] = SpotOpenness(fMiddle);
 		fSpots[iSpots] = fCandidate;
-		fScores[iSpots] = fScore;
+
 		iSpots++;
 	}
 
@@ -5889,31 +5879,30 @@ bool FindHiddenBoothSpot(float fBest[3])
 		return false;
 	}
 
-	// The best few, then one of them at random.
-	int iTop[5], iTopCount = 0;
+	// The strictest rules that still leave somewhere to put it: unseen, far away and boxed in first.
+	static const float fMinDistance[] = { 1400.0, 1000.0, 700.0, 400.0, 0.0 };
+	static const float fMaxOpen[] = { 450.0, 600.0, 800.0, 2000.0, 2001.0 };
+	static const int iMaxSeen[] = { 0, 0, 0, 1, 999 };
 
-	for (int k = 0; k < sizeof(iTop); k++)
+	int iPick[160], iPicks = 0;
+
+	for (int iRule = 0; iRule < sizeof(fMinDistance) && iPicks == 0; iRule++)
 	{
-		int iBest = -1;
-
 		for (int i = 0; i < iSpots; i++)
 		{
-			if (fScores[i] >= 0.0 && (iBest == -1 || fScores[i] > fScores[iBest]))
+			if (iSeen[i] <= iMaxSeen[iRule] && fNearest[i] >= fMinDistance[iRule] && fOpen[i] <= fMaxOpen[iRule])
 			{
-				iBest = i;
+				iPick[iPicks++] = i;
 			}
 		}
-
-		if (iBest == -1)
-		{
-			break;
-		}
-
-		iTop[iTopCount++] = iBest;
-		fScores[iBest] = -1.0;
 	}
 
-	fBest = fSpots[iTop[GetRandomInt(0, iTopCount - 1)]];
+	if (iPicks == 0)
+	{
+		return false;
+	}
+
+	fBest = fSpots[iPick[GetRandomInt(0, iPicks - 1)]];
 
 	strcopy(g_sLastBoothMap, sizeof(g_sLastBoothMap), sMap);
 	g_fLastBoothSpot = fBest;
@@ -5987,7 +5976,7 @@ void SpawnPowerBooth(float fOrigin[3])
 
 	// Green, see-through and flickering, as it was on the original server.
 	SetEntityRenderMode(iBooth, RENDER_TRANSCOLOR);
-	SetEntityRenderColor(iBooth, 0, 255, 0, 150);
+	SetEntityRenderColor(iBooth, 0, 255, 0, g_cvBoothAlpha.IntValue);
 	SetEntityRenderFx(iBooth, RENDERFX_DISTORT);
 
 	g_iBoothRef = EntIndexToEntRef(iBooth);

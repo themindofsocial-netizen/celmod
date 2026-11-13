@@ -59,7 +59,9 @@ v_givemodel - Admin - Gives a player model to a player.
 v_god - Client - Enables/disables breakability on the prop you are looking at.
 v_gravity - Client - Changes the gravity within the land.
 v_guess - Client - Guesses the winning prop at the Guess Booth. One guess per map.
-v_guessbooth - Admin - Moves the Guess Booth to where you are standing and picks new props.
+v_guessbooth - Admin - Moves the Guess Booth to where you are standing for this map only, with new props.
+v_setguessbooth - Admin - Saves where you are standing as this map's Guess Booth spot.
+v_delguessbooth - Admin - Removes this map's Guess Booth spot and the booth.
 v_hat - Client - Spawns a hat you own, or takes off your hat.
 v_hats - Client - Lists the emblems and hats you own.
 v_hide - Client - Hides another player's entities from your view.
