@@ -88,3 +88,4 @@
 	 - 11/28/26: Celweps are no longer carried over when you rejoin, and no name pops up when you pull one out.
 		 - Dug up junk cannot be broken: carry it to a trash can for a few cleers. Trash cans are placed around every map.
 	 - 11/29/26: One celwep at a time: press E on a celwep to take it, on another to swap, on the same one to put it back. The Custom Guns weapon wheel is gone.
+	 - 11/30/26: Trash cans are no longer placed around the map; any trash can or dumpster prop takes junk.

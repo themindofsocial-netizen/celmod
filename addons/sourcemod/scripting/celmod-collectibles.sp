@@ -49,7 +49,6 @@
 #define SOUND_CANISTER "weapons/mortar/mortar_shell_incomming1.wav"
 #define SOUND_DIG "physics/surfaces/sand_impact_bullet1.wav"
 #define MONEYBOX_MODEL "models/props_junk/cardboard_box004a.mdl"
-#define TRASHCAN_MODEL "models/props_junk/trashbin01a.mdl"
 #define SOUND_TRASH "physics/metal/metal_solid_impact_soft1.wav"
 #define SOUND_HEAL "items/medshot4.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
@@ -145,7 +144,6 @@ int g_iTrashCanCount;
 
 ConVar g_cvTrashMax;
 ConVar g_cvTrashMin;
-ConVar g_cvTrashSpawn;
 float g_fNextCough[MAXPLAYERS + 1];
 float g_fNextDig[MAXPLAYERS + 1];
 int g_iSmogItem[MAXPLAYERS + 1][3];
@@ -308,7 +306,6 @@ public void OnPluginStart()
 	g_cvDigMoneyChance = CreateConVar("cm_dig_money_chance", "0.12", "Share of finds that are a money box. The rest is junk.", _, true, 0.0, true, 1.0);
 	g_cvTrashMin = CreateConVar("cm_trash_reward_min", "10", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
 	g_cvTrashMax = CreateConVar("cm_trash_reward_max", "60", "Most cleers for putting dug up junk in a trash can.", _, true, 0.0);
-	g_cvTrashSpawn = CreateConVar("cm_trash_cans", "4", "Trash cans placed around each map for dug up junk.", _, true, 0.0, true, 16.0);
 	g_cvDigMoneyMin = CreateConVar("cm_dig_money_min", "100", "Least cleers in a dug up money box.", _, true, 0.0);
 	g_cvDigMoneyMax = CreateConVar("cm_dig_money_max", "1500", "Most cleers in a dug up money box.", _, true, 0.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
@@ -480,10 +477,7 @@ public void OnMapStart()
 	}
 
 	PrecacheModel(MONEYBOX_MODEL, true);
-	PrecacheModel(TRASHCAN_MODEL, true);
 	PrecacheSound(SOUND_TRASH, true);
-
-	CreateTimer(4.0, Timer_PlaceTrashCans, _, TIMER_FLAG_NO_MAPCHANGE);
 	PrecacheSound(SOUND_DIG, true);
 
 	// After the Guess Booth (placed at 3 seconds), so it can be kept far away from it.
@@ -6273,42 +6267,7 @@ static const char g_sTrashModels[][] =
 	"models/props_lab/scrapyarddumpster.mdl", "models/props_trainstation/trashcan_indoor001a.mdl", "models/props_trainstation/trashcan_indoor001b.mdl"
 };
 
-public Action Timer_PlaceTrashCans(Handle hTimer)
-{
-	float fSpot[3];
-
-	for (int i = 0; i < g_cvTrashSpawn.IntValue; i++)
-	{
-		if (!Cel_FindRandomMapSpot(true, 20.0, 48.0, fSpot))
-		{
-			continue;
-		}
-
-		int iCan = CreateEntityByName("prop_physics_override");
-
-		if (iCan == -1)
-		{
-			continue;
-		}
-
-		DispatchKeyValue(iCan, "model", TRASHCAN_MODEL);
-		DispatchKeyValue(iCan, "classname", "cel_trashcan");
-
-		DispatchSpawn(iCan);
-
-		TeleportEntity(iCan, fSpot, NULL_VECTOR, NULL_VECTOR);
-
-		Cel_FixSpawnPosition(iCan, fSpot);
-
-		AcceptEntityInput(iCan, "DisableMotion");
-
-		SetEntProp(iCan, Prop_Data, "m_takedamage", 0, 1);
-	}
-
-	return Plugin_Stop;
-}
-
-// Every trash can in the map: the ones placed above, any the map has as props, and any a player spawned.
+// Every trash can in the map: any the map has as props, and any a player spawned.
 void FindTrashCans()
 {
 	char sModel[PLATFORM_MAX_PATH];
