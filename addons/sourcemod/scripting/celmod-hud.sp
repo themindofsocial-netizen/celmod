@@ -460,11 +460,11 @@ public Action Timer_HUD(Handle hTimer)
 						//Cleers box: who it belongs to and how much is inside.
 						if (Cel_CheckOwner(i, iEntity))
 						{
-							Format(sHUDMessage, sizeof(sHUDMessage), "Cleers box: %d CL\nPress E to open", Cel_GetCleerBoxAmount(iEntity));
+							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\nContains: %d CL", Cel_GetOwner(iEntity), Cel_GetCleerBoxAmount(iEntity));
 							
 							Cel_GetHudColor(i, iHUDColor);
 						} else {
-							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\nCleers box: %d CL", Cel_GetOwner(iEntity), Cel_GetCleerBoxAmount(iEntity));
+							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\nContains: %d CL", Cel_GetOwner(iEntity), Cel_GetCleerBoxAmount(iEntity));
 							
 							Cel_GetHudColor(Cel_GetOwner(iEntity), iHUDColor);
 						}
