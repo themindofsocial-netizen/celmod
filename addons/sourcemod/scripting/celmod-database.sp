@@ -21,7 +21,8 @@
  * created automatically.
  */
 
-#define SCHEMA_QUERIES 11
+#define SCHEMA_QUERIES 12
+#define MIGRATION_QUERIES 6
 
 Database g_dbCelMod;
 
@@ -31,7 +32,6 @@ bool g_bTracked[MAXPLAYERS + 1];
 bool g_bPurchasesSynced[MAXPLAYERS + 1];
 
 char g_sMap[64];
-char g_sShopDB[PLATFORM_MAX_PATH];
 char g_sSteamID[MAXPLAYERS + 1][32];
 
 ArrayList g_alShopItems;
@@ -65,7 +65,7 @@ StringMap g_smRecentlyLeft;
 char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_players (steamid64 VARCHAR(20) NOT NULL, name VARCHAR(128) NOT NULL DEFAULT '', avatar_url VARCHAR(255) NOT NULL DEFAULT '', balance BIGINT NOT NULL DEFAULT 0, playtime_seconds INT UNSIGNED NOT NULL DEFAULT 0, connections INT UNSIGNED NOT NULL DEFAULT 0, props_spawned INT UNSIGNED NOT NULL DEFAULT 0, cels_spawned INT UNSIGNED NOT NULL DEFAULT 0, effects_spawned INT UNSIGNED NOT NULL DEFAULT 0, entities_removed INT UNSIGNED NOT NULL DEFAULT 0, is_online TINYINT(1) NOT NULL DEFAULT 0, first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (steamid64), KEY idx_balance (balance), KEY idx_playtime (playtime_seconds), KEY idx_props (props_spawned)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_purchases (steamid64 VARCHAR(20) NOT NULL, item VARCHAR(64) NOT NULL, source VARCHAR(8) NOT NULL DEFAULT 'game', purchased_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (steamid64, item)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-	"CREATE TABLE IF NOT EXISTS cm_shop_items (item VARCHAR(64) NOT NULL, display_name VARCHAR(64) NOT NULL DEFAULT '', price INT UNSIGNED NOT NULL DEFAULT 0, category VARCHAR(32) NOT NULL DEFAULT 'Commands', enabled TINYINT(1) NOT NULL DEFAULT 1, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (item)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_shop_items (item VARCHAR(64) NOT NULL, display_name VARCHAR(64) NOT NULL DEFAULT '', price INT UNSIGNED NOT NULL DEFAULT 0, category VARCHAR(32) NOT NULL DEFAULT 'Commands', kind VARCHAR(16) NOT NULL DEFAULT 'command', target VARCHAR(64) NOT NULL DEFAULT '', description VARCHAR(255) NOT NULL DEFAULT '', stock_left INT NULL, repeatable TINYINT(1) NOT NULL DEFAULT 0, sort_order INT NOT NULL DEFAULT 0, enabled TINYINT(1) NOT NULL DEFAULT 1, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (item)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_web_orders (id INT UNSIGNED NOT NULL AUTO_INCREMENT, steamid64 VARCHAR(20) NOT NULL, item VARCHAR(64) NOT NULL, price INT UNSIGNED NOT NULL, status VARCHAR(12) NOT NULL DEFAULT 'pending', message VARCHAR(255) NOT NULL DEFAULT '', server_id INT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, processed_at DATETIME NULL, PRIMARY KEY (id), KEY idx_status_player (status, steamid64)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_servers (server_id INT NOT NULL, hostname VARCHAR(128) NOT NULL DEFAULT '', address VARCHAR(64) NOT NULL DEFAULT '', map VARCHAR(64) NOT NULL DEFAULT '', players INT NOT NULL DEFAULT 0, max_players INT NOT NULL DEFAULT 0, total_props INT NOT NULL DEFAULT 0, total_cels INT NOT NULL DEFAULT 0, version VARCHAR(16) NOT NULL DEFAULT '', map_started DATETIME NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (server_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_online_players (server_id INT NOT NULL, steamid64 VARCHAR(20) NOT NULL, name VARCHAR(128) NOT NULL DEFAULT '', props INT NOT NULL DEFAULT 0, cels INT NOT NULL DEFAULT 0, balance BIGINT NOT NULL DEFAULT 0, joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (server_id, steamid64)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
@@ -73,7 +73,18 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_events (id INT UNSIGNED NOT NULL AUTO_INCREMENT, server_id INT NOT NULL, steamid64 VARCHAR(20) NULL, name VARCHAR(128) NOT NULL DEFAULT '', type VARCHAR(16) NOT NULL, detail VARCHAR(255) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_created (created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_stats_daily (day DATE NOT NULL, server_id INT NOT NULL, connections INT UNSIGNED NOT NULL DEFAULT 0, peak_players INT UNSIGNED NOT NULL DEFAULT 0, props_spawned INT UNSIGNED NOT NULL DEFAULT 0, cels_spawned INT UNSIGNED NOT NULL DEFAULT 0, effects_spawned INT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (day, server_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_player_samples (server_id INT NOT NULL, recorded_at DATETIME NOT NULL, players INT NOT NULL, PRIMARY KEY (server_id, recorded_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_emblem_suggestions (id INT UNSIGNED NOT NULL AUTO_INCREMENT, steamid64 VARCHAR(20) NOT NULL, player_name VARCHAR(128) NOT NULL DEFAULT '', emblem_id VARCHAR(64) NOT NULL, title VARCHAR(64) NOT NULL DEFAULT '', kv TEXT NOT NULL, note VARCHAR(500) NOT NULL DEFAULT '', status VARCHAR(12) NOT NULL DEFAULT 'pending', admin_note VARCHAR(255) NOT NULL DEFAULT '', reviewed_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at DATETIME NULL, PRIMARY KEY (id), KEY idx_status (status), KEY idx_player (steamid64)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+};
+
+// Columns added after the first release. Run one by one; "duplicate column" (1060) means already done.
+char g_sMigrations[MIGRATION_QUERIES][] = {
+	"ALTER TABLE cm_shop_items ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'command' AFTER category",
+	"ALTER TABLE cm_shop_items ADD COLUMN target VARCHAR(64) NOT NULL DEFAULT '' AFTER kind",
+	"ALTER TABLE cm_shop_items ADD COLUMN description VARCHAR(255) NOT NULL DEFAULT '' AFTER target",
+	"ALTER TABLE cm_shop_items ADD COLUMN stock_left INT NULL AFTER description",
+	"ALTER TABLE cm_shop_items ADD COLUMN repeatable TINYINT(1) NOT NULL DEFAULT 0 AFTER stock_left",
+	"ALTER TABLE cm_shop_items ADD COLUMN sort_order INT NOT NULL DEFAULT 0 AFTER repeatable"
 };
 
 public Plugin myinfo =
@@ -87,7 +98,6 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-	BuildPath(Path_SM, g_sShopDB, sizeof(g_sShopDB), "data/celmod/shop.txt");
 
 	g_alShopItems = new ArrayList(ByteCountToCells(64));
 	g_smRecentlyLeft = new StringMap();
@@ -203,6 +213,11 @@ public void SQL_OnSchemaReady(Database dbDatabase, any aData, int iNumQueries, D
 
 	PrintToServer("|CelMod| Connected to the shared website database.");
 
+	for (int i = 0; i < MIGRATION_QUERIES; i++)
+	{
+		g_dbCelMod.Query(SQL_OnMigration, g_sMigrations[i], _, DBPrio_High);
+	}
+
 	// Orders that were mid-delivery when this server last stopped go back in the queue.
 	// Re-delivering is safe: an item the player already owns is never charged twice.
 	FormatEx(sQuery, sizeof(sQuery), "UPDATE cm_web_orders SET status = 'pending' WHERE status = 'processing' AND server_id = %d", g_cvServerID.IntValue);
@@ -240,15 +255,19 @@ public Action Command_DBStatus(int iClient, int iArgs)
 }
 
 //Shop:
+/**
+ * Copies the shop catalog (celmod-shop: commands, rare props, player models, emblems, hats) to
+ * cm_shop_items, including how many are left. Runs on connect, each map and about once a minute.
+ */
 void SyncShopItems()
 {
-	char sCategory[32], sDisplay[64], sEscDisplay[129], sItem[64], sQuery[512], sValue[128], sParts[2][64];
+	char sCategory[32], sDescription[128], sEscCategory[65], sEscDescription[257], sEscName[129], sEscTarget[129];
+	char sKey[64], sName[64], sQuery[1536], sStock[16], sTarget[64], sType[16];
+	int iLeft, iPrice;
+	bool bRepeatable;
 
-	KeyValues kvShop = new KeyValues("Shop");
-
-	if (!kvShop.ImportFromFile(g_sShopDB))
+	if (g_dbCelMod == null)
 	{
-		delete kvShop;
 		return;
 	}
 
@@ -257,43 +276,36 @@ void SyncShopItems()
 	Transaction txShop = new Transaction();
 	txShop.AddQuery("UPDATE cm_shop_items SET enabled = 0");
 
-	if (kvShop.GotoFirstSubKey())
+	for (int i = 0; i < Cel_ShopGetItemCount(); i++)
 	{
-		do
+		if (!Cel_ShopGetItem(i, sKey, sizeof(sKey), sName, sizeof(sName), sCategory, sizeof(sCategory), sDescription, sizeof(sDescription), iPrice, iLeft, bRepeatable)
+			|| !Cel_ShopGetItemType(i, sType, sizeof(sType), sTarget, sizeof(sTarget))
+			|| !IsSafeKey(sKey) || !IsSafeKey(sType))
 		{
-			kvShop.GetSectionName(sCategory, sizeof(sCategory));
+			continue;
+		}
 
-			if (IsSafeKey(sCategory) && kvShop.GotoFirstSubKey(false))
-			{
-				do
-				{
-					kvShop.GetSectionName(sItem, sizeof(sItem));
-					kvShop.GetString(NULL_STRING, sValue, sizeof(sValue));
+		if (!bRepeatable)
+		{
+			g_alShopItems.PushString(sKey);
+		}
 
-					sParts[0][0] = '\0';
-					sParts[1][0] = '\0';
-					ExplodeString(sValue, "|", sParts, 2, sizeof(sParts[]));
-					strcopy(sDisplay, sizeof(sDisplay), sParts[1]);
+		g_dbCelMod.Escape(sName, sEscName, sizeof(sEscName));
+		g_dbCelMod.Escape(sCategory, sEscCategory, sizeof(sEscCategory));
+		g_dbCelMod.Escape(sDescription, sEscDescription, sizeof(sEscDescription));
+		g_dbCelMod.Escape(sTarget, sEscTarget, sizeof(sEscTarget));
 
-					if (!IsSafeKey(sItem))
-					{
-						continue;
-					}
+		if (iLeft < 0)
+		{
+			strcopy(sStock, sizeof(sStock), "NULL");
+		} else {
+			IntToString(iLeft, sStock, sizeof(sStock));
+		}
 
-					g_alShopItems.PushString(sItem);
-
-					g_dbCelMod.Escape(sDisplay, sEscDisplay, sizeof(sEscDisplay));
-
-					FormatEx(sQuery, sizeof(sQuery), "INSERT INTO cm_shop_items (item, display_name, price, category, enabled, updated_at) VALUES ('%s', '%s', %d, '%s', 1, NOW()) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), price = VALUES(price), category = VALUES(category), enabled = 1, updated_at = NOW()", sItem, sEscDisplay, StringToInt(sParts[0]), sCategory);
-					txShop.AddQuery(sQuery);
-				} while (kvShop.GotoNextKey(false));
-
-				kvShop.GoBack();
-			}
-		} while (kvShop.GotoNextKey());
+		FormatEx(sQuery, sizeof(sQuery), "INSERT INTO cm_shop_items (item, display_name, price, category, kind, target, description, stock_left, repeatable, sort_order, enabled, updated_at) VALUES ('%s', '%s', %d, '%s', '%s', '%s', '%s', %s, %d, %d, 1, NOW()) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), price = VALUES(price), category = VALUES(category), kind = VALUES(kind), target = VALUES(target), description = VALUES(description), stock_left = VALUES(stock_left), repeatable = VALUES(repeatable), sort_order = VALUES(sort_order), enabled = 1, updated_at = NOW()",
+			sKey, sEscName, iPrice, sEscCategory, sType, sEscTarget, sEscDescription, sStock, bRepeatable ? 1 : 0, i);
+		txShop.AddQuery(sQuery);
 	}
-
-	delete kvShop;
 
 	g_dbCelMod.Execute(txShop, SQL_OnTxnOk, SQL_OnTxnError);
 }
@@ -464,7 +476,7 @@ void SyncClientPurchases(int iClient)
 	{
 		g_alShopItems.GetString(i, sItem, sizeof(sItem));
 
-		if (Cel_CheckClientPurchase(iClient, sItem))
+		if (Cel_ShopOwnsItem(iClient, sItem))
 		{
 			FormatEx(sQuery, sizeof(sQuery), "INSERT IGNORE INTO cm_purchases (steamid64, item, source) VALUES ('%s', '%s', 'game')", g_sSteamID[iClient], sItem);
 
@@ -568,9 +580,11 @@ public Action Timer_Heartbeat(Handle hTimer)
 
 	FlushDailyStats(iPlayers);
 
-	// Pick up in-game purchases about once a minute.
+	// Pick up in-game purchases and stock changes about once a minute.
 	if (++g_iTick % 4 == 0)
 	{
+		SyncShopItems();
+
 		for (int i = 1; i <= MaxClients; i++)
 		{
 			if (g_bTracked[i])
@@ -743,7 +757,7 @@ public Action Timer_PollOrders(Handle hTimer)
 		return Plugin_Continue;
 	}
 
-	FormatEx(sQuery, sizeof(sQuery), "SELECT id, steamid64, item FROM cm_web_orders WHERE status = 'pending' AND steamid64 IN (%s) ORDER BY id LIMIT 10", sIDs);
+	FormatEx(sQuery, sizeof(sQuery), "SELECT id, steamid64, item, price FROM cm_web_orders WHERE status = 'pending' AND steamid64 IN (%s) ORDER BY id LIMIT 10", sIDs);
 	g_dbCelMod.Query(SQL_OnPendingOrders, sQuery);
 
 	return Plugin_Continue;
@@ -764,6 +778,7 @@ public void SQL_OnPendingOrders(Database dbDatabase, DBResultSet rsResults, cons
 		int iOrder = rsResults.FetchInt(0);
 		rsResults.FetchString(1, sSteamID, sizeof(sSteamID));
 		rsResults.FetchString(2, sItem, sizeof(sItem));
+		int iOrderPrice = rsResults.FetchInt(3);
 
 		// Claim the order first so two servers can never deliver it twice.
 		FormatEx(sQuery, sizeof(sQuery), "UPDATE cm_web_orders SET status = 'processing', server_id = %d WHERE id = %d AND status = 'pending'", g_cvServerID.IntValue, iOrder);
@@ -772,6 +787,7 @@ public void SQL_OnPendingOrders(Database dbDatabase, DBResultSet rsResults, cons
 		dpOrder.WriteCell(iOrder);
 		dpOrder.WriteString(sSteamID);
 		dpOrder.WriteString(sItem);
+		dpOrder.WriteCell(iOrderPrice);
 
 		g_dbCelMod.Query(SQL_OnOrderClaimed, sQuery, dpOrder);
 	}
@@ -779,13 +795,14 @@ public void SQL_OnPendingOrders(Database dbDatabase, DBResultSet rsResults, cons
 
 public void SQL_OnOrderClaimed(Database dbDatabase, DBResultSet rsResults, const char[] sError, DataPack dpOrder)
 {
-	char sDisplay[64], sItem[64], sQuery[512], sSteamID[32];
-	int iClient, iPrice;
+	char sDeliverError[128], sItem[64], sQuery[512], sSteamID[32];
+	int iClient;
 
 	dpOrder.Reset();
 	int iOrder = dpOrder.ReadCell();
 	dpOrder.ReadString(sSteamID, sizeof(sSteamID));
 	dpOrder.ReadString(sItem, sizeof(sItem));
+	int iOrderPrice = dpOrder.ReadCell();
 	delete dpOrder;
 
 	if (rsResults == null)
@@ -815,29 +832,18 @@ public void SQL_OnOrderClaimed(Database dbDatabase, DBResultSet rsResults, const
 		return;
 	}
 
-	if (!Cel_CheckShopDB(sItem, iPrice, sDisplay, sizeof(sDisplay)))
+	// celmod-shop checks the item, stock, ownership and balance, charges and gives it.
+	// It never charges more than the price the player saw on the website.
+	int iPrice = Cel_ShopDeliver(iClient, sItem, iOrderPrice, sDeliverError, sizeof(sDeliverError));
+
+	if (iPrice == -1)
 	{
-		FinishOrder(iOrder, "failed", "That item is no longer in the shop.");
+		FinishOrder(iOrder, "failed", sDeliverError);
+		Cel_PrintToChat(iClient, "Your web shop order for {green}%s{default} failed: %s", sItem, sDeliverError);
 		return;
 	}
 
-	if (Cel_CheckClientPurchase(iClient, sItem))
-	{
-		FinishOrder(iOrder, "failed", "You already own this.");
-		return;
-	}
-
-	if (Cel_GetClientBalance(iClient) < iPrice)
-	{
-		FinishOrder(iOrder, "failed", "Not enough CL when the order was delivered.");
-		Cel_PrintToChat(iClient, "Your web shop order for {green}%s{default} failed: you don't have enough money.", sDisplay);
-		return;
-	}
-
-	Cel_SubFromClientBalance(iClient, iPrice);
-	Cel_SaveClientPurchase(iClient, sItem, true);
-
-	Cel_PrintToChat(iClient, "Your web shop order arrived! You have bought {green}%s{default} for {green}%d{default} CL.", sDisplay, iPrice);
+	Cel_PrintToChat(iClient, "Your web shop order for {green}%s{default} has arrived!", sItem);
 
 	FormatEx(sQuery, sizeof(sQuery), "UPDATE cm_web_orders SET price = %d WHERE id = %d", iPrice, iOrder);
 	g_dbCelMod.Query(SQL_Generic, sQuery);
@@ -850,6 +856,8 @@ public void SQL_OnOrderClaimed(Database dbDatabase, DBResultSet rsResults, const
 	g_dbCelMod.Query(SQL_Generic, sQuery);
 
 	LogEvent(iClient, "web_purchase", sItem);
+
+	SyncShopItems(); // stock went down
 }
 
 void FinishOrder(int iOrder, const char[] sStatus, const char[] sMessage)
@@ -863,6 +871,14 @@ void FinishOrder(int iOrder, const char[] sStatus, const char[] sMessage)
 }
 
 //Callbacks:
+public void SQL_OnMigration(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
+{
+	if (rsResults == null && StrContains(sError, "Duplicate column", false) == -1)
+	{
+		LogError("|CelMod| Database upgrade failed: %s", sError);
+	}
+}
+
 public void SQL_Generic(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
 {
 	if (rsResults == null)

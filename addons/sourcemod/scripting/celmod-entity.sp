@@ -998,7 +998,15 @@ public Action Command_Replace(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	if(Cel_CheckBlacklistDB(sAlias))
+	int iShopProp = Cel_CheckShopProp(iClient, sAlias, sSpawnString, sizeof(sSpawnString));
+	
+	if (iShopProp == -1)
+	{
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is a rare prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop.", sAlias, sAlias);
+		return Plugin_Handled;
+	}
+	
+	if(iShopProp == 0 && Cel_CheckBlacklistDB(sAlias))
 	{
 		Cel_ReplyToCommand(iClient, "%t", "PropNotFound", sAlias);
 		return Plugin_Handled;
@@ -1013,7 +1021,7 @@ public Action Command_Replace(int iClient, int iArgs)
 	
 	if (Cel_CheckOwner(iClient, iProp))
 	{
-		if (Cel_CheckSpawnDB(sAlias, sSpawnString, sizeof(sSpawnString)))
+		if (iShopProp == 1 || Cel_CheckSpawnDB(sAlias, sSpawnString, sizeof(sSpawnString)))
 		{
 			ExplodeString(sSpawnString, "|", sSpawnBuffer, 2, sizeof(sSpawnBuffer[]));
 			

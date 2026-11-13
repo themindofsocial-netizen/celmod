@@ -259,6 +259,11 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GiveCollectible", Native_GiveCollectible);
 	CreateNative("Cel_IsCollectible", Native_IsCollectible);
 	CreateNative("Cel_SpawnCollectible", Native_SpawnCollectible);
+	CreateNative("Cel_GetCollectibleCount", Native_GetCollectibleCount);
+	CreateNative("Cel_GetPlayerModelCount", Native_GetPlayerModelCount);
+	CreateNative("Cel_GetPlayerModelInfo", Native_GetPlayerModelInfo);
+	CreateNative("Cel_OwnsPlayerModel", Native_OwnsPlayerModel);
+	CreateNative("Cel_GivePlayerModel", Native_GivePlayerModel);
 
 	g_bLate = bLate;
 
@@ -2030,6 +2035,86 @@ public int Native_GiveCollectible(Handle hPlugin, int iNumParams)
 	}
 
 	GiveItem(iClient, iItem);
+
+	return true;
+}
+
+// For the shop (celmod-shop): how many of an item a client owns, -1 if there is no such item.
+public int Native_GetCollectibleCount(Handle hPlugin, int iNumParams)
+{
+	char sId[64], sKind[32];
+	int iClient = GetNativeCell(1);
+
+	GetNativeString(2, sKind, sizeof(sKind));
+	GetNativeString(3, sId, sizeof(sId));
+
+	int iItem = FindItem(KindFromName(sKind), sId);
+
+	if (iItem == -1 || !IsRealClient(iClient))
+	{
+		return -1;
+	}
+
+	return GetOwned(iClient, iItem);
+}
+
+public int Native_GetPlayerModelCount(Handle hPlugin, int iNumParams)
+{
+	return g_iPlayerModelCount;
+}
+
+public int Native_GetPlayerModelInfo(Handle hPlugin, int iNumParams)
+{
+	int iModel = GetNativeCell(1);
+
+	if (iModel < 0 || iModel >= g_iPlayerModelCount)
+	{
+		return false;
+	}
+
+	SetNativeString(2, g_PlayerModels[iModel].sId, GetNativeCell(3));
+	SetNativeString(4, g_PlayerModels[iModel].sName, GetNativeCell(5));
+	SetNativeCellRef(6, g_PlayerModels[iModel].iPrice);
+	SetNativeCellRef(7, g_PlayerModels[iModel].iAdminFlags);
+
+	return true;
+}
+
+// -1 = no such model, 0 = not owned, 1 = owned (bought, given, free or admin).
+public int Native_OwnsPlayerModel(Handle hPlugin, int iNumParams)
+{
+	char sId[64];
+	int iClient = GetNativeCell(1);
+
+	GetNativeString(2, sId, sizeof(sId));
+
+	int iModel = FindPlayerModel(sId);
+
+	if (iModel == -1 || !IsRealClient(iClient))
+	{
+		return -1;
+	}
+
+	return OwnsPlayerModel(iClient, iModel) ? 1 : 0;
+}
+
+// Same as !givemodel: the model is the player's for good.
+public int Native_GivePlayerModel(Handle hPlugin, int iNumParams)
+{
+	char sId[64], sKey[64];
+	int iClient = GetNativeCell(1);
+
+	GetNativeString(2, sId, sizeof(sId));
+
+	int iModel = FindPlayerModel(sId);
+
+	if (iModel == -1 || !IsRealClient(iClient))
+	{
+		return false;
+	}
+
+	Format(sKey, sizeof(sKey), "playermodel_%s", g_PlayerModels[iModel].sId);
+	Inv_SetInt(iClient, sKey, 1);
 
 	return true;
 }
