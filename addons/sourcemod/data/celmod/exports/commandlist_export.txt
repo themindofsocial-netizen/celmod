@@ -5,6 +5,8 @@
 cm_exportcolorlist - Server - Exports the color list into a text or html file in 'data/celmod/exports'.
 cm_exportcommandlist - Server - Exports the command list into a text or html file in 'data/celmod/exports'.
 cm_exportproplist - Server - Exports the prop list into a text or html file in 'data/celmod/exports'.
+v_addteam - Client - Adds a player to your build team: they can build in your land and edit the props in it.
+v_delteam - Client - Removes a player from your build team; with no name, lists your team.
 v_alpha - Client - Changes the transparency on the prop you are looking at.
 v_ammo - Client - Creates a ammo bit that will give ammo when the player touches it.
 v_ammocrate - Client - Creates a ammo crate bit that will give ammo to the player.

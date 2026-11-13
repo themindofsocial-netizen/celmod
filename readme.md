@@ -18,6 +18,8 @@ Command | Description | Aliases | Type | Extra
 --- | --- | --- | --- | ---
 +copy/-copy|Starts copying and moving the prop you are looking at.|None|Client|
 +move/-move|Starts moving the prop you are looking at.|None|Client|
+v_addteam|Adds a player to your build team: they can build in your land and edit the props in it. Remembered between visits.|<player>|Client|
+v_delteam|Removes a player from your build team; with no name, lists your team.|[player]|Client|
 v_alpha|Changes the transparency on the prop you are looking at.|v_amt|Client|
 v_ammo|Creates a ammo bit that will give ammo when the player touches it.|None|Client|
 v_ammocrate|Creates a ammo crate bit that will give ammo to the player.|None|Client|

@@ -816,6 +816,18 @@ native int Cel_GetLandOwner(float fBottomCorner[3], float fTopCorner[3]);
 
 native int Cel_GetLandOwnerFromEntity(int iEntity);
 
+/**
+ * Build teams: whether a player is on a land owner's build team (!addteam).
+ */
+native bool Cel_IsOnBuildTeam(int iLandOwner, int iClient);
+
+/**
+ * Whether a player may build on (move, colour, freeze, delete...) an entity: their own, or one owned by the land
+ * owner or a teammate, sitting in the land of an owner whose build team they are on (or that they own).
+ * Selling, giving and trading still need real ownership (Cel_CheckOwner).
+ */
+native bool Cel_CanEdit(int iClient, int iEntity);
+
 native int Cel_GetLandOwnerFromPosition(float fOrigin[3]);
 
 /**

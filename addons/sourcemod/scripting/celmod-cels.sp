@@ -225,7 +225,7 @@ public Action Command_SetURL(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if (Cel_CheckEntityType(iProp, "internet"))
 		{

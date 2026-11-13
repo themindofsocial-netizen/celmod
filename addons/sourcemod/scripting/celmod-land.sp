@@ -71,6 +71,8 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetLandGravity", Native_GetLandGravity);
 	CreateNative("Cel_GetLandOwner", Native_GetLandOwner);
 	CreateNative("Cel_GetLandOwnerFromEntity", Native_GetLandOwnerFromEntity);
+	CreateNative("Cel_IsOnBuildTeam", Native_IsOnBuildTeam);
+	CreateNative("Cel_CanEdit", Native_CanEdit);
 	CreateNative("Cel_GetLandOwnerFromPosition", Native_GetLandOwnerFromPosition);
 	CreateNative("Cel_GetLandPositions", Native_GetLandPositions);
 	CreateNative("Cel_GetMiddleOfABox", Native_GetMiddleOfBox);
@@ -102,6 +104,10 @@ public Plugin myinfo =
 #define SKULL_DM "celmod/faces/skull2.vmt"
 
 int g_iSkullRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+
+//Build teams: g_bTeam[owner][member]. Each owner's team is remembered as SteamID64s in their "buildteam" setting.
+bool g_bTeam[MAXPLAYERS + 1][MAXPLAYERS + 1];
+char g_sTeamIds[MAXPLAYERS + 1][1024];
 int g_iSkullMode[MAXPLAYERS + 1];
 ConVar g_cvSkullScale;
 ConVar g_cvSkullHeight;
@@ -134,6 +140,10 @@ public void OnPluginStart()
 	
 	CreateTimer(0.25, Timer_Skulls, _, TIMER_REPEAT);
 	
+	RegConsoleCmd("v_addteam", Command_AddTeam, "|CelMod| Lets a player build in your land and edit the props in it.");
+	RegConsoleCmd("v_delteam", Command_DelTeam, "|CelMod| Removes a player from your build team, or lists your team.");
+	RegConsoleCmd("v_team", Command_DelTeam, "|CelMod| Lists your build team.");
+	
 	RegConsoleCmd("v_coop", Command_LandCoop, "|CelMod| Changes the mode to co-op within the land.");
 	RegConsoleCmd("v_deathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_dm", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
@@ -154,6 +164,240 @@ public void OnPluginStart()
 	RegConsoleCmd("v_landgravity", Command_LandGravity, "|CelMod| Changes the gravity within the land.");
 	RegConsoleCmd("v_landshop", Command_LandShop, "|CelMod| Changes the mode to shop (merchant) within the land.");
 	RegConsoleCmd("v_shop", Command_LandShop, "|CelMod| Changes the mode to shop (merchant) within the land.");
+}
+
+//Saved teams are matched up once players' settings and Steam IDs are known.
+public void OnClientPostAdminCheck(int iClient)
+{
+	char sId[32];
+	
+	Cel_GetClientSettingString(iClient, "buildteam", g_sTeamIds[iClient], sizeof(g_sTeamIds[]));
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i == iClient || !IsClientInGame(i) || IsFakeClient(i))
+		{
+			continue;
+		}
+		
+		//This player's team members who are already here.
+		if (GetClientAuthId(i, AuthId_SteamID64, sId, sizeof(sId)) && TeamListHas(g_sTeamIds[iClient], sId))
+		{
+			g_bTeam[iClient][i] = true;
+		}
+		
+		//Teams this player is on.
+		if (GetClientAuthId(iClient, AuthId_SteamID64, sId, sizeof(sId)) && TeamListHas(g_sTeamIds[i], sId))
+		{
+			g_bTeam[i][iClient] = true;
+		}
+	}
+}
+
+bool TeamListHas(const char[] sList, const char[] sId)
+{
+	char sFind[40];
+	
+	Format(sFind, sizeof(sFind), ",%s,", sId);
+	
+	char sWrapped[1100];
+	
+	Format(sWrapped, sizeof(sWrapped), ",%s,", sList);
+	
+	return (StrContains(sWrapped, sFind) != -1);
+}
+
+void SaveTeam(int iOwner)
+{
+	char sId[32];
+	
+	g_sTeamIds[iOwner][0] = '\0';
+	
+	//Members who are here now, plus saved members who are not.
+	char sOld[1024], sParts[32][32];
+	
+	Cel_GetClientSettingString(iOwner, "buildteam", sOld, sizeof(sOld));
+	
+	int iParts = ExplodeString(sOld, ",", sParts, sizeof(sParts), sizeof(sParts[]));
+	
+	for (int k = 0; k < iParts; k++)
+	{
+		if (sParts[k][0] == '\0' || IsIdInGame(sParts[k]))
+		{
+			continue;
+		}
+		
+		Format(g_sTeamIds[iOwner], sizeof(g_sTeamIds[]), "%s%s%s", g_sTeamIds[iOwner], g_sTeamIds[iOwner][0] == '\0' ? "" : ",", sParts[k]);
+	}
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_bTeam[iOwner][i] && IsClientInGame(i) && GetClientAuthId(i, AuthId_SteamID64, sId, sizeof(sId)))
+		{
+			Format(g_sTeamIds[iOwner], sizeof(g_sTeamIds[]), "%s%s%s", g_sTeamIds[iOwner], g_sTeamIds[iOwner][0] == '\0' ? "" : ",", sId);
+		}
+	}
+	
+	Cel_SetClientSettingString(iOwner, "buildteam", g_sTeamIds[iOwner]);
+}
+
+bool IsIdInGame(const char[] sId)
+{
+	char sOther[32];
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientAuthId(i, AuthId_SteamID64, sOther, sizeof(sOther)) && StrEqual(sOther, sId))
+		{
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+public Action Command_AddTeam(int iClient, int iArgs)
+{
+	char sTarget[MAX_NAME_LENGTH];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]addteam{default} <player>. They can then build in your land and edit the props in it.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	int iTarget = FindTarget(iClient, sTarget, true, false);
+	
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iTarget == iClient)
+	{
+		Cel_ReplyToCommand(iClient, "You are always on your own build team.");
+		return Plugin_Handled;
+	}
+	
+	g_bTeam[iClient][iTarget] = true;
+	
+	SaveTeam(iClient);
+	
+	Cel_ReplyToCommand(iClient, "{green}%N{default} is now on your build team: they can build in your land and edit the props in it. Only you can save and load the build.", iTarget);
+	Cel_PrintToChat(iTarget, "{green}%N{default} added you to their build team: you can build in their land and edit the props in it.", iClient);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_DelTeam(int iClient, int iArgs)
+{
+	char sTarget[MAX_NAME_LENGTH], sList[512];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	//No name: list the team.
+	if (iArgs < 1)
+	{
+		sList[0] = '\0';
+		
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (g_bTeam[iClient][i] && IsClientInGame(i))
+			{
+				Format(sList, sizeof(sList), "%s%s{green}%N{default}", sList, sList[0] == '\0' ? "" : ", ", i);
+			}
+		}
+		
+		if (sList[0] == '\0')
+		{
+			Cel_ReplyToCommand(iClient, "Nobody on your build team is here. Add someone with {green}[tag]addteam{default} <player>.");
+		} else {
+			Cel_ReplyToCommand(iClient, "Your build team here: %s. Remove someone with {green}[tag]delteam{default} <player>.", sList);
+		}
+		
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	int iTarget = FindTarget(iClient, sTarget, true, false);
+	
+	if (iTarget == -1 || iTarget == iClient)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (!g_bTeam[iClient][iTarget])
+	{
+		Cel_ReplyToCommand(iClient, "{green}%N{default} is not on your build team.", iTarget);
+		return Plugin_Handled;
+	}
+	
+	g_bTeam[iClient][iTarget] = false;
+	
+	SaveTeam(iClient);
+	
+	Cel_ReplyToCommand(iClient, "{green}%N{default} is no longer on your build team.", iTarget);
+	Cel_PrintToChat(iTarget, "{green}%N{default} removed you from their build team.", iClient);
+	
+	return Plugin_Handled;
+}
+
+public int Native_IsOnBuildTeam(Handle hPlugin, int iNumParams)
+{
+	int iOwner = GetNativeCell(1), iClient = GetNativeCell(2);
+	
+	if (iOwner < 1 || iOwner > MaxClients || iClient < 1 || iClient > MaxClients)
+	{
+		return false;
+	}
+	
+	return (iOwner == iClient || g_bTeam[iOwner][iClient]);
+}
+
+public int Native_CanEdit(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1), iEntity = GetNativeCell(2);
+	
+	if (iEntity <= MaxClients || !Cel_IsEntity(iEntity))
+	{
+		return false;
+	}
+	
+	int iOwner = Cel_GetOwner(iEntity);
+	
+	if (iOwner == iClient)
+	{
+		return true;
+	}
+	
+	if (iClient < 1 || iClient > MaxClients || iOwner < 1 || iOwner > MaxClients)
+	{
+		return false;
+	}
+	
+	//In the land of someone whose team the player is on, and owned by that land's owner or another teammate.
+	int iLandOwner = Cel_GetLandOwnerFromEntity(iEntity);
+	
+	if (iLandOwner < 1 || iLandOwner > MaxClients)
+	{
+		return false;
+	}
+	
+	bool bClientAllowed = (iLandOwner == iClient || g_bTeam[iLandOwner][iClient]);
+	bool bOwnerAllowed = (iLandOwner == iOwner || g_bTeam[iLandOwner][iOwner]);
+	
+	return (bClientAllowed && bOwnerAllowed);
 }
 
 public void OnClientPutInServer(int iClient)
@@ -177,6 +421,14 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
+	for (int i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_bTeam[iClient][i] = false;
+		g_bTeam[i][iClient] = false;
+	}
+	
+	g_sTeamIds[iClient][0] = '\0';
+
 	RemoveSkull(iClient);
 	
 	Cel_ClearLand(iClient);

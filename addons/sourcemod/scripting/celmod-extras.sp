@@ -590,9 +590,9 @@ public Action Command_MoveTo(int iClient, int iArgs)
 	
 	int iMoving = EntRefToEntIndex(g_iMoveToRef[iClient]);
 	
-	if (g_iMoveToRef[iClient] == INVALID_ENT_REFERENCE || iMoving == INVALID_ENT_REFERENCE || !Cel_CheckOwner(iClient, iMoving))
+	if (g_iMoveToRef[iClient] == INVALID_ENT_REFERENCE || iMoving == INVALID_ENT_REFERENCE || !Cel_CanEdit(iClient, iMoving))
 	{
-		if (!Cel_CheckOwner(iClient, iProp))
+		if (!Cel_CanEdit(iClient, iProp))
 		{
 			Cel_NotYours(iClient, iProp);
 			return Plugin_Handled;
@@ -873,7 +873,7 @@ public Action Command_Weld(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	if (!Cel_CheckOwner(iClient, iProp))
+	if (!Cel_CanEdit(iClient, iProp))
 	{
 		Cel_NotYours(iClient, iProp);
 		return Plugin_Handled;
@@ -881,7 +881,7 @@ public Action Command_Weld(int iClient, int iArgs)
 	
 	int iFirst = EntRefToEntIndex(g_iWeldRef[iClient]);
 	
-	if (g_iWeldRef[iClient] == INVALID_ENT_REFERENCE || iFirst == INVALID_ENT_REFERENCE || !Cel_CheckOwner(iClient, iFirst))
+	if (g_iWeldRef[iClient] == INVALID_ENT_REFERENCE || iFirst == INVALID_ENT_REFERENCE || !Cel_CanEdit(iClient, iFirst))
 	{
 		g_iWeldRef[iClient] = EntIndexToEntRef(iProp);
 		
@@ -925,7 +925,7 @@ public Action Command_Release(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	if (!Cel_CheckOwner(iClient, iProp))
+	if (!Cel_CanEdit(iClient, iProp))
 	{
 		Cel_NotYours(iClient, iProp);
 		return Plugin_Handled;
@@ -1337,7 +1337,7 @@ public Action Command_Palette(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	if (!Cel_CheckOwner(iClient, iProp))
+	if (!Cel_CanEdit(iClient, iProp))
 	{
 		Cel_NotYours(iClient, iProp);
 		return Plugin_Handled;
@@ -1393,7 +1393,7 @@ public Action Command_Teleport(int iClient, int iArgs)
 	
 	int iEntrance = EntRefToEntIndex(g_iTeleportRef[iClient]);
 	
-	if (g_iTeleportRef[iClient] == INVALID_ENT_REFERENCE || iEntrance == INVALID_ENT_REFERENCE || !Cel_CheckOwner(iClient, iEntrance))
+	if (g_iTeleportRef[iClient] == INVALID_ENT_REFERENCE || iEntrance == INVALID_ENT_REFERENCE || !Cel_CanEdit(iClient, iEntrance))
 	{
 		g_iTeleportRef[iClient] = EntIndexToEntRef(iPad);
 		

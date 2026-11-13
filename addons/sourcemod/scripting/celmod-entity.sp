@@ -285,7 +285,7 @@ public Action Command_Alpha(int iClient, int iArgs)
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
 		
-		if (Cel_CheckOwner(iClient, iProp))
+		if (Cel_CanEdit(iClient, iProp))
 		{
 			Cel_SetColor(iProp, -1, -1, -1, iAlpha);
 			
@@ -329,7 +329,7 @@ public Action Command_AutoBuild(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "dynamic"))
 		{
@@ -471,7 +471,7 @@ public Action Command_Color(int iClient, int iArgs)
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
 		
-		if (Cel_CheckOwner(iClient, iProp))
+		if (Cel_CanEdit(iClient, iProp))
 		{
 			if(StrEqual(sColor, "rainbow", false))
 			{
@@ -538,7 +538,7 @@ public Action Command_CopyProp(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "dynamic"))
 		{
@@ -594,7 +594,7 @@ public Action Command_Delete(int iClient, int iArgs)
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
 		
-		if (Cel_CheckOwner(iClient, iProp))
+		if (Cel_CanEdit(iClient, iProp))
 		{
 			if (Cel_CheckEntityType(iProp, "effect"))
 			{
@@ -663,7 +663,7 @@ public Action Command_Drop(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		Cel_DropEntityToFloor(iProp);
 	} else {
@@ -739,7 +739,7 @@ public Action Command_FadeColor(int iClient, int iArgs)
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
 		
-		if (Cel_CheckOwner(iClient, iProp))
+		if (Cel_CanEdit(iClient, iProp))
 		{
 			if (Cel_CheckColorDB(sColor[0], sColorString, sizeof(sColorString)))
 			{
@@ -791,7 +791,7 @@ public Action Command_FreezeIt(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityCatagory(iProp, ENTCATAGORY_BIT))
 		{
@@ -822,7 +822,7 @@ public Action Command_God(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityCatagory(iProp, ENTCATAGORY_BIT))
 		{
@@ -928,7 +928,7 @@ public Action Command_Lock(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityType(iProp, "cycler") || Cel_CheckEntityType(iProp, "dynamic") || Cel_CheckEntityType(iProp, "ladder") || 
 			Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "cleer") || Cel_CheckEntityType(iProp, "bit") || Cel_CheckEntityType(iProp, "unknown"))
@@ -1019,7 +1019,7 @@ public Action Command_Replace(int iClient, int iArgs)
 		Cel_ReplyToCommand(iClient, "%t", "CantReplace");
 	}
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if (iShopProp == 1 || Cel_CheckSpawnDB(sAlias, sSpawnString, sizeof(sSpawnString)))
 		{
@@ -1085,7 +1085,7 @@ public Action Command_RenderFX(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		RenderFx rfRenderFX = Cel_GetRenderFXFromName(sRenderFX);
 		
@@ -1126,7 +1126,7 @@ public Action Command_Rotate(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		Cel_GetEntityOrigin(iProp, fOrigin);
 		Cel_GetEntityAngles(iProp, fPropAngles);
@@ -1176,7 +1176,7 @@ public Action Command_Skin(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityCatagory(iProp, ENTCATAGORY_BIT))
 		{
@@ -1250,7 +1250,7 @@ public Action Command_SMove(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		Cel_ChangePositionRelativeToOrigin(iProp, fAddOrigin);
 	} else {
@@ -1271,7 +1271,7 @@ public Action Command_Solid(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityCatagory(iProp, ENTCATAGORY_BIT))
 		{
@@ -1322,7 +1322,7 @@ public Action Command_Stack(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "dynamic"))
 		{
@@ -1451,7 +1451,7 @@ public Action Command_Stand(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		TeleportEntity(iProp, NULL_VECTOR, g_fZero, NULL_VECTOR);
 	} else {
@@ -1486,7 +1486,7 @@ public Action Command_StartCopy(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(!Cel_CheckEntityCatagory(iProp, ENTCATAGORY_PROP))
 		{
@@ -1540,7 +1540,7 @@ public Action Command_StartGrab(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		Cel_GetEntityOrigin(iProp, fOrigin[0]);
 		GetClientAbsOrigin(iClient, fOrigin[1]);
@@ -1616,7 +1616,7 @@ public Action Command_UnfreezeIt(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityCatagory(iProp, ENTCATAGORY_BIT))
 		{
@@ -1647,7 +1647,7 @@ public Action Command_Unlock(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
-	if (Cel_CheckOwner(iClient, iProp))
+	if (Cel_CanEdit(iClient, iProp))
 	{
 		if(Cel_CheckEntityType(iProp, "cycler") || Cel_CheckEntityType(iProp, "dynamic") || Cel_CheckEntityType(iProp, "ladder") || 
 			Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "cleer") || Cel_CheckEntityType(iProp, "bit") || Cel_CheckEntityType(iProp, "unknown"))

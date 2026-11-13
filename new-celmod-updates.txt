@@ -116,3 +116,5 @@
 	 - 12/08/26: Tapping the walk key (left Alt) changes your walking speed: normal, slow, very slow, super slow, fast, and round again. Fast is capped to normal inside event areas.
 		 - !block stops you from entering other players' lands: you are stopped at the edge. Type it again (or !block off) to turn it off. It is remembered between visits.
 	 - 12/09/26: !music <song> [speed 50-200] spawns a music cel (E plays the song, E again stops it; saved with builds). !celmusic lists the songs, from the "Music" section of data/celmod/sounds.txt.
+	 - 12/10/26: Build teams: !addteam <player> lets them build in your land and edit the props in it (as the original Team Build did). !delteam <player> removes them; !delteam on its own lists your team. Teams are remembered between visits.
+		 - Teammates' props stay theirs (their prop limit; only the real owner can sell, give or trade them), but the land owner's !save includes everything the team built in the land, and !load gives it all to the land owner.

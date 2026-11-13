@@ -476,7 +476,8 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 	
 	for (int i = 0; i < GetMaxEntities(); i++)
 	{
-		if (Cel_CheckOwner(iClient, i))
+		//The land owner's own entities and their build team's, as long as they are in the owner's land.
+		if (i > MaxClients && IsValidEntity(i) && Cel_IsEntity(i) && (Cel_GetOwner(i) == iClient || Cel_IsOnBuildTeam(iClient, Cel_GetOwner(i))))
 		{
 			if(Cel_IsEntityInOwnLand(iClient, i))
 			{
