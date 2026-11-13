@@ -238,6 +238,9 @@ int g_iLastButtons[MAXPLAYERS + 1];
 int g_iMinutesSinceDrop;
 int g_iModdedWeaponRef[MAXPLAYERS + 1];
 int g_iRewardId[MAXENTITIES + 1];
+bool g_bRewardEvent[MAXENTITIES + 1];
+bool g_bInEvent[MAXPLAYERS + 1];
+float g_fPhaseStart[MAXPLAYERS + 1][3];
 int g_iTick;
 
 Item g_Items[MAX_ITEMS];
@@ -262,6 +265,8 @@ native void CG_GetShootPosition(int iClient, float fPos[3], float fForwardOffset
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("CG_GiveGun");
+	MarkNativeAsOptional("Cel_GetZoneType");
+	CreateNative("Cel_GetRewardLabel", Native_GetRewardLabel);
 	MarkNativeAsOptional("CG_ClearInventory");
 	MarkNativeAsOptional("CG_PlayActivity");
 	MarkNativeAsOptional("CG_SetPlayerAnimation");
@@ -352,6 +357,7 @@ public void OnPluginStart()
 	RegAdminCmd("v_giveitem", Command_GiveItem, ADMFLAG_SLAY, "|CelMod| Gives an emblem or hat to a player.");
 	RegAdminCmd("v_tune", Command_Tune, ADMFLAG_SLAY, "|CelMod| Sets where held emblems, celweps or your hat sit, and saves it.");
 	RegAdminCmd("v_nudge", Command_Nudge, ADMFLAG_SLAY, "|CelMod| Moves where held emblems, celweps or your hat sit a little, and saves it.");
+	RegAdminCmd("v_eventemblem", Command_EventEmblem, ADMFLAG_SLAY, "|CelMod| Places an event emblem where you aim (end of a maze or parkour). Each player can only ever get it once.");
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
 	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
 	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
@@ -1319,6 +1325,146 @@ public Action Command_EmblemDrop(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+// An event emblem: placed at the end of a maze or parkour course (inside an event area made with !zone), it gives its
+// emblem to whoever reaches it and presses E. Each player can only ever earn each event emblem once.
+public Action Command_EventEmblem(int iClient, int iArgs)
+{
+	char sId[64];
+	float fOrigin[3];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]eventemblem{default} <emblem> (placed where you aim; remove it with {green}[tag]delreward{default})");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sId, sizeof(sId));
+
+	int iItem = FindItem(KIND_EMBLEM, sId);
+
+	if (iItem == -1 || g_Items[iItem].bIsBig)
+	{
+		Cel_ReplyToCommand(iClient, "There is no emblem called {green}%s{default}.", sId);
+		return Plugin_Handled;
+	}
+
+	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+
+	fOrigin[2] += 24.0;
+
+	int iId = SaveReward(-1, KIND_EMBLEM, g_Items[iItem].sId, fOrigin, true);
+
+	int iEntity = SpawnRewardEntity(iId, KIND_EMBLEM, g_Items[iItem].sId, fOrigin);
+
+	if (iEntity == -1)
+	{
+		Cel_ReplyToCommand(iClient, "The event emblem could not be spawned.");
+		return Plugin_Handled;
+	}
+
+	g_bRewardEvent[iEntity] = true;
+
+	Cel_ReplyToCommand(iClient, "Placed event emblem {green}#%d{default} ({green}%s{default}). Players get it once ever by pressing E on it.", iId, g_Items[iItem].sName);
+
+	if (ZoneTypeAt(fOrigin) != CEL_ZONE_EVENT)
+	{
+		Cel_ReplyToCommand(iClient, "Tip: put the course inside an event area ({green}[tag]zone{default}) so nobody can fly, phase or blink to it.");
+	}
+
+	if (g_Items[iItem].iWeight > 0)
+	{
+		Cel_ReplyToCommand(iClient, "Tip: the {green}%s{default} emblem can also come from drops. Give it {green}\"dropweight\" \"0\"{default} in collectibles.txt to make it event only.", g_Items[iItem].sName);
+	}
+
+	return Plugin_Handled;
+}
+
+public int Native_GetRewardLabel(Handle hPlugin, int iNumParams)
+{
+	char sLabel[128];
+	int iEntity = GetNativeCell(1);
+
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || g_iRewardId[iEntity] == -1 || !IsValidEntity(iEntity))
+	{
+		return false;
+	}
+
+	int iItem = g_iEntItem[iEntity];
+
+	if (g_bRewardEvent[iEntity] && iItem >= 0)
+	{
+		Format(sLabel, sizeof(sLabel), "Event emblem: %s\nPress E to claim (once ever)", g_Items[iItem].sName);
+	} else if (iItem >= 0)
+	{
+		Format(sLabel, sizeof(sLabel), "Reward: %s %s\nPress E to claim", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
+	} else {
+		Format(sLabel, sizeof(sLabel), "Reward: a random %s\nPress E to claim", g_sKindName[-(iItem + 2)]);
+	}
+
+	SetNativeString(2, sLabel, GetNativeCell(3));
+
+	return true;
+}
+
+// Event emblems glow and send up rings, so the prize at the end of a course stands out.
+void ThinkEventEmblems()
+{
+	float fOrigin[3];
+	int iColor[4], iEntity = -1;
+
+	while ((iEntity = FindEntityByClassname(iEntity, "cel_reward")) != -1)
+	{
+		if (iEntity > MAXENTITIES || !g_bRewardEvent[iEntity] || g_iEntItem[iEntity] < 0)
+		{
+			continue;
+		}
+
+		int iItem = g_iEntItem[iEntity];
+
+		GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+		iColor[0] = g_Items[iItem].iBeamColor[0];
+		iColor[1] = g_Items[iItem].iBeamColor[1];
+		iColor[2] = g_Items[iItem].iBeamColor[2];
+		iColor[3] = 255;
+
+		fOrigin[2] -= 16.0;
+
+		Fx_Ring(fOrigin, 20.0, 60.0, g_iBmPhys, 4.0, 1.0, 0.0, iColor);
+
+		fOrigin[2] += 16.0;
+
+		Fx_Glow(fOrigin, g_iFxSoftGlow, 0.6, 1.0, 140);
+	}
+}
+
+// Which kind of admin made area a point is in, when the zones plugin is loaded.
+int ZoneTypeAt(float fPos[3])
+{
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") != FeatureStatus_Available)
+	{
+		return CEL_ZONE_NONE;
+	}
+
+	return Cel_GetZoneType(fPos);
+}
+
+bool IsZoneExempt(int iClient)
+{
+	return CheckCommandAccess(iClient, "celmod_zone_exempt", ADMFLAG_SLAY, true);
+}
+
+// True when a point is inside an event or restricted area that the player is not allowed to get into by power.
+bool ZoneBlocks(int iClient, float fPos[3])
+{
+	return (!IsZoneExempt(iClient) && ZoneTypeAt(fPos) != CEL_ZONE_NONE);
+}
+
 public Action Command_Reward(int iClient, int iArgs)
 {
 	char sId[64], sKind[32];
@@ -1589,6 +1735,23 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 
 	Format(sKey, sizeof(sKey), "reward_%d_%s", g_iRewardId[iEntity], g_sMap);
 
+	// An event emblem can only ever be earned once, from any pickup on any map, even one placed again later.
+	char sEventKey[64];
+
+	if (g_bRewardEvent[iEntity] && g_iEntItem[iEntity] >= 0)
+	{
+		Format(sEventKey, sizeof(sEventKey), "event_%s", g_Items[g_iEntItem[iEntity]].sId);
+
+		if (Inv_GetInt(iActivator, sEventKey) == 1)
+		{
+			EmitSoundToClient(iActivator, SOUND_DENY);
+
+			Cel_PrintToChat(iActivator, "You have already earned the {green}%s{default} event emblem. Each event emblem can only be earned once.", g_Items[g_iEntItem[iEntity]].sName);
+
+			return;
+		}
+	}
+
 	if (Inv_GetInt(iActivator, sKey) == 1)
 	{
 		EmitSoundToClient(iActivator, SOUND_DENY);
@@ -1612,6 +1775,11 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 	}
 
 	Inv_SetInt(iActivator, sKey, 1);
+
+	if (g_bRewardEvent[iEntity])
+	{
+		Inv_SetInt(iActivator, sEventKey, 1);
+	}
 
 	GiveItem(iActivator, iItem);
 
@@ -1691,6 +1859,27 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		CloseHandle(hDig);
 	}
 
+	// Phasing into an event or restricted area puts the player back where they started phasing.
+	if (g_bPhasing[iClient] && IsPlayerAlive(iClient))
+	{
+		float fOrigin[3];
+
+		GetClientAbsOrigin(iClient, fOrigin);
+
+		fOrigin[2] += 32.0;
+
+		if (ZoneBlocks(iClient, fOrigin))
+		{
+			g_bPhasing[iClient] = false;
+
+			SetEntityMoveType(iClient, MOVETYPE_WALK);
+
+			TeleportEntity(iClient, g_fPhaseStart[iClient], NULL_VECTOR, g_fZero);
+
+			Cel_PrintToChat(iClient, "You cannot phase into that area.");
+		}
+	}
+
 	int iItem = g_iActiveEmblem[iClient];
 
 	if (iItem == -1 || !g_bHoldingGravGun[iClient] || !IsPlayerAlive(iClient))
@@ -1698,21 +1887,32 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		return Plugin_Changed;
 	}
 
-	// Phantom: holding right click phases through walls.
-	if (StrEqual(g_Items[iItem].sPower, "phase") && (iButtons & IN_ATTACK2) && !g_bPhasing[iClient])
+	// Phantom: holding right click phases through walls (but not inside event and restricted areas).
+	if (StrEqual(g_Items[iItem].sPower, "phase") && (iButtons & IN_ATTACK2) && !g_bPhasing[iClient] && !g_bInEvent[iClient])
 	{
-		g_bPhasing[iClient] = true;
+		float fOrigin[3];
 
-		SetEntityMoveType(iClient, MOVETYPE_NOCLIP);
+		GetClientAbsOrigin(iClient, fOrigin);
+
+		fOrigin[2] += 32.0;
+
+		if (!ZoneBlocks(iClient, fOrigin))
+		{
+			GetClientAbsOrigin(iClient, g_fPhaseStart[iClient]);
+
+			g_bPhasing[iClient] = true;
+
+			SetEntityMoveType(iClient, MOVETYPE_NOCLIP);
+		}
 	}
 
 	// Jump emblems, and any emblem with a "jumpboost", jump higher.
-	if ((StrEqual(g_Items[iItem].sPower, "jump") || g_Items[iItem].fJump > 0.0) && (iButtons & IN_JUMP) && !(iLast & IN_JUMP) && (GetEntityFlags(iClient) & FL_ONGROUND))
+	if ((StrEqual(g_Items[iItem].sPower, "jump") || g_Items[iItem].fJump > 0.0) && !g_bInEvent[iClient] && (iButtons & IN_JUMP) && !(iLast & IN_JUMP) && (GetEntityFlags(iClient) & FL_ONGROUND))
 	{
 		RequestFrame(Frame_Jump, GetClientUserId(iClient));
 	}
 
-	if (StrEqual(g_Items[iItem].sPower, "feather"))
+	if (StrEqual(g_Items[iItem].sPower, "feather") && !g_bInEvent[iClient])
 	{
 		float fVelocity[3];
 
@@ -1920,6 +2120,22 @@ public Action Timer_Think(Handle hTimer)
 
 		g_bHoldingGravGun[i] = false;
 
+		// Inside an event area (a maze or parkour course) emblems give no help moving around.
+		float fFeet[3];
+
+		GetClientAbsOrigin(i, fFeet);
+
+		fFeet[2] += 32.0;
+
+		bool bWasInEvent = g_bInEvent[i];
+
+		g_bInEvent[i] = (!IsZoneExempt(i) && ZoneTypeAt(fFeet) == CEL_ZONE_EVENT);
+
+		if (g_bInEvent[i] && !bWasInEvent && iItem != -1 && IsMovementPower(iItem))
+		{
+			Cel_PrintToChat(i, "Your {green}%s{default} emblem's power does not work in event areas.", g_Items[iItem].sName);
+		}
+
 		if (iWeapon > MaxClients && IsValidEntity(iWeapon))
 		{
 			GetEntityClassname(iWeapon, sClassname, sizeof(sClassname));
@@ -1990,7 +2206,7 @@ public Action Timer_Think(Handle hTimer)
 				SetEntityRenderColor(i, 255, 255, 255, 255);
 			}
 
-			if (g_bHoldingGravGun[i] && iItem != -1)
+			if (g_bHoldingGravGun[i] && iItem != -1 && !g_bInEvent[i])
 			{
 				// The speed emblem uses its value, any other emblem can carry a "speed" key.
 				fSpeed = StrEqual(g_Items[iItem].sPower, "speed") ? g_Items[iItem].fValue : g_Items[iItem].fSpeed;
@@ -2053,7 +2269,7 @@ public Action Timer_Think(Handle hTimer)
 		}
 
 		// Gravity: the holder is lighter (or heavier) while the emblem is in hand.
-		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "gravity"))
+		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "gravity") && !g_bInEvent[i])
 		{
 			g_bGravityManaged[i] = true;
 
@@ -2066,7 +2282,7 @@ public Action Timer_Think(Handle hTimer)
 		}
 
 		// Sprint: the suit's sprint power never runs out.
-		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "sprint"))
+		if (g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "sprint") && !g_bInEvent[i])
 		{
 			SetEntPropFloat(i, Prop_Send, "m_flSuitPower", 100.0);
 		}
@@ -2102,6 +2318,11 @@ public Action Timer_Think(Handle hTimer)
 	ThinkPortals();
 
 	Fx_ThinkAuras();
+
+	if (g_iTick % 5 == 0)
+	{
+		ThinkEventEmblems();
+	}
 
 	if (g_iTick % 3 == 0)
 	{
@@ -3026,6 +3247,13 @@ void RestoreWeapon(int iClient)
 	g_iHandEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iHandItem[iClient] = -1;
 	g_iModdedWeaponRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+bool IsMovementPower(int iItem)
+{
+	return (StrEqual(g_Items[iItem].sPower, "speed") || StrEqual(g_Items[iItem].sPower, "sprint") || StrEqual(g_Items[iItem].sPower, "gravity") || StrEqual(g_Items[iItem].sPower, "jump")
+		|| StrEqual(g_Items[iItem].sPower, "feather") || StrEqual(g_Items[iItem].sPower, "phase") || StrEqual(g_Items[iItem].sPower, "blink") || StrEqual(g_Items[iItem].sPower, "portal")
+		|| g_Items[iItem].fJump > 0.0 || g_Items[iItem].fSpeed != 1.0);
 }
 
 bool IsShotPower(const char[] sPower)
@@ -4730,6 +4958,22 @@ void ThrowTarget(int iClient, int iTarget, float fDirection[3], float fForce)
 // Abyss: places one of the holder's two portals. Walking into one comes out of the other.
 void SetPortal(int iClient, int iPortal, float fEnd[3], float fDirection[3], int iColor[4])
 {
+	// Portals can't be opened in event and restricted areas, nor while standing in one.
+	float fFeet[3];
+
+	GetClientAbsOrigin(iClient, fFeet);
+
+	fFeet[2] += 32.0;
+
+	if (ZoneBlocks(iClient, fEnd) || ZoneBlocks(iClient, fFeet))
+	{
+		EmitSoundToClient(iClient, SOUND_DENY);
+
+		Cel_PrintToChat(iClient, "You cannot open a portal in that area.");
+
+		return;
+	}
+
 	g_fPortal[iClient][iPortal][0] = fEnd[0] - fDirection[0] * 40.0;
 	g_fPortal[iClient][iPortal][1] = fEnd[1] - fDirection[1] * 40.0;
 	g_fPortal[iClient][iPortal][2] = fEnd[2] - fDirection[2] * 40.0;
@@ -4812,6 +5056,21 @@ void BlinkPlayer(int iClient, float fStart[3], float fDirection[3], float fEnd[3
 	fDest[0] = fEnd[0] - fDirection[0] * 40.0;
 	fDest[1] = fEnd[1] - fDirection[1] * 40.0;
 	fDest[2] = fEnd[2] - fDirection[2] * 40.0 - (fStart[2] - fOrigin[2]) + 8.0;
+
+	// No blinking into, out of or around inside event and restricted areas.
+	float fCheck[3];
+
+	fCheck = fDest;
+	fCheck[2] += 32.0;
+
+	if (ZoneBlocks(iClient, fCheck) || ZoneBlocks(iClient, fStart))
+	{
+		EmitSoundToClient(iClient, SOUND_DENY);
+
+		Cel_PrintToChat(iClient, "You cannot blink into or inside that area.");
+
+		return;
+	}
 
 	Handle hTrace = TR_TraceHullFilterEx(fDest, fDest, fMins, fMaxs, MASK_PLAYERSOLID, Filter_NotSelf, iClient);
 
@@ -5247,7 +5506,12 @@ void LoadRewards()
 			kvRewards.GetString("item", sId, sizeof(sId), "random");
 			kvRewards.GetVector("origin", fOrigin);
 
-			SpawnRewardEntity(StringToInt(sSection), KindFromName(sKind), sId, fOrigin);
+			int iReward = SpawnRewardEntity(StringToInt(sSection), KindFromName(sKind), sId, fOrigin);
+
+			if (iReward != -1)
+			{
+				g_bRewardEvent[iReward] = (kvRewards.GetNum("event", 0) == 1);
+			}
 		}
 		while (kvRewards.GotoNextKey());
 	}
@@ -5256,7 +5520,7 @@ void LoadRewards()
 }
 
 // Writes a reward to this map's file. Pass -1 as the id to use the next free one. Returns the id.
-int SaveReward(int iId, int iKind, const char[] sId, float fOrigin[3])
+int SaveReward(int iId, int iKind, const char[] sId, float fOrigin[3], bool bEvent = false)
 {
 	char sKey[16], sSection[16];
 
@@ -5291,6 +5555,7 @@ int SaveReward(int iId, int iKind, const char[] sId, float fOrigin[3])
 	kvRewards.SetString("kind", g_sKindName[iKind]);
 	kvRewards.SetString("item", sId);
 	kvRewards.SetVector("origin", fOrigin);
+	kvRewards.SetNum("event", bEvent ? 1 : 0);
 	kvRewards.Rewind();
 
 	kvRewards.ExportToFile(g_sRewardDB);
@@ -5356,6 +5621,7 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 	g_bDropBox[iEntity] = false;
 	g_iEntItem[iEntity] = (iItem == -1) ? -(iKind + 2) : iItem;
 	g_iRewardId[iEntity] = iId;
+	g_bRewardEvent[iEntity] = false;
 
 	SDKHook(iEntity, SDKHook_UsePost, Hook_RewardUse);
 

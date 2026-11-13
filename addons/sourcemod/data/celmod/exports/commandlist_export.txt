@@ -35,6 +35,7 @@ v_delall - Client - Removes all the entities that you own.
 v_delete - Client - Removes the prop you are looking at.
 v_deleteall - Client - Removes all the entities that you own.
 v_delreward - Admin - Removes the reward pickup you are looking at.
+v_eventemblem - Admin - Places an event emblem where you aim. Each player can only ever earn it once.
 v_delzone - Admin - Deletes the area you are standing in.
 v_dm - Client - Changes the mode to deathmatch within the land.
 v_door - Client - Spawns a working door cel.

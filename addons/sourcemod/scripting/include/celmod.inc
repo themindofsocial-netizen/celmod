@@ -549,6 +549,24 @@ native bool Cel_IsCollectible(int iEntity);
 native bool Cel_GetDropBoxEmblem(int iEntity, char[] sName, int iMaxLength);
 
 /**
+ * Text describing a reward pickup (an event emblem, or a reward placed with !reward), for the HUD.
+ *
+ * @return  False when the entity is not a reward pickup.
+ */
+native bool Cel_GetRewardLabel(int iEntity, char[] sLabel, int iMaxLength);
+
+#define CEL_ZONE_NONE -1
+#define CEL_ZONE_RESTRICTED 0
+#define CEL_ZONE_EVENT 1
+
+/**
+ * Which kind of admin made area a point is in (from the zones plugin, which may not be loaded: mark it optional).
+ *
+ * @return  CEL_ZONE_NONE, CEL_ZONE_RESTRICTED or CEL_ZONE_EVENT.
+ */
+native int Cel_GetZoneType(const float fPos[3]);
+
+/**
  * How many of an emblem, hat or weapon a client owns.
  *
  * @return  The count, or -1 if there is no such item.

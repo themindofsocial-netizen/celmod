@@ -36,6 +36,13 @@ int g_iWeldRef[MAXPLAYERS + 1];
 
 float g_fNextTeleport[MAXPLAYERS + 1];
 
+public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
+{
+	MarkNativeAsOptional("Cel_GetZoneType");
+	
+	return APLRes_Success;
+}
+
 public Plugin myinfo =
 {
 	name = "|CelMod| Extras",
@@ -1106,6 +1113,18 @@ public void Hook_TeleportTouch(int iEntity, int iOther)
 	Cel_GetEntityOrigin(iExit, fOrigin);
 	
 	fOrigin[2] += 12.0;
+	
+	//Teleport pads can't carry players into an event or restricted area (a maze or parkour course).
+	float fCheck[3];
+	
+	fCheck = fOrigin;
+	fCheck[2] += 32.0;
+	
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && Cel_GetZoneType(fCheck) != CEL_ZONE_NONE && !CheckCommandAccess(iOther, "celmod_zone_exempt", ADMFLAG_SLAY, true))
+	{
+		Cel_PrintToChat(iOther, "This teleport pad leads into an event area, so it does not work.");
+		return;
+	}
 	
 	TeleportEntity(iOther, fOrigin, NULL_VECTOR, NULL_VECTOR);
 	

@@ -11,7 +11,9 @@
  *
  * Restricted area - flying (noclip) inside it kills you, and !fly, !noclip and !land are refused inside it.
  *				   Getting in on foot or through a map teleporter is fine.
- * Event area	  - the same, and no building command works inside it at all.
+ * Event area	  - the same, and no building command works inside it at all. Emblems give no help moving inside it
+ *				   (speed, sprint, gravity, jump, feather), and nobody can phase, blink, open portals or take a
+ *				   teleport pad into either kind of area. Put event emblems (!eventemblem) at the end of the course.
  *
  * Admins (slay flag) are never affected.
  */
@@ -44,6 +46,27 @@ char g_sEventAllowed[][] =
 	"v_owner", "v_commandlist", "v_cmds", "v_commands", "v_updates", "v_updatelist", "v_switch", "v_guess", "v_bid", 
 	"v_playermodel", "v_playermodels", "v_buymodel", "v_emblem", "v_hat", "v_weapon", "v_zones"
 };
+
+public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
+{
+	CreateNative("Cel_GetZoneType", Native_GetZoneType);
+	
+	RegPluginLibrary("celmod_zones");
+	
+	return APLRes_Success;
+}
+
+//Which kind of area a point is in: CEL_ZONE_NONE, CEL_ZONE_RESTRICTED or CEL_ZONE_EVENT.
+public int Native_GetZoneType(Handle hPlugin, int iNumParams)
+{
+	float fPos[3];
+	
+	GetNativeArray(1, fPos, 3);
+	
+	int iZone = FindZone(fPos);
+	
+	return (iZone == -1) ? CEL_ZONE_NONE : g_iZoneType[iZone];
+}
 
 public Plugin myinfo =
 {

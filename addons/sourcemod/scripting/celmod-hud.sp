@@ -635,6 +635,9 @@ public Action Timer_HUD(Handle hTimer)
 					{
 						Format(sHUDMessage, sizeof(sHUDMessage), "%s\nPrice: %d CL%s", sHUDMessage, Cel_GetEntityPrice(iEntity), Cel_CheckOwner(i, iEntity) ? "" : " (!buy)");
 					}
+				} else if (GetClientAimTarget(i, false) > MaxClients && Cel_GetRewardLabel(GetClientAimTarget(i, false), sHUDMessage, sizeof(sHUDMessage))) {
+					//Event emblems and reward pickups say what they give.
+					Cel_GetHudColor(i, iHUDColor);
 				} else if (GetClientAimTarget(i, false) > MaxClients && Cel_GetDropBoxEmblem(GetClientAimTarget(i, false), sPropName, sizeof(sPropName))) {
 					//Emblem drop boxes are nobody's until the map changes, but everyone can see what is inside.
 					Format(sHUDMessage, sizeof(sHUDMessage), "Emblem box: %s\nHold it at map change, or open it (E) in your land", sPropName);
