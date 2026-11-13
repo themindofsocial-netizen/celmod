@@ -131,6 +131,7 @@ ConVar g_cvUpgradeCost;
 int g_iBoothRef = INVALID_ENT_REFERENCE;
 float g_fBoothSpot[3];
 bool g_bBoothPlaced = false;
+bool g_bBoothSpent = false;
 char g_sLastBoothMap[PLATFORM_MAX_PATH];
 float g_fLastBoothSpot[3];
 
@@ -516,6 +517,7 @@ public void OnMapStart()
 
 	// After the Guess Booth (placed at 3 seconds), so it can be kept far away from it.
 	g_bBoothPlaced = false;
+	g_bBoothSpent = false;
 
 	CreateTimer(8.0, Timer_SpawnBooth, _, TIMER_FLAG_NO_MAPCHANGE);
 	CreateTimer(5.0, Timer_BoothGuard, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
@@ -5919,7 +5921,8 @@ bool FindHiddenBoothSpot(float fBest[3])
 	return true;
 }
 
-// The booth can't be broken, but if anything ever removes it, it comes back where it was.
+// The booth can't be broken, and if anything removes it before it has been used, it comes back where it was.
+// Once used it is gone for the rest of the map.
 public Action Timer_BoothGuard(Handle hTimer)
 {
 	if (g_bBoothPlaced && EntRefToEntIndex(g_iBoothRef) == INVALID_ENT_REFERENCE)
@@ -5980,6 +5983,7 @@ void SpawnPowerBooth(float fOrigin[3])
 
 	g_fBoothSpot = fOrigin;
 	g_bBoothPlaced = true;
+	g_bBoothSpent = false;
 
 	// Green, see-through and flickering, as it was on the original server.
 	SetEntityRenderMode(iBooth, RENDER_TRANSCOLOR);
@@ -6083,7 +6087,7 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 	float fBooth[3];
 	int iCost = g_cvUpgradeCost.IntValue, iFrom = -1, iTo = -1;
 
-	if (!IsRealClient(iActivator))
+	if (!IsRealClient(iActivator) || g_bBoothSpent)
 	{
 		return;
 	}
@@ -6265,7 +6269,62 @@ void UpgradeAtBooth(int iClient, int iBooth, int iFrom, int iTo)
 
 	EmitSoundToAll(SOUND_REWARD, iBooth);
 
-	Cel_PrintToChatAll("{green}%N{default} used the Power Booth to make a {green}%s{default} emblem!", iClient, g_Items[iTo].sName);
+	Cel_PrintToChatAll("{green}%N{default} used the Power Booth to make a {green}%s{default} emblem! The booth is overloading...", iClient, g_Items[iTo].sName);
+
+	// One use per map: the booth overloads and blows itself apart a moment later.
+	g_bBoothSpent = true;
+	g_bBoothPlaced = false;
+
+	CreateTimer(1.5, Timer_BoothExplode, EntIndexToEntRef(iBooth), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_BoothExplode(Handle hTimer, any iRef)
+{
+	float fBooth[3], fUp[3] = { 0.0, 0.0, 1.0 };
+	int iGreen[4] = { 60, 255, 60, 255 }, iWhite[4] = { 220, 255, 220, 255 };
+
+	int iBooth = EntRefToEntIndex(iRef);
+
+	if (iBooth == INVALID_ENT_REFERENCE)
+	{
+		return Plugin_Stop;
+	}
+
+	GetEntPropVector(iBooth, Prop_Data, "m_vecAbsOrigin", fBooth);
+
+	fBooth[2] += 32.0;
+
+	// A real explosion for the look and sound, but it hurts nobody and breaks nothing (spawnflag 1: no damage).
+	int iExplosion = CreateEntityByName("env_explosion");
+
+	if (iExplosion != -1)
+	{
+		DispatchKeyValue(iExplosion, "iMagnitude", "120");
+		DispatchKeyValue(iExplosion, "spawnflags", "1");
+
+		DispatchSpawn(iExplosion);
+
+		TeleportEntity(iExplosion, fBooth, NULL_VECTOR, NULL_VECTOR);
+
+		AcceptEntityInput(iExplosion, "Explode");
+		AcceptEntityInput(iExplosion, "kill");
+	}
+
+	Fx_Starburst(fBooth, 8, 140.0, g_iBmLightning, 6.0, 0.6, iGreen);
+	Fx_Ring(fBooth, 10.0, 300.0, g_iBmPhys, 14.0, 0.6, 0.0, iGreen);
+	Fx_Ring(fBooth, 10.0, 200.0, g_iBmLaser, 8.0, 0.4, 0.0, iWhite);
+	Fx_Sparks(fBooth, fUp, 8, 6);
+	Fx_Light(fBooth, iGreen, 450.0, 1.0, 7);
+
+	EmitAmbientSound(g_sFxBoom, fBooth, SOUND_FROM_WORLD, SNDLEVEL_SCREAMING);
+
+	AcceptEntityInput(iBooth, "kill");
+
+	g_iBoothRef = INVALID_ENT_REFERENCE;
+
+	Cel_PrintToChatAll("{green}The Power Booth{default} blew up. It will be back somewhere else next map.");
+
+	return Plugin_Stop;
 }
 
 // What an item looks like, for plugins that put one on display (the auction above the Guess Booth).

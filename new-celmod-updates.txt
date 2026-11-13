@@ -103,5 +103,5 @@
 		 - Boxes fall back to stock models when their .vvd/.vtx/.phy files are missing, so they can always be picked up.
 		 - !thirdperson now follows the player and their aim smoothly (cm_thirdperson_distance, cm_thirdperson_side). Hats go back on after a player model change.
 		 - New admin commands: !givemoney and !takemoney <player> <amount>.
-		 - The Power Booth no longer blows up when used, comes back if removed, and is hidden somewhere different and harder to reach each map.
+		 - The Power Booth works once per map, then overloads and explodes (harmlessly) and is gone until the next map. It is hidden somewhere different and harder to reach each map.
 		 - Every emblem has its own shot style and its own aura while held (cm_emblem_aura).
