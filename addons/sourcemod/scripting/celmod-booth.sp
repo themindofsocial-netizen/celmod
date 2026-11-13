@@ -7,7 +7,7 @@
 /*
  * |CelMod| Guess Booth
  *
- * A small yellow square at a spot an admin chose for the map (!setguessbooth, saved in data/celmod/guessbooth.txt),
+ * A small yellow square at a spot an admin chose for the map (!setguessbooth, saved as data/celmod/guessbooth/<map>.txt),
  * with three props floating in it. Maps without a saved spot have no Guess Booth.
  * One of the three is the winner. A player standing in the booth gets one guess per map; a right guess pays out.
  *
@@ -136,16 +136,57 @@ public Action Timer_PlaceBooth(Handle hTimer)
 	return Plugin_Stop;
 }
 
+//Each map's spot is its own file in data/celmod/guessbooth/, which the release never ships, so updating CelMod
+//never wipes the spots. The older single file (data/celmod/guessbooth.txt) is still read as a fallback.
+void SpotFile(char[] sPath, int iMaxLength)
+{
+	char sMap[PLATFORM_MAX_PATH], sDir[PLATFORM_MAX_PATH];
+	
+	GetCurrentMap(sMap, sizeof(sMap));
+	
+	//Workshop maps have slashes in their names.
+	ReplaceString(sMap, sizeof(sMap), "/", "_");
+	ReplaceString(sMap, sizeof(sMap), "\\", "_");
+	
+	BuildPath(Path_SM, sDir, sizeof(sDir), "data/celmod/guessbooth");
+	
+	if (!DirExists(sDir))
+	{
+		CreateDirectory(sDir, 511);
+	}
+	
+	BuildPath(Path_SM, sPath, iMaxLength, "data/celmod/guessbooth/%s.txt", sMap);
+}
+
 bool GetSavedSpot(float fSpot[3])
 {
-	char sMap[PLATFORM_MAX_PATH];
+	char sMap[PLATFORM_MAX_PATH], sPath[PLATFORM_MAX_PATH];
 	bool bFound = false;
 	
+	SpotFile(sPath, sizeof(sPath));
+	
+	KeyValues kvSpot = new KeyValues("GuessBooth");
+	
+	if (FileExists(sPath) && kvSpot.ImportFromFile(sPath))
+	{
+		kvSpot.GetVector("origin", fSpot);
+		
+		bFound = true;
+	}
+	
+	delete kvSpot;
+	
+	if (bFound)
+	{
+		return true;
+	}
+	
+	//The older single file, if the server still has one.
 	GetCurrentMap(sMap, sizeof(sMap));
 	
 	KeyValues kvSpots = new KeyValues("GuessBooth");
 	
-	if (kvSpots.ImportFromFile(g_sBoothDB) && kvSpots.JumpToKey(sMap, false))
+	if (FileExists(g_sBoothDB) && kvSpots.ImportFromFile(g_sBoothDB) && kvSpots.JumpToKey(sMap, false))
 	{
 		kvSpots.GetVector("origin", fSpot);
 		
@@ -157,31 +198,55 @@ bool GetSavedSpot(float fSpot[3])
 	return bFound;
 }
 
-void SetSavedSpot(const float fSpot[3], bool bRemove)
+//Returns false (and says why in the server log) when the spot could not be written.
+bool SetSavedSpot(const float fSpot[3], bool bRemove)
 {
-	char sMap[PLATFORM_MAX_PATH];
+	char sMap[PLATFORM_MAX_PATH], sPath[PLATFORM_MAX_PATH];
 	
-	GetCurrentMap(sMap, sizeof(sMap));
-	
-	KeyValues kvSpots = new KeyValues("GuessBooth");
-	
-	kvSpots.ImportFromFile(g_sBoothDB);
+	SpotFile(sPath, sizeof(sPath));
 	
 	if (bRemove)
 	{
-		if (kvSpots.JumpToKey(sMap, false))
+		if (FileExists(sPath))
+		{
+			DeleteFile(sPath);
+		}
+		
+		//Also out of the older single file, so it does not come back from there.
+		GetCurrentMap(sMap, sizeof(sMap));
+		
+		KeyValues kvSpots = new KeyValues("GuessBooth");
+		
+		if (FileExists(g_sBoothDB) && kvSpots.ImportFromFile(g_sBoothDB) && kvSpots.JumpToKey(sMap, false))
 		{
 			kvSpots.DeleteThis();
+			kvSpots.Rewind();
+			kvSpots.ExportToFile(g_sBoothDB);
 		}
-	} else {
-		kvSpots.JumpToKey(sMap, true);
-		kvSpots.SetVector("origin", fSpot);
+		
+		delete kvSpots;
+		
+		return true;
 	}
 	
-	kvSpots.Rewind();
-	kvSpots.ExportToFile(g_sBoothDB);
+	KeyValues kvSpot = new KeyValues("GuessBooth");
 	
-	delete kvSpots;
+	kvSpot.SetVector("origin", fSpot);
+	
+	bool bSaved = kvSpot.ExportToFile(sPath);
+	
+	delete kvSpot;
+	
+	//Read back, to be sure it really is on disk.
+	float fCheck[3];
+	
+	if (!bSaved || !GetSavedSpot(fCheck) || GetVectorDistance(fCheck, fSpot) > 1.0)
+	{
+		LogError("|CelMod| Could not save the Guess Booth spot to %s. Check that the server can write to that folder.", sPath);
+		return false;
+	}
+	
+	return true;
 }
 
 void RemoveBooth()
@@ -210,9 +275,13 @@ public Action Command_SetGuessBooth(int iClient, int iArgs)
 	GetClientAbsOrigin(iClient, fOrigin);
 	GetCurrentMap(sMap, sizeof(sMap));
 	
-	SetSavedSpot(fOrigin, false);
-	
 	MoveBooth(fOrigin);
+	
+	if (!SetSavedSpot(fOrigin, false))
+	{
+		Cel_ReplyToCommand(iClient, "The Guess Booth was moved here, but the spot {green}could not be saved{default}: the server could not write to {green}data/celmod/guessbooth/{default}. See the error log.");
+		return Plugin_Handled;
+	}
 	
 	Cel_ReplyToCommand(iClient, "The Guess Booth on {green}%s{default} will now always be here.", sMap);
 	

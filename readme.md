@@ -64,7 +64,7 @@ v_god|Enables/disables breakability on the prop you are looking at.|None|Client|
 v_gravity|Changes the gravity within the land.|v_landgravity|Client|
 v_guess|Guesses the winning prop at the Guess Booth. One guess per map.|None|Client|
 v_guessbooth|Moves the Guess Booth to where you are standing for this map only, with new props.|None|Admin|
-v_setguessbooth|Saves where you are standing as this map's Guess Booth spot (data/celmod/guessbooth.txt).|None|Admin|
+v_setguessbooth|Saves where you are standing as this map's Guess Booth spot (data/celmod/guessbooth/<map>.txt).|None|Admin|
 v_delguessbooth|Removes this map's Guess Booth spot and the booth.|None|Admin|
 v_hat|Spawns a hat you own, or takes off your hat (off).|None|Client|
 v_hide|Hides another player's entities from your view.|None|Client|

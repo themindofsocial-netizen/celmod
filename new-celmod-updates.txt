@@ -119,3 +119,4 @@
 	 - 12/10/26: Build teams: !addteam <player> lets them build in your land and edit the props in it (as the original Team Build did). !delteam <player> removes them; !delteam on its own lists your team. Teams are remembered between visits.
 		 - Teammates' props stay theirs (their prop limit; only the real owner can sell, give or trade them), but the land owner's !save includes everything the team built in the land, and !load gives it all to the land owner.
 		 - !speed turns the walk key speed change on or off (handy when Alt-Tabbing). Turning it off puts you back to normal speed. Remembered between visits.
+	 - 12/11/26: Guess Booth spots are now saved one file per map in data/celmod/guessbooth/, which CelMod updates never overwrite (the release used to ship an empty guessbooth.txt that wiped saved spots). Old guessbooth.txt spots are still read. !setguessbooth says so if the spot could not be written.
