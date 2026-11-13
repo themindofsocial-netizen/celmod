@@ -3386,7 +3386,7 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
 
 	// Once parented to the attachment these are relative to the player's right hand.
-	TeleportEntity(iHand, g_Items[iItem].fHandOffset, g_Items[iItem].fHandAngles, NULL_VECTOR);
+	SetLocalOffset(iHand, g_Items[iItem].fHandOffset, g_Items[iItem].fHandAngles);
 
 	g_iHandEntRef[iClient] = EntIndexToEntRef(iHand);
 
@@ -5410,6 +5410,13 @@ void RemoveHatEntity(int iClient)
 	g_iHatEntRef[iClient] = INVALID_ENT_REFERENCE;
 }
 
+// Places a parented entity relative to its parent (or the attachment it is on).
+void SetLocalOffset(int iEntity, const float fOffset[3], const float fAngles[3])
+{
+	SetEntPropVector(iEntity, Prop_Send, "m_vecOrigin", fOffset);
+	SetEntPropVector(iEntity, Prop_Send, "m_angRotation", fAngles);
+}
+
 void CreateHatEntity(int iClient)
 {
 	int iItem = g_iActiveHat[iClient];
@@ -5479,8 +5486,9 @@ void CreateHatEntity(int iClient)
 
 	if (bAttached)
 	{
-		// Once parented to the attachment these are relative to the player's head.
-		TeleportEntity(iHat, g_Items[iItem].fOffset, g_Items[iItem].fAngles, NULL_VECTOR);
+		// Relative to the player's head. (TeleportEntity would take these as a position in the world and put the
+		// hat near the middle of the map, where nobody sees it.)
+		SetLocalOffset(iHat, g_Items[iItem].fOffset, g_Items[iItem].fAngles);
 	} else {
 		// No head attachment at all: the hat sits at standing head height above the player's feet.
 		float fFallback[3];
@@ -5489,7 +5497,7 @@ void CreateHatEntity(int iClient)
 		fFallback[1] = g_Items[iItem].fOffset[1];
 		fFallback[2] = g_Items[iItem].fOffset[2] + 64.0;
 
-		TeleportEntity(iHat, fFallback, g_Items[iItem].fAngles, NULL_VECTOR);
+		SetLocalOffset(iHat, fFallback, g_Items[iItem].fAngles);
 	}
 
 	g_iHatEntRef[iClient] = EntIndexToEntRef(iHat);

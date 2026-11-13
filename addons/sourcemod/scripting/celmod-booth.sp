@@ -530,32 +530,49 @@ void PlaceKleiner(float fCenter[3])
 	
 	g_iKleinerRef = EntIndexToEntRef(iKleiner);
 	
-	//A traffic cone on his head.
+	//A traffic cone on his head, fixed to his eyes so it sits on his head whatever his pose.
 	int iCone = CreateEntityByName("prop_dynamic_override");
 	
 	if (iCone != -1)
 	{
-		//He never moves, so the cone simply sits at the top of his head: the top of his model, less a little.
-		float fConePos[3], fKleinerMaxs[3];
-		
-		GetEntPropVector(iKleiner, Prop_Send, "m_vecMaxs", fKleinerMaxs);
-		
-		fConePos = fPos;
-		fConePos[2] += (fKleinerMaxs[2] > 40.0 ? fKleinerMaxs[2] : 72.0) - 2.0;
-		
 		DispatchKeyValue(iCone, "model", CONE_MODEL);
-		DispatchKeyValue(iCone, "solid", "0");
+		DispatchKeyValue(iCone, "solid", "2");
 		DispatchKeyValue(iCone, "classname", "cel_booth_cone");
 		
 		DispatchSpawn(iCone);
+		
+		//A bounding box (so its size is known) that players walk straight through.
+		SetEntProp(iCone, Prop_Send, "m_CollisionGroup", 1);
 		
 		float fConeMins[3];
 		
 		GetEntPropVector(iCone, Prop_Send, "m_vecMins", fConeMins);
 		
-		fConePos[2] -= fConeMins[2] + 6.0;
+		float fConePos[3], fConeAngles[3];
+		
+		fConePos = fPos;
+		fConePos[2] += 70.0;
 		
 		TeleportEntity(iCone, fConePos, fAngles, NULL_VECTOR);
+		
+		if (LookupEntityAttachment(iKleiner, "eyes") > 0)
+		{
+			SetVariantString("!activator");
+			AcceptEntityInput(iCone, "SetParent", iKleiner, iCone);
+			
+			SetVariantString("eyes");
+			AcceptEntityInput(iCone, "SetParentAttachment", iCone, iCone);
+			
+			//Relative to his eyes: a little back and up, standing upright on top of his head.
+			//The cone's base goes about 7 units above his eyes, the top of his head.
+			float fOffset[3];
+			
+			fOffset[0] = -3.0;
+			fOffset[2] = 7.0 - fConeMins[2];
+			
+			SetEntPropVector(iCone, Prop_Send, "m_vecOrigin", fOffset);
+			SetEntPropVector(iCone, Prop_Send, "m_angRotation", fConeAngles);
+		}
 		
 		g_iConeRef = EntIndexToEntRef(iCone);
 	}

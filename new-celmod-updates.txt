@@ -121,3 +121,4 @@
 		 - !speed turns the walk key speed change on or off (handy when Alt-Tabbing). Turning it off puts you back to normal speed. Remembered between visits.
 	 - 12/11/26: Guess Booth spots are now saved one file per map in data/celmod/guessbooth/, which CelMod updates never overwrite (the release used to ship an empty guessbooth.txt that wiped saved spots). Old guessbooth.txt spots are still read. !setguessbooth says so if the spot could not be written.
 	 - 12/12/26: The Power Booth now looks across the whole map (not just near the spawn points), no longer always picks the single tallest area, and is chosen at random from the better third of the spots found. It never returns within an eighth of the map's size of last time's spot.
+	 - 12/13/26: Hats now really sit on players' heads (they were being placed near the middle of the map). The same fix applies to emblems and celweps shown in hand, and Dr. Kleiner's traffic cone is now fixed to his head.
