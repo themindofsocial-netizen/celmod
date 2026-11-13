@@ -138,7 +138,8 @@ public void OnPluginStart()
 	
 	g_cvSkullSize = CreateConVar("cm_land_skull_size", "16", "How big (in units) the co-op and deathmatch skulls over players' heads are. A player is about 72 units tall.", _, true, 2.0, true, 128.0);
 	g_cvSkullSize.AddChangeHook(CMLand_OnSkullSizeChanged);
-	g_cvSkullHeight = CreateConVar("cm_land_skull_height", "90", "How high above a player's feet the land skull floats.", _, true, 60.0, true, 200.0);
+	g_cvSkullHeight = CreateConVar("cm_land_skull_height", "80", "How high above a player's feet the middle of the land skull floats (a player is about 72 units tall).", _, true, 40.0, true, 200.0);
+	g_cvSkullHeight.AddChangeHook(CMLand_OnSkullHeightChanged);
 	
 	CreateTimer(0.25, Timer_Skulls, _, TIMER_REPEAT);
 	
@@ -509,6 +510,15 @@ int PrecacheSkull(const char[] sMaterial)
 float SkullScale(int iMode)
 {
 	return g_cvSkullSize.FloatValue / float(g_iSkullPixels[iMode] > 0 ? g_iSkullPixels[iMode] : 128);
+}
+
+//A new height: every skull is put back on at the new height (the timer puts them back within a quarter second).
+public void CMLand_OnSkullHeightChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		RemoveSkull(i);
+	}
 }
 
 //A new size applies to every skull already showing, straight away.
