@@ -74,6 +74,7 @@ v_landdeathmatch - Client - Changes the mode to deathmatch within the land.
 v_landgravity - Client - Changes the gravity within the land.
 v_landkick - Client - Kicks a player out of your land for 10 seconds.
 v_landshop - Client - Changes the mode to shop (merchant) within the land.
+v_landskin - Client - Covers the floor of your land with a land skin (1 to 26), or removes it (off).
 v_landslay - Client - Slays a player, or everyone, inside your land.
 v_landunban - Client - Lets a banned player back into your land.
 v_light - Client - Creates a working light cel.

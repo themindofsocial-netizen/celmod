@@ -7,7 +7,14 @@
 #define LAND_MODEL "models/error.mdl"
 
 bool g_bLandColor[MAXPLAYERS + 1];
+
+ArrayList g_alSkinTiles[MAXPLAYERS + 1];
+ConVar g_cvSkinTexture;
+ConVar g_cvSkinTile;
+int g_iLandSkin[MAXPLAYERS + 1];
 bool g_bLate;
+
+#define LANDSKIN_COUNT 26
 
 ConVar g_cvMaxLandSize;
 
@@ -117,6 +124,15 @@ public void OnPluginStart()
 	RegConsoleCmd("v_deathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_dm", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_gravity", Command_LandGravity, "|CelMod| Changes the gravity within the land.");
+	g_cvSkinTile = CreateConVar("cm_landskin_tile", "512", "Size in units of each land skin tile laid over a land's floor.", _, true, 64.0, true, 2048.0);
+	g_cvSkinTexture = CreateConVar("cm_landskin_texture", "512", "Size in pixels of the land skin textures; sets how big each tile is drawn.", _, true, 16.0);
+	
+	for (int i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_alSkinTiles[i] = new ArrayList();
+	}
+	
+	RegConsoleCmd("v_landskin", Command_LandSkin, "|CelMod| Covers the floor of your land with a land skin (1 to 26), or removes it (off).");
 	RegConsoleCmd("v_landcolor", Command_LandColor, "|CelMod| Changes the color of your land's border.");
 	RegConsoleCmd("v_land", Command_Land, "|CelMod| Creates a building zone.");
 	RegConsoleCmd("v_landcoop", Command_LandCoop, "|CelMod| Changes the mode to co-op within the land.");
@@ -131,6 +147,13 @@ public void OnClientPutInServer(int iClient)
 	Cel_ClearLand(iClient);
 	
 	g_bLandColor[iClient] = false;
+	
+	g_iLandSkin[iClient] = Cel_GetClientSettingInt(iClient, "landskin");
+	
+	if (g_iLandSkin[iClient] < 1 || g_iLandSkin[iClient] > LANDSKIN_COUNT)
+	{
+		g_iLandSkin[iClient] = 0;
+	}
 	
 	g_hGettingTop[iClient] = CreateTimer(0.1, Timer_GettingTop, GetClientUserId(iClient), TIMER_REPEAT);
 	g_hLandTimer[iClient] = CreateTimer(0.1, Timer_Land, GetClientUserId(iClient), TIMER_REPEAT);
@@ -235,6 +258,9 @@ public Action Command_Land(int iClient, int iArgs)
 				g_liLand[iClient].fLandPosBottomMiddle[2] = g_liLand[iClient].fLandPosBottom[2];
 				
 				Cel_CreateLand(iClient, g_liLand[iClient].fLandPosBottom, g_liLand[iClient].fLandPosTop);
+				
+				//A land skin the player chose before is laid on the new land.
+				ApplyLandSkin(iClient);
 				
 				g_liLand[iClient].iLandStage = 2;
 				
@@ -383,6 +409,8 @@ public int Native_CreateLand(Handle hPlugin, int iNumParams)
 public int Native_ClearLand(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
+	
+	RemoveLandSkin(iClient);
 	
 	g_liLand[iClient].bInCoopMode = false;
 	g_liLand[iClient].bInDeathmatchMode = false;
@@ -1000,6 +1028,153 @@ public Action Timer_GettingTop(Handle hTimer, any iPlayer)
 	}
 	
 	return Plugin_Continue;
+}
+
+//Land skins: materials/celmod/landskins/s1 to s26, drawn as flat tiles lying just above the land's floor.
+void RemoveLandSkin(int iClient)
+{
+	for (int i = 0; i < g_alSkinTiles[iClient].Length; i++)
+	{
+		int iTile = EntRefToEntIndex(g_alSkinTiles[iClient].Get(i));
+
+		if (iTile != INVALID_ENT_REFERENCE && iTile > MaxClients)
+		{
+			AcceptEntityInput(iTile, "kill");
+		}
+	}
+
+	g_alSkinTiles[iClient].Clear();
+}
+
+void ApplyLandSkin(int iClient)
+{
+	char sMaterial[PLATFORM_MAX_PATH];
+	float fAngles[3] = { -90.0, 0.0, 0.0 }, fMax[3], fMin[3], fPos[3];
+
+	RemoveLandSkin(iClient);
+
+	if (g_iLandSkin[iClient] < 1 || !g_liLand[iClient].bLandCreated)
+	{
+		return;
+	}
+
+	for (int k = 0; k < 3; k++)
+	{
+		fMin[k] = (g_liLand[iClient].fLandPosBottom[k] < g_liLand[iClient].fLandPosTop[k]) ? g_liLand[iClient].fLandPosBottom[k] : g_liLand[iClient].fLandPosTop[k];
+		fMax[k] = (g_liLand[iClient].fLandPosBottom[k] < g_liLand[iClient].fLandPosTop[k]) ? g_liLand[iClient].fLandPosTop[k] : g_liLand[iClient].fLandPosBottom[k];
+	}
+
+	Format(sMaterial, sizeof(sMaterial), "celmod/landskins/s%d.vmt", g_iLandSkin[iClient]);
+
+	float fTile = g_cvSkinTile.FloatValue;
+	float fWidth = fMax[0] - fMin[0], fLength = fMax[1] - fMin[1];
+
+	//Square tiles, overlapping a little where the land is not a whole number of tiles, so they cover it exactly.
+	int iAcross = RoundToCeil(fWidth / fTile), iAlong = RoundToCeil(fLength / fTile);
+
+	if (iAcross < 1) iAcross = 1;
+	if (iAlong < 1) iAlong = 1;
+
+	float fTileX = (fWidth < fTile) ? fWidth : fTile;
+	float fTileY = (fLength < fTile) ? fLength : fTile;
+	float fSize = (fTileX > fTileY) ? fTileX : fTileY;
+
+	for (int x = 0; x < iAcross; x++)
+	{
+		for (int y = 0; y < iAlong; y++)
+		{
+			int iTile = CreateEntityByName("env_sprite_oriented");
+
+			if (iTile == -1)
+			{
+				return;
+			}
+
+			fPos[0] = fMin[0] + fTileX * 0.5 + ((iAcross > 1) ? x * (fWidth - fTileX) / (iAcross - 1) : (fWidth - fTileX) * 0.5);
+			fPos[1] = fMin[1] + fTileY * 0.5 + ((iAlong > 1) ? y * (fLength - fTileY) / (iAlong - 1) : (fLength - fTileY) * 0.5);
+
+			//Just above the floor, each tile a hair apart in height so overlapping edges do not flicker.
+			fPos[2] = fMin[2] + 1.0 + ((x + y) % 4) * 0.1;
+
+			DispatchKeyValue(iTile, "model", sMaterial);
+			DispatchKeyValue(iTile, "rendermode", "0");
+			DispatchKeyValue(iTile, "renderamt", "255");
+			DispatchKeyValue(iTile, "spawnflags", "1");
+			DispatchKeyValue(iTile, "classname", "cel_landskin");
+			DispatchKeyValueFloat(iTile, "scale", fSize / g_cvSkinTexture.FloatValue);
+
+			DispatchSpawn(iTile);
+
+			TeleportEntity(iTile, fPos, fAngles, NULL_VECTOR);
+
+			AcceptEntityInput(iTile, "ShowSprite");
+
+			g_alSkinTiles[iClient].Push(EntIndexToEntRef(iTile));
+		}
+	}
+}
+
+public Action Command_LandSkin(int iClient, int iArgs)
+{
+	char sArg[16], sDisplay[64];
+	int iPrice;
+
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]landskin{default} <1-%d/off>", LANDSKIN_COUNT);
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sArg, sizeof(sArg));
+
+	if (StrEqual(sArg, "off", false) || StrEqual(sArg, "0"))
+	{
+		g_iLandSkin[iClient] = 0;
+
+		Cel_SetClientSettingInt(iClient, "landskin", 0);
+
+		RemoveLandSkin(iClient);
+
+		Cel_ReplyToCommand(iClient, "Your land skin has been removed.");
+
+		return Plugin_Handled;
+	}
+
+	int iSkin = StringToInt(sArg);
+
+	if (iSkin < 1 || iSkin > LANDSKIN_COUNT)
+	{
+		Cel_ReplyToCommand(iClient, "Land skins go from {green}1{default} to {green}%d{default}.", LANDSKIN_COUNT);
+		return Plugin_Handled;
+	}
+
+	//Land skins are bought once in the shop, when the shop sells them.
+	if (Cel_CheckShopDB("landskin", iPrice, sDisplay, sizeof(sDisplay)) && !Cel_CheckClientPurchase(iClient, "landskin"))
+	{
+		Cel_ReplyToCommand(iClient, "Land skins cost {green}%d CL{default}. Buy them with {green}[tag]buy landskin{default}.", iPrice);
+		return Plugin_Handled;
+	}
+
+	g_iLandSkin[iClient] = iSkin;
+
+	Cel_SetClientSettingInt(iClient, "landskin", iSkin);
+
+	if (!g_liLand[iClient].bLandCreated)
+	{
+		Cel_ReplyToCommand(iClient, "Land skin {green}%d{default} chosen. It will cover your land once you make one with {green}[tag]land{default}.", iSkin);
+		return Plugin_Handled;
+	}
+
+	ApplyLandSkin(iClient);
+
+	Cel_ReplyToCommand(iClient, "Your land now has land skin {green}%d{default}.", iSkin);
+
+	return Plugin_Handled;
 }
 
 public Action Command_LandColor(int iClient, int iArgs)

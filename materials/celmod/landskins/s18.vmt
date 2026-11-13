@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "metal/citadel_metalwall078a"
+	"$surfaceprop" "metal"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

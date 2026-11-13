@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "nature/grassfloor002a"
+	"$surfaceprop" "grass"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

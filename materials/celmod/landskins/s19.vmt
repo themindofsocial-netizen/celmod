@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "dev/dev_corrugatedmetal"
+	"$surfaceprop" "metal"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

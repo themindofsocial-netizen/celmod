@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "skybox/sky_day01_05up"
+	"$surfaceprop" "flesh"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "concrete/concretefloor008b"
+	"$surfaceprop" "concrete"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

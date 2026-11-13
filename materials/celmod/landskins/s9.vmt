@@ -1,0 +1,21 @@
+"UnlitGeneric"
+{
+	"$basetexture" "dev/water"
+	"$surfaceprop" "water"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"AnimatedTexture"
+		{
+			"animatedtexturevar"	"$basetexture"
+			"animatedtextureframenumvar"	"$frame"
+			"animatedtextureframerate"	24
+		}
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

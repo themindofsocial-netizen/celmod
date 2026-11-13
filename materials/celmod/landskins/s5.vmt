@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "nature/dirtfloor002a"
+	"$surfaceprop" "dirt"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

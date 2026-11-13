@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "tile/tilefloor011a"
+	"$surfaceprop" "tile"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

@@ -94,3 +94,4 @@
 		 - Money drops and dug up money use the cleers money box.
 		 - New Phantom emblem: hold right click to phase through walls.
 		 - Tactics level: earn experience by playing, building and fighting. The HUD shows Money, Tactics Lvl and an EXP bar. !tacticlvl, !tacticxp.
+	 - 12/02/26: !landskin <1-26> covers the floor of your land with a land skin (bought once in the shop). !landskin off removes it.

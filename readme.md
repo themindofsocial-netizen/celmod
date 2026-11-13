@@ -68,6 +68,7 @@ v_land|Creates a building zone.|None|Client|
 v_landban|Bans a player from your land.|None|Client|
 v_landcolor|Changes the color of your land's border.|None|Client|
 v_landkick|Kicks a player out of your land for 10 seconds.|None|Client|
+v_landskin|Covers the floor of your land with a land skin (1 to 26), or removes it (off).|None|Client|
 v_landslay|Slays a player, or everyone, inside your land.|None|Client|
 v_landunban|Lets a banned player back into your land.|None|Client|
 v_light|Creates a working light cel.|None|Client|

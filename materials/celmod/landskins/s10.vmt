@@ -1,0 +1,15 @@
+"UnlitGeneric"
+{
+	"$basetexture" "nature/toxicslime002a"
+	"$surfaceprop" "water"
+	"$nodecal" 1
+	"$scaled" 16
+	"Proxies"
+	{
+		"TextureTransform"
+		{
+			"scaleVar" "$scaled"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}
