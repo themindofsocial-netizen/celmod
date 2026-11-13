@@ -239,6 +239,7 @@ int g_iMinutesSinceDrop;
 int g_iModdedWeaponRef[MAXPLAYERS + 1];
 int g_iRewardId[MAXENTITIES + 1];
 bool g_bRewardEvent[MAXENTITIES + 1];
+bool g_bRewardLinked[MAXENTITIES + 1];
 bool g_bInEvent[MAXPLAYERS + 1];
 float g_fPhaseStart[MAXPLAYERS + 1][3];
 int g_iTick;
@@ -499,6 +500,8 @@ public void OnMapStart()
 		g_bDropBox[i] = false;
 		g_iEntItem[i] = -1;
 		g_iRewardId[i] = -1;
+		g_bRewardEvent[i] = false;
+		g_bRewardLinked[i] = false;
 	}
 
 	g_iMinutesSinceDrop = 0;
@@ -533,6 +536,8 @@ public void OnMapStart()
 
 	LoadItems();
 	LoadRewards();
+
+	CreateTimer(2.0, Timer_LinkRewards, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public void OnClientPutInServer(int iClient)
@@ -587,6 +592,8 @@ public void OnEntityDestroyed(int iEntity)
 		g_bDropBox[iEntity] = false;
 		g_iEntItem[iEntity] = -1;
 		g_iRewardId[iEntity] = -1;
+		g_bRewardEvent[iEntity] = false;
+		g_bRewardLinked[iEntity] = false;
 	}
 }
 
@@ -1351,12 +1358,36 @@ public Action Command_EventItem(int iClient, int iArgs)
 
 	if (iArgs < 2)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]eventitem{default} <emblem/hat/weapon> <name> (placed where you aim; remove it with {green}[tag]delreward{default})");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]eventitem{default} <emblem/hat/weapon> <name> (placed where you aim), or {green}[tag]eventitem link{default} <emblem/hat/weapon> <name> (makes the map object you look at claimable). {green}[tag]delreward{default} removes either.");
 		return Plugin_Handled;
 	}
 
 	GetCmdArg(1, sKind, sizeof(sKind));
 	GetCmdArg(2, sId, sizeof(sId));
+
+	// Link: a map's own entity (a prop, button, door or other brush entity) becomes the claimable object.
+	if (StrEqual(sKind, "link", false))
+	{
+		if (iArgs < 3)
+		{
+			Cel_ReplyToCommand(iClient, "Usage: {green}[tag]eventitem link{default} <emblem/hat/weapon> <name>, while looking at a map object.");
+			return Plugin_Handled;
+		}
+
+		strcopy(sKind, sizeof(sKind), sId);
+
+		GetCmdArg(3, sId, sizeof(sId));
+
+		if (!StrEqual(sKind, "emblem", false) && !StrEqual(sKind, "hat", false) && !StrEqual(sKind, "weapon", false) && !StrEqual(sKind, "celwep", false))
+		{
+			Cel_ReplyToCommand(iClient, "The kind must be {green}emblem{default}, {green}hat{default} or {green}weapon{default}.");
+			return Plugin_Handled;
+		}
+
+		LinkEventItem(iClient, KindFromName(sKind), sId);
+
+		return Plugin_Handled;
+	}
 
 	if (!StrEqual(sKind, "emblem", false) && !StrEqual(sKind, "hat", false) && !StrEqual(sKind, "weapon", false) && !StrEqual(sKind, "celwep", false))
 	{
@@ -1415,6 +1446,126 @@ void PlaceEventItem(int iClient, int iKind, const char[] sName)
 	}
 }
 
+void LinkEventItem(int iClient, int iKind, const char[] sName)
+{
+	char sClassname[64];
+
+	if (!IsRealClient(iClient))
+	{
+		return;
+	}
+
+	int iItem = FindItem(iKind, sName);
+
+	if (iItem == -1 || g_Items[iItem].bIsBig)
+	{
+		Cel_ReplyToCommand(iClient, "There is no %s called {green}%s{default}.", g_sKindName[iKind], sName);
+		return;
+	}
+
+	int iTarget = GetClientAimTarget(iClient, false);
+
+	// Only the map's own entities: they carry the Hammer ID the map was built with, which is the same every time
+	// the map loads. Static props and world brushes are part of the world and can't be used.
+	if (iTarget <= MaxClients || iTarget > MAXENTITIES || !IsValidEntity(iTarget) || !HasEntProp(iTarget, Prop_Data, "m_iHammerID") || GetEntProp(iTarget, Prop_Data, "m_iHammerID") < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Look at one of the map's own entities (a prop_dynamic or prop_physics prop, a button, a door or another brush entity). Static props and plain walls are part of the world and can't be used.");
+		return;
+	}
+
+	if (Cel_IsEntity(iTarget) || g_iRewardId[iTarget] != -1)
+	{
+		Cel_ReplyToCommand(iClient, "That is already a CelMod entity or a claimable item.");
+		return;
+	}
+
+	int iHammer = GetEntProp(iTarget, Prop_Data, "m_iHammerID");
+	float fOrigin[3];
+
+	GetEntPropVector(iTarget, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+	int iId = SaveReward(-1, iKind, g_Items[iItem].sId, fOrigin, true, iHammer);
+
+	MarkLinked(iTarget, iId, iItem);
+
+	GetEntityClassname(iTarget, sClassname, sizeof(sClassname));
+
+	Cel_ReplyToCommand(iClient, "This {green}%s{default} (Hammer ID %d) now gives the event %s {green}%s{default} (#%d). Every player can press E on it once and only once.", sClassname, iHammer, g_sKindName[iKind], g_Items[iItem].sName, iId);
+
+	if (ZoneTypeAt(fOrigin) != CEL_ZONE_EVENT)
+	{
+		Cel_ReplyToCommand(iClient, "Tip: put the course inside an event area ({green}[tag]zone{default}) so nobody can fly, phase or blink to it.");
+	}
+}
+
+void MarkLinked(int iEntity, int iId, int iItem)
+{
+	g_bDropBox[iEntity] = false;
+	g_iEntItem[iEntity] = iItem;
+	g_iRewardId[iEntity] = iId;
+	g_bRewardEvent[iEntity] = true;
+	g_bRewardLinked[iEntity] = true;
+}
+
+// Attaches linked event items to the map's entities, by Hammer ID, once they have all spawned.
+public Action Timer_LinkRewards(Handle hTimer)
+{
+	char sId[64], sKind[32], sSection[16];
+
+	if (!FileExists(g_sRewardDB))
+	{
+		return Plugin_Stop;
+	}
+
+	KeyValues kvRewards = new KeyValues("Rewards");
+
+	if (kvRewards.ImportFromFile(g_sRewardDB) && kvRewards.GotoFirstSubKey())
+	{
+		do
+		{
+			int iHammer = kvRewards.GetNum("hammerid", 0);
+
+			if (iHammer < 1)
+			{
+				continue;
+			}
+
+			kvRewards.GetSectionName(sSection, sizeof(sSection));
+			kvRewards.GetString("kind", sKind, sizeof(sKind), "emblem");
+			kvRewards.GetString("item", sId, sizeof(sId), "");
+
+			int iItem = FindItem(KindFromName(sKind), sId);
+			int iEntity = FindByHammerId(iHammer);
+
+			if (iItem == -1 || iEntity == -1)
+			{
+				LogError("|CelMod| Linked event item #%s on %s: %s.", sSection, g_sMap, iItem == -1 ? "unknown item" : "no map entity with that Hammer ID");
+				continue;
+			}
+
+			MarkLinked(iEntity, StringToInt(sSection), iItem);
+		}
+		while (kvRewards.GotoNextKey());
+	}
+
+	delete kvRewards;
+
+	return Plugin_Stop;
+}
+
+int FindByHammerId(int iHammer)
+{
+	for (int i = MaxClients + 1; i <= MAXENTITIES && i < GetMaxEntities(); i++)
+	{
+		if (IsValidEntity(i) && HasEntProp(i, Prop_Data, "m_iHammerID") && GetEntProp(i, Prop_Data, "m_iHammerID") == iHammer)
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 public int Native_GetRewardLabel(Handle hPlugin, int iNumParams)
 {
 	char sLabel[128];
@@ -1445,19 +1596,31 @@ public int Native_GetRewardLabel(Handle hPlugin, int iNumParams)
 // Event emblems glow and send up rings, so the prize at the end of a course stands out.
 void ThinkEventEmblems()
 {
-	float fOrigin[3];
-	int iColor[4], iEntity = -1;
+	float fOrigin[3], fMins[3], fMaxs[3];
+	int iColor[4];
 
-	while ((iEntity = FindEntityByClassname(iEntity, "cel_reward")) != -1)
+	for (int iEntity = MaxClients + 1; iEntity <= MAXENTITIES && iEntity < GetMaxEntities(); iEntity++)
 	{
-		if (iEntity > MAXENTITIES || !g_bRewardEvent[iEntity] || g_iEntItem[iEntity] < 0)
+		if (g_iRewardId[iEntity] == -1 || !g_bRewardEvent[iEntity] || g_iEntItem[iEntity] < 0 || !IsValidEntity(iEntity))
 		{
 			continue;
 		}
 
 		int iItem = g_iEntItem[iEntity];
 
+		// The middle of the object: brush entities often have their origin somewhere else entirely.
 		GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+		if (HasEntProp(iEntity, Prop_Send, "m_vecMins"))
+		{
+			GetEntPropVector(iEntity, Prop_Send, "m_vecMins", fMins);
+			GetEntPropVector(iEntity, Prop_Send, "m_vecMaxs", fMaxs);
+
+			for (int k = 0; k < 3; k++)
+			{
+				fOrigin[k] += (fMins[k] + fMaxs[k]) * 0.5;
+			}
+		}
 
 		iColor[0] = g_Items[iItem].iBeamColor[0];
 		iColor[1] = g_Items[iItem].iBeamColor[1];
@@ -1581,6 +1744,19 @@ public Action Command_DelReward(int iClient, int iArgs)
 	}
 
 	delete kvRewards;
+
+	// A map entity that was linked stays in the map; it just stops being claimable.
+	if (g_bRewardLinked[iEntity])
+	{
+		g_iRewardId[iEntity] = -1;
+		g_iEntItem[iEntity] = -1;
+		g_bRewardEvent[iEntity] = false;
+		g_bRewardLinked[iEntity] = false;
+
+		Cel_ReplyToCommand(iClient, "Unlinked event item {green}#%d{default} from this map entity.", iId);
+
+		return Plugin_Handled;
+	}
 
 	AcceptEntityInput(iEntity, "kill");
 
@@ -1870,12 +2046,26 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 
 		if (iAim > MaxClients && iAim <= MAXENTITIES && g_iRewardId[iAim] != -1)
 		{
-			float fEyes[3], fReward[3];
+			// Measured to the point being looked at, so large map objects work from any side.
+			float fEyes[3], fAngles[3], fHit[3];
 
 			GetClientEyePosition(iClient, fEyes);
-			GetEntPropVector(iAim, Prop_Data, "m_vecAbsOrigin", fReward);
+			GetClientEyeAngles(iClient, fAngles);
 
-			if (GetVectorDistance(fEyes, fReward) <= 160.0)
+			Handle hAim = TR_TraceRayFilterEx(fEyes, fAngles, MASK_SHOT, RayType_Infinite, Filter_NotSelf, iClient);
+
+			bool bClose = false;
+
+			if (TR_DidHit(hAim) && TR_GetEntityIndex(hAim) == iAim)
+			{
+				TR_GetEndPosition(fHit, hAim);
+
+				bClose = (GetVectorDistance(fEyes, fHit) <= 120.0);
+			}
+
+			CloseHandle(hAim);
+
+			if (bClose)
 			{
 				Hook_RewardUse(iAim, iClient, iClient, Use_Toggle, 0.0);
 			}
@@ -5562,6 +5752,12 @@ void LoadRewards()
 			kvRewards.GetString("item", sId, sizeof(sId), "random");
 			kvRewards.GetVector("origin", fOrigin);
 
+			// Linked to one of the map's own entities: attached once the map's entities are all there.
+			if (kvRewards.GetNum("hammerid", 0) > 0)
+			{
+				continue;
+			}
+
 			int iReward = SpawnRewardEntity(StringToInt(sSection), KindFromName(sKind), sId, fOrigin);
 
 			if (iReward != -1)
@@ -5576,7 +5772,7 @@ void LoadRewards()
 }
 
 // Writes a reward to this map's file. Pass -1 as the id to use the next free one. Returns the id.
-int SaveReward(int iId, int iKind, const char[] sId, float fOrigin[3], bool bEvent = false)
+int SaveReward(int iId, int iKind, const char[] sId, float fOrigin[3], bool bEvent = false, int iHammer = 0)
 {
 	char sKey[16], sSection[16];
 
@@ -5612,6 +5808,11 @@ int SaveReward(int iId, int iKind, const char[] sId, float fOrigin[3], bool bEve
 	kvRewards.SetString("item", sId);
 	kvRewards.SetVector("origin", fOrigin);
 	kvRewards.SetNum("event", bEvent ? 1 : 0);
+
+	if (iHammer > 0)
+	{
+		kvRewards.SetNum("hammerid", iHammer);
+	}
 	kvRewards.Rewind();
 
 	kvRewards.ExportToFile(g_sRewardDB);
@@ -5683,6 +5884,7 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 	g_iEntItem[iEntity] = (iItem == -1) ? -(iKind + 2) : iItem;
 	g_iRewardId[iEntity] = iId;
 	g_bRewardEvent[iEntity] = false;
+	g_bRewardLinked[iEntity] = false;
 
 	return iEntity;
 }

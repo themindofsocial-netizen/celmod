@@ -36,7 +36,7 @@ v_delete - Client - Removes the prop you are looking at.
 v_deleteall - Client - Removes all the entities that you own.
 v_delreward - Admin - Removes the reward pickup you are looking at.
 v_eventemblem - Admin - Places an event emblem where you aim. Every player can claim it once and only once.
-v_eventitem - Admin - Places an event emblem, hat or celwep where you aim. Every player can claim it once and only once.
+v_eventitem - Admin - Places an event emblem, hat or celwep where you aim, or (eventitem link ...) makes the map object you look at claimable. Every player can claim it once and only once.
 v_delzone - Admin - Deletes the area you are standing in.
 v_dm - Client - Changes the mode to deathmatch within the land.
 v_door - Client - Spawns a working door cel.
