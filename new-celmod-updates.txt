@@ -109,3 +109,4 @@
 		 - The Power Booth hides much better: only spots no spawn point or Guess Booth can see, far from spawns and boxed in, chosen at random, never near last time's spot. It is also fainter (cm_powerbooth_alpha).
 	 - 12/05/26: Event emblems: !eventemblem <emblem> places one where you aim (end of a maze or parkour). Press E to get it; each player can only ever earn each event emblem once. They glow and the HUD says what they give. !delreward removes one.
 		 - Event and restricted areas now also stop phasing, blinking, portals and teleport pads from getting players in, and emblems give no movement help (speed, sprint, gravity, jump, feather) inside event areas.
+		 - Event items are fixed objects (nothing can move, pick up or break them) for emblems, hats and celweps: !eventitem <emblem/hat/weapon> <name>. Every player can press E on one to claim it, once and only once per item. Reward pickups are fixed objects too.

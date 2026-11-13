@@ -358,6 +358,7 @@ public void OnPluginStart()
 	RegAdminCmd("v_tune", Command_Tune, ADMFLAG_SLAY, "|CelMod| Sets where held emblems, celweps or your hat sit, and saves it.");
 	RegAdminCmd("v_nudge", Command_Nudge, ADMFLAG_SLAY, "|CelMod| Moves where held emblems, celweps or your hat sit a little, and saves it.");
 	RegAdminCmd("v_eventemblem", Command_EventEmblem, ADMFLAG_SLAY, "|CelMod| Places an event emblem where you aim (end of a maze or parkour). Each player can only ever get it once.");
+	RegAdminCmd("v_eventitem", Command_EventItem, ADMFLAG_SLAY, "|CelMod| Places an event emblem, hat or celwep where you aim. Each player can only ever get it once.");
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
 	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
 	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
@@ -1325,51 +1326,83 @@ public Action Command_EmblemDrop(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
-// An event emblem: placed at the end of a maze or parkour course (inside an event area made with !zone), it gives its
-// emblem to whoever reaches it and presses E. Each player can only ever earn each event emblem once.
+// An event item (emblem, hat or celwep): a fixed object at the end of a maze or parkour course (inside an event
+// area made with !zone). Every player can press E on it to claim the item, once and only once ever per item.
 public Action Command_EventEmblem(int iClient, int iArgs)
 {
 	char sId[64];
-	float fOrigin[3];
-
-	if (!IsRealClient(iClient))
-	{
-		return Plugin_Handled;
-	}
 
 	if (iArgs < 1)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]eventemblem{default} <emblem> (placed where you aim; remove it with {green}[tag]delreward{default})");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]eventemblem{default} <emblem>, or {green}[tag]eventitem{default} <emblem/hat/weapon> <name>");
 		return Plugin_Handled;
 	}
 
 	GetCmdArg(1, sId, sizeof(sId));
 
-	int iItem = FindItem(KIND_EMBLEM, sId);
+	PlaceEventItem(iClient, KIND_EMBLEM, sId);
+
+	return Plugin_Handled;
+}
+
+public Action Command_EventItem(int iClient, int iArgs)
+{
+	char sId[64], sKind[32];
+
+	if (iArgs < 2)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]eventitem{default} <emblem/hat/weapon> <name> (placed where you aim; remove it with {green}[tag]delreward{default})");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sKind, sizeof(sKind));
+	GetCmdArg(2, sId, sizeof(sId));
+
+	if (!StrEqual(sKind, "emblem", false) && !StrEqual(sKind, "hat", false) && !StrEqual(sKind, "weapon", false) && !StrEqual(sKind, "celwep", false))
+	{
+		Cel_ReplyToCommand(iClient, "The kind must be {green}emblem{default}, {green}hat{default} or {green}weapon{default}.");
+		return Plugin_Handled;
+	}
+
+	PlaceEventItem(iClient, KindFromName(sKind), sId);
+
+	return Plugin_Handled;
+}
+
+void PlaceEventItem(int iClient, int iKind, const char[] sName)
+{
+	float fOrigin[3];
+
+	if (!IsRealClient(iClient))
+	{
+		return;
+	}
+
+	int iItem = FindItem(iKind, sName);
 
 	if (iItem == -1 || g_Items[iItem].bIsBig)
 	{
-		Cel_ReplyToCommand(iClient, "There is no emblem called {green}%s{default}.", sId);
-		return Plugin_Handled;
+		Cel_ReplyToCommand(iClient, "There is no %s called {green}%s{default}.", g_sKindName[iKind], sName);
+		return;
 	}
 
 	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
 
 	fOrigin[2] += 24.0;
 
-	int iId = SaveReward(-1, KIND_EMBLEM, g_Items[iItem].sId, fOrigin, true);
+	int iId = SaveReward(-1, iKind, g_Items[iItem].sId, fOrigin, true);
 
-	int iEntity = SpawnRewardEntity(iId, KIND_EMBLEM, g_Items[iItem].sId, fOrigin);
+	int iEntity = SpawnRewardEntity(iId, iKind, g_Items[iItem].sId, fOrigin);
 
 	if (iEntity == -1)
 	{
-		Cel_ReplyToCommand(iClient, "The event emblem could not be spawned.");
-		return Plugin_Handled;
+		Cel_ReplyToCommand(iClient, "The event %s could not be spawned.", g_sKindName[iKind]);
+		return;
 	}
 
 	g_bRewardEvent[iEntity] = true;
 
-	Cel_ReplyToCommand(iClient, "Placed event emblem {green}#%d{default} ({green}%s{default}). Players get it once ever by pressing E on it.", iId, g_Items[iItem].sName);
+	Cel_ReplyToCommand(iClient, "Placed event %s {green}#%d{default} ({green}%s{default}). Every player can press E on it to get it, once and only once.", g_sKindName[iKind], iId, g_Items[iItem].sName);
 
 	if (ZoneTypeAt(fOrigin) != CEL_ZONE_EVENT)
 	{
@@ -1378,10 +1411,8 @@ public Action Command_EventEmblem(int iClient, int iArgs)
 
 	if (g_Items[iItem].iWeight > 0)
 	{
-		Cel_ReplyToCommand(iClient, "Tip: the {green}%s{default} emblem can also come from drops. Give it {green}\"dropweight\" \"0\"{default} in collectibles.txt to make it event only.", g_Items[iItem].sName);
+		Cel_ReplyToCommand(iClient, "Tip: the {green}%s{default} can also come from drops and random rewards. Give it {green}\"dropweight\" \"0\"{default} in collectibles.txt to make it event only.", g_Items[iItem].sName);
 	}
-
-	return Plugin_Handled;
 }
 
 public int Native_GetRewardLabel(Handle hPlugin, int iNumParams)
@@ -1398,7 +1429,7 @@ public int Native_GetRewardLabel(Handle hPlugin, int iNumParams)
 
 	if (g_bRewardEvent[iEntity] && iItem >= 0)
 	{
-		Format(sLabel, sizeof(sLabel), "Event emblem: %s\nPress E to claim (once ever)", g_Items[iItem].sName);
+		Format(sLabel, sizeof(sLabel), "Event %s: %s\nPress E to claim (once ever)", g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sName);
 	} else if (iItem >= 0)
 	{
 		Format(sLabel, sizeof(sLabel), "Reward: %s %s\nPress E to claim", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
@@ -1740,13 +1771,21 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 
 	if (g_bRewardEvent[iEntity] && g_iEntItem[iEntity] >= 0)
 	{
-		Format(sEventKey, sizeof(sEventKey), "event_%s", g_Items[g_iEntItem[iEntity]].sId);
+		int iEventItem = g_iEntItem[iEntity];
+
+		// Emblems keep their original key; hats and celweps include their kind.
+		if (g_Items[iEventItem].iKind == KIND_EMBLEM)
+		{
+			Format(sEventKey, sizeof(sEventKey), "event_%s", g_Items[iEventItem].sId);
+		} else {
+			Format(sEventKey, sizeof(sEventKey), "event_%s_%s", g_sKindName[g_Items[iEventItem].iKind], g_Items[iEventItem].sId);
+		}
 
 		if (Inv_GetInt(iActivator, sEventKey) == 1)
 		{
 			EmitSoundToClient(iActivator, SOUND_DENY);
 
-			Cel_PrintToChat(iActivator, "You have already earned the {green}%s{default} event emblem. Each event emblem can only be earned once.", g_Items[g_iEntItem[iEntity]].sName);
+			Cel_PrintToChat(iActivator, "You have already earned the {green}%s{default} event %s. Each event item can only be earned once.", g_Items[iEventItem].sName, g_sKindName[g_Items[iEventItem].iKind]);
 
 			return;
 		}
@@ -1824,6 +1863,23 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 	if ((iButtons & IN_USE) && !(iLast & IN_USE) && IsPlayerAlive(iClient) && IsLookingAtBooth(iClient))
 	{
 		Hook_BoothUse(EntRefToEntIndex(g_iBoothRef), iClient, iClient, Use_Toggle, 0.0);
+	} else if ((iButtons & IN_USE) && !(iLast & IN_USE) && IsPlayerAlive(iClient))
+	{
+		// Pressing E on a reward pickup or event item up close.
+		int iAim = GetClientAimTarget(iClient, false);
+
+		if (iAim > MaxClients && iAim <= MAXENTITIES && g_iRewardId[iAim] != -1)
+		{
+			float fEyes[3], fReward[3];
+
+			GetClientEyePosition(iClient, fEyes);
+			GetEntPropVector(iAim, Prop_Data, "m_vecAbsOrigin", fReward);
+
+			if (GetVectorDistance(fEyes, fReward) <= 160.0)
+			{
+				Hook_RewardUse(iAim, iClient, iClient, Use_Toggle, 0.0);
+			}
+		}
 	}
 
 	// The fallback shovel (no Custom Guns) digs too, whenever it swings at the ground.
@@ -5590,10 +5646,17 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 		strcopy(sModel, sizeof(sModel), iKind == KIND_EMBLEM ? GRAVGUN_WORLDMODEL : g_sDropModel);
 	}
 
-	int iEntity = CreateEntityByName("prop_physics_override");
+	// A fixed object: nothing can move it, pick it up or break it. Players claim it by pressing E while looking at it.
+	int iEntity = CreateEntityByName("prop_dynamic_override");
 
-	if (iEntity == -1 || iEntity > MAXENTITIES)
+	if (iEntity == -1)
 	{
+		return -1;
+	}
+
+	if (iEntity > MAXENTITIES)
+	{
+		AcceptEntityInput(iEntity, "kill");
 		return -1;
 	}
 
@@ -5601,13 +5664,11 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 
 	DispatchKeyValue(iEntity, "model", sModel);
 	DispatchKeyValue(iEntity, "classname", "cel_reward");
-	DispatchKeyValue(iEntity, "spawnflags", "264");
+	DispatchKeyValue(iEntity, "solid", "2");
 
 	DispatchSpawn(iEntity);
 
 	TeleportEntity(iEntity, fOrigin, NULL_VECTOR, NULL_VECTOR);
-
-	AcceptEntityInput(iEntity, "disablemotion");
 
 	SetEntProp(iEntity, Prop_Data, "m_takedamage", 0, 1);
 	SetEntityRenderColor(iEntity, iColor[0], iColor[1], iColor[2], 255);
@@ -5622,8 +5683,6 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 	g_iEntItem[iEntity] = (iItem == -1) ? -(iKind + 2) : iItem;
 	g_iRewardId[iEntity] = iId;
 	g_bRewardEvent[iEntity] = false;
-
-	SDKHook(iEntity, SDKHook_UsePost, Hook_RewardUse);
 
 	return iEntity;
 }

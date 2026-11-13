@@ -39,7 +39,8 @@ v_commandlist|Displays the command list.|v_cmds, v_commands|Client|[Command List
 v_copy|Copies the prop you are looking at into your copy buffer.|None|Client|
 v_delete|Removes the prop you are looking at.|v_del, v_remove|Client|
 v_delreward|Removes the reward pickup you are looking at.|None|Admin|
-v_eventemblem|Places an event emblem where you aim (end of a maze or parkour). Each player can only ever earn it once.|<emblem>|Admin|
+v_eventemblem|Places an event emblem where you aim (end of a maze or parkour). Every player can claim it with E once and only once.|<emblem>|Admin|
+v_eventitem|Places an event emblem, hat or celwep where you aim. Every player can claim it with E once and only once.|<emblem/hat/weapon> <name>|Admin|
 v_delzone|Deletes the area you are standing in.|None|Admin|
 v_dm|Changes the deathmatch setting within the land.|v_landdeathmatch|Client|
 v_door|Spawns a working door cel.|None|Client|
