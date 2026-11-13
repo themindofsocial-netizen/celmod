@@ -1580,12 +1580,12 @@ public int Native_GetRewardLabel(Handle hPlugin, int iNumParams)
 
 	if (g_bRewardEvent[iEntity] && iItem >= 0)
 	{
-		Format(sLabel, sizeof(sLabel), "Event %s: %s\nPress E to claim (once ever)", g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sName);
+		Format(sLabel, sizeof(sLabel), "Reward: %s", g_Items[iItem].sName);
 	} else if (iItem >= 0)
 	{
-		Format(sLabel, sizeof(sLabel), "Reward: %s %s\nPress E to claim", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
+		Format(sLabel, sizeof(sLabel), "Reward: %s", g_Items[iItem].sName);
 	} else {
-		Format(sLabel, sizeof(sLabel), "Reward: a random %s\nPress E to claim", g_sKindName[-(iItem + 2)]);
+		Format(sLabel, sizeof(sLabel), "Reward: a random %s", g_sKindName[-(iItem + 2)]);
 	}
 
 	SetNativeString(2, sLabel, GetNativeCell(3));
