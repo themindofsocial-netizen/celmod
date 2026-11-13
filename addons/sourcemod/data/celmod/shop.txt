@@ -1,3 +1,24 @@
+// |CelMod| shop. Everything here can be bought in game (!buy <key>, list with !catalog) and in the web shop.
+// celmod-shop reads this file; reload it with cm_shop_reload.
+//
+// Commands: "key" "price|display name"
+//
+// Props: rare props that only their buyers can spawn (rare cels, discontinued props). Buying one
+//   unlocks "!alias" for that player for good. Players type !buy <alias> (or !buy prop_<alias>).
+//     name         Display name.
+//     price        Price in CL.
+//     stock        Optional: how many can ever be sold. Sold counts live in data/celmod/shopstock.txt.
+//     category     Heading in the shop, e.g. "Rare Cels" or "Discontinued Props".
+//     description  Optional one-liner shown in the web shop.
+//     spawn        "classname|model". Leave it out if the alias is already in spawns.txt; it then
+//                  stops being free for everyone and becomes buy-only.
+//
+// Collectibles: emblems, hats or weapons from collectibles.txt for sale.
+//     "key" { "kind" "hat" "id" "<collectible id>" "price" "..." }  plus stock, category, description,
+//     and "repeatable" (default 1 for emblems, which stack, 0 for hats and weapons).
+//
+// Player models are listed automatically from the "PlayerModels" in collectibles.txt (price there).
+//   Here you can only hide one or limit it:  "PlayerModels" { "gman" { "stock" "3" } "breen" { "hide" "1" } }
 "Shop"
 {
 	"Commands"
@@ -15,5 +36,91 @@
 		"landcolor"	"200000|!landcolor"
 		"internet"	"200000|!internet"
 		"seturl"	"500000|!seturl"
+	}
+
+	"Props"
+	{
+		// Discontinued props: back for a limited time, with the counts the old site listed.
+		"dog"
+		{
+			"name"			"Dog"
+			"category"		"Discontinued Props"
+			"price"			"150000"
+			"stock"			"49"
+			"description"	"Discontinued 5/31/10. Alyx's robot companion."
+			"spawn"			"cycler|models/dog.mdl"
+		}
+		"smg"
+		{
+			"name"			"SMG"
+			"category"		"Discontinued Props"
+			"price"			"40000"
+			"stock"			"83"
+			"description"	"Discontinued 6/16/10."
+			"spawn"			"prop_physics_override|models/weapons/w_smg1.mdl"
+		}
+		"huladoll"
+		{
+			"name"			"Hula Doll"
+			"category"		"Discontinued Props"
+			"price"			"60000"
+			"stock"			"43"
+			"description"	"The original dashboard decoration."
+			"spawn"			"prop_physics_override|models/props_lab/huladoll.mdl"
+		}
+
+		// Rare cels: animated characters nobody else can spawn.
+		"manhack"
+		{
+			"name"			"Manhack"
+			"category"		"Rare Cels"
+			"price"			"120000"
+			"stock"			"20"
+			"spawn"			"cycler|models/manhack.mdl"
+		}
+		"rollermine"
+		{
+			"name"			"Rollermine"
+			"category"		"Rare Cels"
+			"price"			"90000"
+			"stock"			"25"
+			"spawn"			"prop_physics_override|models/roller.mdl"
+		}
+		"stalker"
+		{
+			"name"			"Stalker"
+			"category"		"Rare Cels"
+			"price"			"250000"
+			"stock"			"10"
+			"spawn"			"cycler|models/stalker.mdl"
+		}
+		"antlionguard"
+		{
+			"name"			"Antlion Guard"
+			"category"		"Rare Cels"
+			"price"			"500000"
+			"stock"			"5"
+			"spawn"			"cycler|models/antlion_guard.mdl"
+		}
+		"gmanstatue"
+		{
+			"name"			"G-Man"
+			"category"		"Rare Cels"
+			"price"			"750000"
+			"stock"			"3"
+			"description"	"Rise and shine."
+			"spawn"			"cycler|models/gman_high.mdl"
+		}
+	}
+
+	"Collectibles"
+	{
+		// Example (remove the // to sell it):
+		// "hat_yearhat2009"	{ "kind" "hat"	"id" "yearhat2009"	"price" "250000"	"stock" "10" }
+	}
+
+	"PlayerModels"
+	{
+		// Example: "gman" { "stock" "3" }  or  "breen" { "hide" "1" }
 	}
 }

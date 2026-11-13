@@ -233,6 +233,30 @@ public Action Command_Buy(int iClient, int iArgs)
 		}
 	}
 	
+	// Everything in the shop catalog (commands, rare props, player models, emblems, hats) is sold by
+	// celmod-shop, which checks stock and ownership. "!buy gman" also finds "model_gman", etc.
+	char sKey[80], sError[128];
+	strcopy(sKey, sizeof(sKey), sOption);
+	
+	if (Cel_ShopFindItem(sKey) == -1)
+	{
+		FormatEx(sKey, sizeof(sKey), "prop_%s", sOption);
+		
+		if (Cel_ShopFindItem(sKey) == -1)
+		{
+			FormatEx(sKey, sizeof(sKey), "model_%s", sOption);
+		}
+	}
+	
+	if (Cel_ShopFindItem(sKey) != -1)
+	{
+		if (Cel_ShopDeliver(iClient, sKey, -1, sError, sizeof(sError)) == -1)
+		{
+			Cel_ReplyToCommand(iClient, "%s", sError);
+		}
+		return Plugin_Handled;
+	}
+	
 	if(Cel_CheckShopDB(sOption, iPrice, sDisplay, sizeof(sDisplay)))
 	{
 		if(Cel_CheckClientBalance(iClient, iPrice))

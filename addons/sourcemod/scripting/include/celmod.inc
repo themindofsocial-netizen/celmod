@@ -542,6 +542,81 @@ native bool Cel_GiveCollectible(int iClient, const char[] sKind, const char[] sI
 native bool Cel_IsCollectible(int iEntity);
 
 /**
+ * How many of an emblem, hat or weapon a client owns.
+ *
+ * @return  The count, or -1 if there is no such item.
+ */
+native int Cel_GetCollectibleCount(int iClient, const char[] sKind, const char[] sId);
+
+/** Number of player models in collectibles.txt. */
+native int Cel_GetPlayerModelCount();
+
+/**
+ * Reads a player model from collectibles.txt by index (0 to Cel_GetPlayerModelCount() - 1).
+ *
+ * @param iAdminFlags  Admin flags that own it for free (0 = none).
+ * @return             False if the index is out of range.
+ */
+native bool Cel_GetPlayerModelInfo(int iIndex, char[] sId, int iIdLength, char[] sName, int iNameLength, int &iPrice, int &iAdminFlags);
+
+/**
+ * Whether a client owns a player model (bought, given, free, or through admin flags).
+ *
+ * @return  1 owned, 0 not owned, -1 no such model.
+ */
+native int Cel_OwnsPlayerModel(int iClient, const char[] sId);
+
+/**
+ * Gives a client a player model for good, like !givemodel.
+ *
+ * @return  True if the model exists and was given.
+ */
+native bool Cel_GivePlayerModel(int iClient, const char[] sId);
+
+/**
+ * Checks a prop alias against the shop's rare / discontinued props (the "Props" section of shop.txt).
+ *
+ * @param sSpawnString  Filled with "classname|model" when the client may spawn it.
+ * @return              0 = not a shop prop (spawn it normally), 1 = the client owns it, -1 = locked.
+ */
+native int Cel_CheckShopProp(int iClient, const char[] sAlias, char[] sSpawnString, int iMaxLength);
+
+/** Number of items in the shop catalog (celmod-shop). */
+native int Cel_ShopGetItemCount();
+
+/**
+ * Reads a shop item by index (0 to Cel_ShopGetItemCount() - 1).
+ *
+ * @param sKey         What players type to buy it, e.g. "fire", "prop_megapumpkin", "model_gman".
+ * @param iLeft        How many can still be sold, or -1 for no limit.
+ * @param bRepeatable  True if it can be bought more than once (emblems).
+ * @return             False if the index is out of range.
+ */
+native bool Cel_ShopGetItem(int iIndex, char[] sKey, int iKeyLength, char[] sName, int iNameLength, char[] sCategory, int iCategoryLength, char[] sDescription, int iDescriptionLength, int &iPrice, int &iLeft, bool &bRepeatable);
+
+/**
+ * What a shop item is: "command", "prop", "model", or a collectible kind ("emblem", "hat", "weapon"),
+ * and what it unlocks (the command, prop alias, model id or collectible id).
+ */
+native bool Cel_ShopGetItemType(int iIndex, char[] sType, int iTypeLength, char[] sTarget, int iTargetLength);
+
+/** Whether a client already owns a shop item (always false for items that can be bought again). */
+native bool Cel_ShopOwnsItem(int iClient, const char[] sKey);
+
+/** Index of a shop item by key, or -1. */
+native int Cel_ShopFindItem(const char[] sKey);
+
+/**
+ * Sells a shop item to a client: checks it exists, is in stock, not already owned and affordable,
+ * then charges the client, gives the item and counts it against the stock.
+ *
+ * @param iMaxPrice  Refuse if the price is now higher than this (web orders), or -1 for no limit.
+ * @param sError     Why it failed, for the player.
+ * @return           The price charged, or -1 if nothing was sold.
+ */
+native int Cel_ShopDeliver(int iClient, const char[] sKey, int iMaxPrice, char[] sError, int iErrorLength);
+
+/**
  * Looks up how an emblem, hat or weapon looks, to put one on display.
  *
  * @param sKind  "emblem", "hat" or "weapon".

@@ -131,6 +131,16 @@ cm_exportproplist|Exports the prop list into a text or html file in 'data/celmod
 
 For the most current command list, [click here](https://raw.githubusercontent.com/themindofsocial-netizen/celmod/main/addons/sourcemod/data/celmod/exports/commandlist_export.txt).
 
+## Shop (celmod-shop)
+One catalog for everything that can be bought, in game with `!buy <name>` (list it with `!catalog`) and in the website shop:
+
+- **Commands**: the `Commands` section of `data/celmod/shop.txt`, as before.
+- **Rare cels and discontinued props**: the `Props` section. Only buyers can spawn them; everyone else is told to get them from the shop. Each can have a limited `stock`; sold counts are kept in `data/celmod/shopstock.txt`.
+- **Player models**: every model with a price in `collectibles.txt`.
+- **Emblems, hats and weapons**: the `Collectibles` section.
+
+The comments at the top of `shop.txt` describe every key. `cm_shop_reload` reloads it. Web shop orders are delivered by the game server through the same code, so stock, ownership and balance are always checked in game.
+
 ## Website Database (celmod-database)
 `celmod-database` shares live server data with the [|CelMod| website](https://github.com/rockzehh/celmod-website) through a MySQL/MariaDB database: who is online, playtime, balances, unlocks, props/cels spawned, map history and daily stats. It also delivers orders placed in the website shop - the server re-checks the price and balance in-game before charging, so balances stay server-side.
 

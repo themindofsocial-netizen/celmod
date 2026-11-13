@@ -20,6 +20,9 @@ char g_sBlacklistDB[PLATFORM_MAX_PATH];
 char g_sDownloadPath[PLATFORM_MAX_PATH];
 char g_sOverlayPath[PLATFORM_MAX_PATH];
 char g_sSpawnDB[PLATFORM_MAX_PATH];
+char g_sShopDB[PLATFORM_MAX_PATH];
+
+StringMap g_smShopProps;
 
 ConVar g_cvBetaBranchUpdates;
 ConVar g_cvCelLimit;
@@ -47,6 +50,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_CheckCelCount", Native_CheckCelCount);
 	CreateNative("Cel_CheckPropCount", Native_CheckPropCount);
 	CreateNative("Cel_CheckSpawnDB", Native_CheckSpawnDB);
+	CreateNative("Cel_CheckShopProp", Native_CheckShopProp);
 	CreateNative("Cel_DownloadClientFiles", Native_DownloadClientFiles);
 	CreateNative("Cel_GetAuthID", Native_GetAuthID);
 	CreateNative("Cel_GetBeamMaterial", Native_GetBeamMaterial);
@@ -138,6 +142,10 @@ public void OnPluginStart()
 	{
 		Cel_AddToBlacklist("traintrack01");
 	}
+	
+	BuildPath(Path_SM, g_sShopDB, sizeof(g_sShopDB), "data/celmod/shop.txt");
+	g_smShopProps = new StringMap();
+	LoadShopProps();
 	
 	AddCommandListener(Handle_Spawn, "say");
 	AddCommandListener(Handle_Spawn, "say_team");
@@ -273,6 +281,57 @@ public void OnMapStart()
 	g_iPhys = PrecacheModel("materials/sprites/physbeam.vmt", true);
 	
 	Cel_DownloadClientFiles();
+	
+	LoadShopProps();
+}
+
+/**
+ * Rare and discontinued props from the "Props" section of shop.txt. Only players who bought one
+ * (purchase "prop_<alias>") can spawn it; everyone else is told to get it from the shop.
+ * Each entry may give its own "spawn" string ("classname|model") so retired props need no
+ * entry in spawns.txt.
+ */
+void LoadShopProps()
+{
+	char sAlias[64], sSpawn[256];
+	
+	g_smShopProps.Clear();
+	
+	KeyValues kvShop = new KeyValues("Shop");
+	
+	if (kvShop.ImportFromFile(g_sShopDB) && kvShop.JumpToKey("Props") && kvShop.GotoFirstSubKey())
+	{
+		do
+		{
+			kvShop.GetSectionName(sAlias, sizeof(sAlias));
+			kvShop.GetString("spawn", sSpawn, sizeof(sSpawn), "");
+			StringToLower(sAlias);
+			g_smShopProps.SetString(sAlias, sSpawn);
+		} while (kvShop.GotoNextKey());
+	}
+	
+	delete kvShop;
+}
+
+void StringToLower(char[] sText)
+{
+	for (int i = 0; sText[i] != '\0'; i++)
+	{
+		sText[i] = CharToLower(sText[i]);
+	}
+}
+
+bool LookupSpawnDB(const char[] sAlias, char[] sSpawnString, int iMaxLength)
+{
+	KeyValues kvProps = new KeyValues("Props");
+	
+	kvProps.ImportFromFile(g_sSpawnDB);
+	kvProps.JumpToKey("Models", false);
+	kvProps.GetString(sAlias, sSpawnString, iMaxLength, "null");
+	
+	delete kvProps;
+	
+	return !StrEqual(sSpawnString, "null");
 }
 
 public void OnMapEnd()
@@ -493,7 +552,15 @@ public Action Command_Spawn(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	if(Cel_CheckBlacklistDB(sAlias))
+	int iShopProp = Cel_CheckShopProp(iClient, sAlias, sSpawnString, sizeof(sSpawnString));
+	
+	if (iShopProp == -1)
+	{
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is a rare prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop.", sAlias, sAlias);
+		return Plugin_Handled;
+	}
+	
+	if(iShopProp == 0 && Cel_CheckBlacklistDB(sAlias))
 	{
 		Cel_ReplyToCommand(iClient, "%t", "PropNotFound", sAlias);
 		return Plugin_Handled;
@@ -516,7 +583,7 @@ public Action Command_Spawn(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	if (Cel_CheckSpawnDB(sAlias, sSpawnString, sizeof(sSpawnString)))
+	if (iShopProp == 1 || Cel_CheckSpawnDB(sAlias, sSpawnString, sizeof(sSpawnString)))
 	{
 		ExplodeString(sSpawnString, "|", sSpawnBuffer, 2, sizeof(sSpawnBuffer[]));
 		
@@ -568,10 +635,26 @@ public Action Handle_Spawn(int iClient, char[] sCommand, int iArgs)
 	
 	GetCmdArg(1, sPropAlias, sizeof(sPropAlias));
 	
+	bool bTyped = (sPropAlias[0] == '!' || sPropAlias[0] == '/');
+	
 	ReplaceString(sPropAlias, sizeof(sPropAlias), "!", "");
 	ReplaceString(sPropAlias, sizeof(sPropAlias), "/", "");
 	
-	if (Cel_CheckSpawnDB(sPropAlias, sSpawnString, sizeof(sSpawnString)))
+	int iShopProp = Cel_CheckShopProp(iClient, sPropAlias, sSpawnString, sizeof(sSpawnString));
+	
+	if (iShopProp == -1)
+	{
+		// Only answer "!rareprop" or "/rareprop"; a plain word in chat is just chat.
+		if (!bTyped)
+		{
+			return Plugin_Continue;
+		}
+		
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is a rare prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop.", sPropAlias, sPropAlias);
+		return Plugin_Handled;
+	}
+	
+	if (iShopProp == 1 || Cel_CheckSpawnDB(sPropAlias, sSpawnString, sizeof(sSpawnString)))
 	{
 		GetCmdArg(2, sOption, sizeof(sOption));
 		
@@ -597,7 +680,7 @@ public Action Handle_Spawn(int iClient, char[] sCommand, int iArgs)
 			return Plugin_Handled;
 		}
 		
-		if(Cel_CheckBlacklistDB(sPropAlias))
+		if(iShopProp == 0 && Cel_CheckBlacklistDB(sPropAlias))
 		{
 			return Plugin_Continue;
 		}
@@ -868,6 +951,39 @@ public int Native_CheckSpawnDB(Handle hPlugin, int iNumParams)
 	SetNativeString(2, sSpawnString, iMaxLength);
 	
 	return (StrEqual(sSpawnString, "null")) ? false : true;
+}
+
+public int Native_CheckShopProp(Handle hPlugin, int iNumParams)
+{
+	char sAlias[64], sKey[80], sSpawn[256];
+	int iClient = GetNativeCell(1), iMaxLength = GetNativeCell(4);
+	
+	GetNativeString(2, sAlias, sizeof(sAlias));
+	ReplaceString(sAlias, sizeof(sAlias), "!", "");
+	ReplaceString(sAlias, sizeof(sAlias), "/", "");
+	StringToLower(sAlias);
+	
+	if (!g_smShopProps.GetString(sAlias, sSpawn, sizeof(sSpawn)))
+	{
+		return 0;
+	}
+	
+	FormatEx(sKey, sizeof(sKey), "prop_%s", sAlias);
+	
+	// Root admins can always spawn them, e.g. to set up displays.
+	if (!Cel_CheckClientPurchase(iClient, sKey) && !CheckCommandAccess(iClient, "celmod_shop_props", ADMFLAG_ROOT))
+	{
+		return -1;
+	}
+	
+	if (sSpawn[0] == '\0' && !LookupSpawnDB(sAlias, sSpawn, sizeof(sSpawn)))
+	{
+		return 0;
+	}
+	
+	SetNativeString(3, sSpawn, iMaxLength);
+	
+	return 1;
 }
 
 public int Native_DownloadClientFiles(Handle hPlugin, int iNumParams)
