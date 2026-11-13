@@ -25,3 +25,67 @@
 	 - 06/09/25: Added commands !replace/v_replace to replace the model of a prop and !owner/v_owner to print the owner of the entity.
 		 - Updated !lock/v_lock and !unlock/v_unlock to be their own commands instead of being hidden in !freeze/!unfreeze.
 		 - Added command !drop/v_drop to drop entities to the floor.
+	 - 11/11/26: Added emblems. Press E on an emblem you own to enable it, then hold your gravity gun to use its power.
+		 - Other players see the emblem in your hands. Emblems: fire, speed, jump, blizzard, health, gold.
+		 - Added hats. Press E on a hat you own to wear it.
+		 - Added !emblem, !hat and !emblems/!hats/!inventory to spawn and list the items you own.
+		 - Added emblem drops: crates fall from the sky, and any crate inside your land when the timer ends is yours.
+		 - Added reward pickups for mazes and parkour (!reward, !delreward) and !giveitem, !emblemdrop for admins.
+		 - A free emblem can appear in your build when you load it, once you have been building for a few days.
+		 - Fixed !buy and !sell. The price and owner now show on the HUD when looking at something for sale.
+		 - Added !give to give an entity to another player and !trade to swap entities with another player.
+	 - 11/12/26: Emblems now match the original set: 30 emblems using the emblem model, each with its own color, skin and power.
+		 - Added !thirdperson and !firstperson so you can see your own emblem and hat.
+		 - Added the yearhat, delaware, partyhat and santahat hats.
+		 - Added !cl to drop money, !moveto, !turn, !noclip, !fire, !weps, !stuck, !clear, !landslay and !landkick.
+		 - Added fire, cland and landskin to the shop.
+	 - 11/13/26: Emblem shots now have their own effects: flames, ice, water, energy bolts, smoke, orbs, lasers and rainbow beams.
+		 - Added !undo, !hide, !show, !weld, !release, !landban, !landunban, !message and !sound. !landkick now keeps a player out for 10 seconds.
+		 - Saving and loading builds is more reliable and reports when a build cannot be written.
+		 - Added a standalone emblem editor web page in webapp/emblem-editor.
+	 - 11/14/26: Builds now load into your own land, in the same place they were saved, and only if the whole build fits.
+		 - Saving only includes entities whose origin is inside your land.
+		 - Added !landcolor, !palette, !model and !teleport.
+	 - 11/15/26: The fire emblem is now a flamethrower, and right click throws a fireball that explodes on impact.
+		 - Blizzard and Energy also have right click attacks (ice storm, big shot).
+		 - Held emblems now point forwards. Hats find the head on more player models.
+		 - !emblems, !hats and !inventory show everything you own in one list.
+		 - Added !tune for admins to line up held emblems and hats while in game.
+	 - 11/16/26: Teleports, message cels, sound cels, welds and buttons with their links are now saved with builds.
+		 - The Power Booth appears on every map. Bring it 5 of the same emblem to make one big emblem.
+		 - Added event areas and restricted areas for admins (!zone, !delzone, !zones).
+		 - Added celweps: weapon cels you own and press E on to take the weapon (!weapon, !weapons).
+		 - Added the Guess Booth (!guess) and auctions above it (!auction, !bid).
+		 - Added buyable player models (!playermodels, !buymodel, !playermodel).
+		 - Emblem drop crates are tinted with their emblem's color. Drops are admin triggered by default.
+	 - 11/17/26: Celweps can be real, separate weapons with the Custom Guns plugin: axe, fire sword, ice blade, power blade, pickaxe and shovel.
+		 - The shovel can dig up Black and White emblems.
+		 - Emblems reworked: Solar blinds players facing you, the Errors fire errors (25/50/75 damage), Smog makes a coughing smoke cloud,
+		   Chaos raises a burning antlion hill, Demon raises towers of dark power and shakes screens, Nuke drops a headcrab canister.
+		 - Added the Orange emblem (double speed). Cloud now jumps higher with lower gravity.
+		 - The Power Booth shows a menu: 2 Errors make a Blue Error, 2 Blue make a Green, and 5 of any emblem make a big one.
+		 - Player models can be admin only, and admins can give them with !givemodel.
+	 - 11/18/26: 58 new emblems have been added to the emblem pool, from Magma and Glacier to Rocket, Ghost, Vampire and Diamond.
+	 - 11/19/26: The Power Booth now appears floating somewhere random in the map, and the Guess Booth on open ground somewhere random, instead of in the spawn rooms.
+		 - Emblems are switched off when you join the server.
+	 - 11/20/26: The Nuke is a falling canister again and no longer posts in chat. Smog is one quieter cloud at a time.
+		 - The Fire emblem shows its flames, and its fireball is now a real projectile that explodes on impact.
+		 - The Power Booth is the HEV suit case. The Guess Booth is bigger, shows all three props, and Dr. Kleiner greets you there.
+		 - The shovel digs up junk, money boxes, and now and then a Black or White emblem.
+	 - 11/21/26: The Power Booth now works with the emblems you bring to it: spawn them, carry them up to the booth, then press E on it.
+	 - 11/21/26: Added the website database integration (celmod-database): live server data, player profiles and web shop orders.
+	 - 11/22/26: The Power Booth and Guess Booth no longer appear near each other. Dr. Kleiner wears a traffic cone.
+		 - The Guess Booth message is shown quietly at the top of the screen.
+		 - The Power Booth tells you how many emblems you brought and how many each upgrade needs; new emblems land under it.
+		 - New celweps: Sunflower, Saw Gun, Melon Launcher and Blade Bow.
+	 - 11/23/26: The Guess Booth shows three props again, is bigger, and Kleiner has his cone. The Power Booth hides as far from spawns and the Guess Booth as it can.
+	 - 11/24/26: Guess Booth props, Kleiner's cone and hats show again (they were scaled, and scaled models do not show). The Guess Booth is a little smaller.
+		 - The Power Booth hides in tucked away spots out of sight of spawns and the Guess Booth.
+	 - 11/25/26: Celweps are shown in your hand and their name appears when you switch to one. Admins can line up held emblems, celweps and hats in game with !nudge and !tune; it is saved.
+	 - 11/26/26: The Guess Booth props are shown again.
+		 - The Guess Booth props and the auction item slowly spin.
+	 - 11/27/26: The Power Booth no longer uses a menu: bring 5 of an emblem for the big one, or 2 Errors for a Blue Error, and press E.
+	 - 11/28/26: Celweps are no longer carried over when you rejoin, and no name pops up when you pull one out.
+		 - Dug up junk cannot be broken: carry it to a trash can for a few cleers. Trash cans are placed around every map.
+	 - 11/29/26: One celwep at a time: press E on a celwep to take it, on another to swap, on the same one to put it back. The Custom Guns weapon wheel is gone.
+	 - 11/30/26: Trash cans are no longer placed around the map; any trash can or dumpster prop takes junk.

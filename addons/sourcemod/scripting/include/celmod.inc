@@ -37,6 +37,9 @@ enum EntityType
 	ENTTYPE_TRIGGER = 14,
 	ENTTYPE_LINK = 15,
 	ENTTYPE_UNKNOWN = 16,
+	ENTTYPE_EMBLEM = 17,
+	ENTTYPE_HAT = 18,
+	ENTTYPE_CELWEP = 19,
 };
 
 enum EffectType
@@ -104,10 +107,10 @@ enum ControlTriggerType
 };
 
 #define CEL_AUTHOR "rockzehh"
-#define CEL_URL "https://github.com/rockzehh/celmod"
-#define CEL_VERSION "2.1.4"
-#define UPDATE_URL "https://raw.githubusercontent.com/rockzehh/celmod/main/addons/sourcemod/celmod_update.upd"
-#define UPDATE_BETA_URL "https://raw.githubusercontent.com/rockzehh/celmod/beta/addons/sourcemod/celmod_update.upd"
+#define CEL_URL "https://github.com/themindofsocial-netizen/celmod"
+#define CEL_VERSION "3.0.0"
+#define UPDATE_URL "https://raw.githubusercontent.com/themindofsocial-netizen/celmod/main/addons/sourcemod/celmod_update.upd"
+#define UPDATE_BETA_URL "https://raw.githubusercontent.com/themindofsocial-netizen/celmod/beta/addons/sourcemod/celmod_update.upd"
 
 #define MAXENTITIES 2048
 #define PLAYER_CROWBAR_ATTACK_RADIUS 2.0
@@ -163,6 +166,40 @@ forward void Cel_OnEntityRemove(int iEntity, int iOwner, bool bCel);
 forward void Cel_OnPropSpawn(int iProp, int iOwner, EntityType etEntityType);
 
 //Natives:
+/**
+ * Called when an entity passes from one player to another (sale, trade, gift or admin command).
+ *
+ * @param iEntity	The entity index.
+ * @param iOldOwner  The client index of the previous owner.
+ * @param iNewOwner  The client index of the new owner.
+ */
+forward void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner);
+
+/**
+ * Called after a client has loaded a build.
+ *
+ * @param iClient	The client index.
+ * @param sSaveName  The name of the build that was loaded.
+ */
+forward void Cel_OnBuildLoaded(int iClient, const char[] sSaveName);
+
+/**
+ * Called for each entity while a build is being saved, so a plugin can store its own data with it.
+ *
+ * @param iEntity  The entity being saved.
+ * @param kvSave   The save file, positioned on this entity's section. Do not move or close it.
+ */
+forward void Cel_OnSaveEntity(int iEntity, KeyValues kvSave);
+
+/**
+ * Called for each entity after it has been spawned from a build, so a plugin can restore its own data.
+ *
+ * @param iClient  The client loading the build.
+ * @param iEntity  The entity that was spawned.
+ * @param kvSave   The save file, positioned on this entity's section. Do not move or close it.
+ */
+forward void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave);
+
 native void Cel_AddToBlacklist(char[] sAlias);
 
 /**
@@ -479,6 +516,40 @@ native void Cel_GetClientSettingString(int iClient, char[] sSetting, char[] sVal
  * @param iColor   An integer array [R, G, B, A] storing the color values.
  * @return		 The color as an integer array.
  */
+/**
+ * Retrieves the id of the emblem or hat an entity is (the section name in collectibles.txt).
+ *
+ * @return  True if the entity is an emblem or hat.
+ */
+native bool Cel_GetCollectibleId(int iEntity, char[] sId, int iMaxLength);
+
+/**
+ * Retrieves the display name of the emblem or hat an entity is.
+ *
+ * @return  True if the entity is an emblem or hat.
+ */
+native bool Cel_GetCollectibleName(int iEntity, char[] sName, int iMaxLength);
+
+/**
+ * Adds an emblem or hat to a client's inventory.
+ *
+ * @param sKind  "emblem" or "hat".
+ * @param sId	The id or name of the item.
+ * @return	   True if the item exists and was given.
+ */
+native bool Cel_GiveCollectible(int iClient, const char[] sKind, const char[] sId);
+
+native bool Cel_IsCollectible(int iEntity);
+
+/**
+ * Looks up how an emblem, hat or weapon looks, to put one on display.
+ *
+ * @param sKind  "emblem", "hat" or "weapon".
+ * @param sId	The id or name of the item.
+ * @return	   True if the item exists.
+ */
+native bool Cel_GetCollectibleLook(const char[] sKind, const char[] sId, char[] sModel, int iModelLength, char[] sName, int iNameLength, int &iSkin, int iColor[4]);
+
 native int Cel_GetColor(int iEntity, int iColor[4]);
 
 native int Cel_GetCombinedCount(int iClient);
@@ -586,6 +657,8 @@ native EntityType Cel_GetEntityTypeFromName(const char[] sEntityType);
  * @return			  The entity type name as a string.
  */
 native char Cel_GetEntityTypeName(EntityType etEntityType, char[] sEntityType, int iMaxLength);
+
+native void Cel_GiveEntity(int iClient, int iTarget, int iEntity);
 
 native void Cel_GetFadeColor(int iEntity, iFadeFrom[3], iFadeTo[3]);
 
@@ -747,6 +820,10 @@ native RenderFx Cel_GetRenderFXFromName(const char[] sRenderFXName);
 native char Cel_GetRenderFXName(RenderFx rfRenderFX, char[] sRenderFX, int iMaxLength);
 
 native int Cel_GetSaveSystemVersion();
+
+native int Cel_GetTriggerLink(int iEntity);
+
+native void Cel_SetTriggerLink(int iEntity, int iTarget);
 
 native int Cel_GetTriggerType(iEntity);
 
@@ -1186,6 +1263,15 @@ native int Cel_SpawnCharger(int iClient, ChargerType ctType, float fAngles[3], f
 native int Cel_SpawnDoor(int iClient, int iSkin, float fAngles[3], float fOrigin[3], int iR, int iG, int iB, int iA);
 
 /**
+ * Spawns an emblem or hat entity the client owns. Fails if every copy the client owns is already spawned.
+ *
+ * @param sKind  "emblem" or "hat".
+ * @param sId	The id or name of the item.
+ * @return	   The entity index, or -1 on failure.
+ */
+native int Cel_SpawnCollectible(int iClient, const char[] sKind, const char[] sId, float fAngles[3], float fOrigin[3]);
+
+/**
  * Spawns an effect at a specified location.
  *
  * @param iClient	The client index of the player spawning the effect.
@@ -1298,6 +1384,235 @@ stock void Cel_ActivateEffect(int iEntity)
 	}
 	
 	Cel_SetEffectActive(iEntity, !Cel_IsEffectActive(iEntity));
+}
+
+public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)
+{
+	return (iEntity == 0);
+}
+
+/**
+ * Finds a random open spot somewhere in the playable part of the map.
+ *
+ * The search covers the area around the map's spawn points (widened a long way, so it reaches the whole map but
+ * not the 3D skybox), and keeps the space a box of the given size needs clear of walls, props and water.
+ *
+ * @param bOnFloor    True: standing on flat ground. False: floating in the air somewhere above the ground.
+ * @param fHalfWidth  Half the width of the box that must fit.
+ * @param fHeight     Height of the box that must fit.
+ * @param fSpot       The spot found: the middle of the box's floor.
+ * @param fAvoid      A place the spot must stay away from (another booth), with fAvoidRadius.
+ * @param fMaxAir     For spots in the air: the most it can be above the ground.
+ * @return            True if a spot was found.
+ */
+stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3], const float fAvoid[3] = NULL_VECTOR, float fAvoidRadius = 0.0, float fMaxAir = 480.0)
+{
+	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
+	float fCamera[3], fGround[3], fMax[3], fMin[3], fOrigin[3], fTry[3];
+	bool bAny = false, bCamera = false;
+	int iEntity;
+
+	for (int i = 0; i < sizeof(sSpawns); i++)
+	{
+		iEntity = -1;
+
+		while ((iEntity = FindEntityByClassname(iEntity, sSpawns[i])) != -1)
+		{
+			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+			for (int k = 0; k < 3; k++)
+			{
+				if (!bAny || fOrigin[k] < fMin[k]) fMin[k] = fOrigin[k];
+				if (!bAny || fOrigin[k] > fMax[k]) fMax[k] = fOrigin[k];
+			}
+
+			bAny = true;
+		}
+	}
+
+	if (!bAny)
+	{
+		return false;
+	}
+
+	//The whole map, as far as it reaches from where players play, but kept inside the world.
+	float fWorldMin[3], fWorldMax[3];
+
+	GetEntPropVector(0, Prop_Data, "m_WorldMins", fWorldMin);
+	GetEntPropVector(0, Prop_Data, "m_WorldMaxs", fWorldMax);
+
+	for (int k = 0; k < 2; k++)
+	{
+		fMin[k] -= 4000.0;
+		fMax[k] += 4000.0;
+	}
+
+	fMin[2] -= 768.0;
+	fMax[2] += 2048.0;
+
+	for (int k = 0; k < 3; k++)
+	{
+		if (fMin[k] < fWorldMin[k]) fMin[k] = fWorldMin[k];
+		if (fMax[k] > fWorldMax[k]) fMax[k] = fWorldMax[k];
+	}
+
+	//The 3D skybox is a small room of real map somewhere off to the side; nothing goes in it.
+	iEntity = FindEntityByClassname(-1, "sky_camera");
+
+	if (iEntity != -1)
+	{
+		GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fCamera);
+
+		bCamera = true;
+	}
+
+	float fBoxMin[3], fBoxMax[3];
+
+	fBoxMin[0] = -fHalfWidth;
+	fBoxMin[1] = -fHalfWidth;
+	fBoxMin[2] = 4.0;
+	fBoxMax[0] = fHalfWidth;
+	fBoxMax[1] = fHalfWidth;
+	fBoxMax[2] = fHeight;
+
+	for (int iTry = 0; iTry < 400; iTry++)
+	{
+		for (int k = 0; k < 3; k++)
+		{
+			fTry[k] = GetRandomFloat(fMin[k], fMax[k]);
+		}
+
+		if (bCamera && GetVectorDistance(fTry, fCamera) < 2500.0)
+		{
+			continue;
+		}
+		
+		if (fAvoidRadius > 0.0 && GetVectorDistance(fTry, fAvoid) < fAvoidRadius)
+		{
+			continue;
+		}
+
+		if (TR_PointOutsideWorld(fTry) || (TR_GetPointContents(fTry) & (MASK_SOLID | MASK_WATER)))
+		{
+			continue;
+		}
+
+		//Drop straight down to the ground; the ground has to be the map itself, not a prop or the sky.
+		float fDown[3];
+
+		fDown = fTry;
+		fDown[2] -= 4096.0;
+
+		Handle hTrace = TR_TraceRayFilterEx(fTry, fDown, MASK_PLAYERSOLID, RayType_EndPoint, Cel_FilterWorldOnly, 0);
+
+		if (!TR_DidHit(hTrace) || (TR_GetSurfaceFlags(hTrace) & (SURF_SKY | SURF_SKY2D)))
+		{
+			CloseHandle(hTrace);
+			continue;
+		}
+
+		float fNormal[3];
+
+		TR_GetEndPosition(fGround, hTrace);
+		TR_GetPlaneNormal(hTrace, fNormal);
+
+		CloseHandle(hTrace);
+
+		if (fNormal[2] < 0.7)
+		{
+			continue;
+		}
+
+		fSpot = fGround;
+
+		if (!bOnFloor)
+		{
+			//Somewhere in the air above that ground, under whatever is overhead.
+			float fUp[3], fCeiling[3];
+
+			fUp = fGround;
+			fUp[2] += 4096.0;
+
+			hTrace = TR_TraceRayFilterEx(fGround, fUp, MASK_PLAYERSOLID, RayType_EndPoint, Cel_FilterWorldOnly, 0);
+
+			fCeiling = fUp;
+
+			if (TR_DidHit(hTrace))
+			{
+				TR_GetEndPosition(fCeiling, hTrace);
+			}
+
+			CloseHandle(hTrace);
+
+			float fRoom = fCeiling[2] - fGround[2] - fHeight - 16.0;
+
+			if (fRoom < 64.0)
+			{
+				continue;
+			}
+
+			fSpot[2] = fGround[2] + GetRandomFloat(64.0, (fRoom < fMaxAir) ? fRoom : fMaxAir);
+		} else {
+			//A flat floor: the ground under every corner is about as high as the middle.
+			bool bFlat = true;
+
+			for (int c = 0; c < 4 && bFlat; c++)
+			{
+				float fCorner[3], fCornerDown[3];
+
+				fCorner[0] = fGround[0] + ((c & 1) ? fHalfWidth : -fHalfWidth);
+				fCorner[1] = fGround[1] + ((c & 2) ? fHalfWidth : -fHalfWidth);
+				fCorner[2] = fGround[2] + 32.0;
+
+				fCornerDown = fCorner;
+				fCornerDown[2] -= 64.0;
+
+				hTrace = TR_TraceRayFilterEx(fCorner, fCornerDown, MASK_PLAYERSOLID, RayType_EndPoint, Cel_FilterWorldOnly, 0);
+
+				if (!TR_DidHit(hTrace))
+				{
+					bFlat = false;
+				} else {
+					float fHit[3];
+
+					TR_GetEndPosition(fHit, hTrace);
+
+					bFlat = (FloatAbs(fHit[2] - fGround[2]) <= 24.0);
+				}
+
+				CloseHandle(hTrace);
+			}
+
+			if (!bFlat)
+			{
+				continue;
+			}
+
+			float fAbove[3];
+
+			fAbove = fGround;
+			fAbove[2] += 16.0;
+
+			if (TR_GetPointContents(fAbove) & MASK_WATER)
+			{
+				continue;
+			}
+		}
+
+		//The box has to fit there without touching anything, the map or props.
+		hTrace = TR_TraceHullEx(fSpot, fSpot, fBoxMin, fBoxMax, MASK_PLAYERSOLID);
+
+		bool bBlocked = TR_DidHit(hTrace);
+
+		CloseHandle(hTrace);
+
+		if (!bBlocked)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 public bool Cel_FilterPlayer(int iEntity, int iContentsMask, any aData)

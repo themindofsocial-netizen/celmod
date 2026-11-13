@@ -8,6 +8,10 @@ bool g_bLate;
 
 float g_fCrosshairOrigin[MAXPLAYERS + 1][3];
 
+Handle g_hOnBuildLoaded;
+Handle g_hOnLoadEntity;
+Handle g_hOnSaveEntity;
+
 int g_iSaveOverride[MAXPLAYERS + 1];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
@@ -30,6 +34,10 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	LoadTranslations("celmod.phrases");
+	
+	g_hOnBuildLoaded = CreateGlobalForward("Cel_OnBuildLoaded", ET_Ignore, Param_Cell, Param_String);
+	g_hOnLoadEntity = CreateGlobalForward("Cel_OnLoadEntity", ET_Ignore, Param_Cell, Param_Cell, Param_Cell);
+	g_hOnSaveEntity = CreateGlobalForward("Cel_OnSaveEntity", ET_Ignore, Param_Cell, Param_Cell);
 	
 	if (g_bLate)
 	{
@@ -59,6 +67,89 @@ public void OnClientPutInServer(int iClient)
 	{
 		CreateDirectory(sPath, 511);
 	}
+}
+
+//Finds the client's Steam id and makes sure their save folder exists. Returns false if the id is not known yet.
+bool Cel_PrepareSaveFolder(int iClient, char[] sAuthID, int iMaxLength)
+{
+	char sPath[PLATFORM_MAX_PATH];
+	
+	Cel_GetAuthID(iClient, sAuthID, iMaxLength);
+	
+	//The stored id is empty when Steam had not confirmed the player when they joined.
+	if (sAuthID[0] == '\0' && !GetClientAuthId(iClient, AuthId_SteamID64, sAuthID, iMaxLength, false))
+	{
+		sAuthID[0] = '\0';
+	}
+	
+	if (sAuthID[0] == '\0')
+	{
+		return false;
+	}
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/users");
+	if (!DirExists(sPath))
+	{
+		CreateDirectory(sPath, 511);
+	}
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/users/%s", sAuthID);
+	if (!DirExists(sPath))
+	{
+		CreateDirectory(sPath, 511);
+	}
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/users/%s/saves", sAuthID);
+	if (!DirExists(sPath))
+	{
+		CreateDirectory(sPath, 511);
+	}
+	
+	return DirExists(sPath);
+}
+
+//Works out the client's land: the middle of its floor (what saved positions are measured from), half its width
+//and depth, and its height. Returns false if the client has no land.
+bool Cel_GetLandLayout(int iClient, float fMiddle[3], float fHalfSize[2], float &fHeight)
+{
+	float fBottom[3], fCorner[2][3], fTop[3];
+	
+	if (!Cel_IsLandCreated(iClient))
+	{
+		return false;
+	}
+	
+	Cel_GetLandPositions(iClient, 1, fCorner[0]);
+	Cel_GetLandPositions(iClient, 4, fCorner[1]);
+	
+	Cel_GetMiddleOfABox(fCorner[0], fCorner[1], fMiddle);
+	
+	fMiddle[2] = fCorner[0][2];
+	
+	Cel_GetLandPositions(iClient, 2, fBottom);
+	Cel_GetLandPositions(iClient, 3, fTop);
+	
+	fHalfSize[0] = FloatAbs(fTop[0] - fBottom[0]) / 2.0;
+	fHalfSize[1] = FloatAbs(fTop[1] - fBottom[1]) / 2.0;
+	fHeight = FloatAbs(fTop[2] - fBottom[2]);
+	
+	return true;
+}
+
+//An entity belongs to a build when its origin is inside its owner's own land.
+bool Cel_IsEntityInOwnLand(int iClient, int iEntity)
+{
+	float fHalfSize[2], fHeight, fMiddle[3], fOrigin[3];
+	
+	if (!Cel_GetLandLayout(iClient, fMiddle, fHalfSize, fHeight))
+	{
+		return false;
+	}
+	
+	Cel_GetEntityOrigin(iEntity, fOrigin);
+	
+	return (FloatAbs(fOrigin[0] - fMiddle[0]) <= fHalfSize[0] && FloatAbs(fOrigin[1] - fMiddle[1]) <= fHalfSize[1]
+		&& fOrigin[2] >= fMiddle[2] - 64.0 && fOrigin[2] <= fMiddle[2] + fHeight);
 }
 
 public Action Command_LoadBuild(int iClient, int iArgs)
@@ -104,9 +195,22 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 	
 	GetNativeString(2, sSaveName, sizeof(sSaveName));
 	
-	Cel_GetAuthID(iClient, sAuthID, sizeof(sAuthID));
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Your builds cannot be reached right now: your Steam ID is not known to the server yet. Try again in a moment.");
+		
+		return false;
+	}
 	
-	Cel_GetCrosshairHitOrigin(iClient, g_fCrosshairOrigin[iClient]);
+	//Builds are placed around the middle of the player's own land, exactly as they were saved.
+	float fHalfSize[2], fHeight, fNeeded[3];
+	
+	if (!Cel_GetLandLayout(iClient, g_fCrosshairOrigin[iClient], fHalfSize, fHeight))
+	{
+		Cel_ReplyToCommand(iClient, "You need a land to load a build into. Type {green}[tag]land{default} to create one.");
+		
+		return false;
+	}
 	
 	Format(sRelPath, sizeof(sRelPath), "data/celmod/users/%s/saves/%s.txt", sAuthID, sSaveName);
 	
@@ -116,6 +220,29 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 	
 	if(kvLoadBuild.ImportFromFile(sFile))
 	{
+		//First pass: how much room the build needs. Nothing is spawned unless all of it fits in the land.
+		if (kvLoadBuild.GotoFirstSubKey())
+		{
+			do
+			{
+				if (FloatAbs(kvLoadBuild.GetFloat("o1")) > fNeeded[0]) fNeeded[0] = FloatAbs(kvLoadBuild.GetFloat("o1"));
+				if (FloatAbs(kvLoadBuild.GetFloat("o2")) > fNeeded[1]) fNeeded[1] = FloatAbs(kvLoadBuild.GetFloat("o2"));
+				if (kvLoadBuild.GetFloat("o3") > fNeeded[2]) fNeeded[2] = kvLoadBuild.GetFloat("o3");
+			}
+			while (kvLoadBuild.GotoNextKey());
+			
+			kvLoadBuild.Rewind();
+		}
+		
+		if (fNeeded[0] > fHalfSize[0] + 1.0 || fNeeded[1] > fHalfSize[1] + 1.0 || fNeeded[2] > fHeight + 1.0)
+		{
+			kvLoadBuild.Close();
+			
+			Cel_ReplyToCommand(iClient, "The build {green}%s{default} does not fit in your land. It needs {green}%d x %d{default} units and {green}%d{default} high; your land is {green}%d x %d{default} and {green}%d{default} high.", sSaveName, RoundToCeil(fNeeded[0] * 2.0), RoundToCeil(fNeeded[1] * 2.0), RoundToCeil(fNeeded[2]), RoundToFloor(fHalfSize[0] * 2.0), RoundToFloor(fHalfSize[1] * 2.0), RoundToFloor(fHeight));
+			
+			return false;
+		}
+		
 		if (kvLoadBuild.GotoFirstSubKey())
 		{
 			do
@@ -137,6 +264,9 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 				kvLoadBuild.GetString("model", sBuffer[2], sizeof(sBuffer[]));
 				
 				EntityType etType = view_as<EntityType>(kvLoadBuild.GetNum("entitytype"));
+				
+				//Entity types that cannot be loaded are skipped instead of re-using the previous entity.
+				iProp = -1;
 				
 				switch(etType)
 				{
@@ -202,12 +332,30 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 					{
 						iProp = Cel_SpawnWeaponBit(iClient, view_as<WeaponBitType>(kvLoadBuild.GetNum("weaponbittype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
 					}
+					case ENTTYPE_TRIGGER:
+					{
+						iProp = Cel_SpawnButton(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+					}
+					case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP:
+					{
+						char sItemId[64];
+						
+						kvLoadBuild.GetString("itemid", sItemId, sizeof(sItemId));
+						
+						//Returns -1 when the player no longer owns the item, or it is already spawned.
+						iProp = Cel_SpawnCollectible(iClient, etType == ENTTYPE_EMBLEM ? "emblem" : (etType == ENTTYPE_HAT ? "hat" : "weapon"), sItemId, fEnt[0], fOrigin);
+					}
 					case ENTTYPE_UNKNOWN:
 					{
 						kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
 						
 						iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
 					}
+				}
+				
+				if (iProp == -1 || !IsValidEntity(iProp))
+				{
+					continue;
 				}
 				
 				Entity_SetName(iProp, sBuffer[1]);
@@ -221,6 +369,15 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 				
 				Cel_SetColorFade(iProp, view_as<bool>(kvLoadBuild.GetNum("colorfading")), kvLoadBuild.GetNum("fc1-1"), kvLoadBuild.GetNum("fc1-2"), kvLoadBuild.GetNum("fc1-3"), kvLoadBuild.GetNum("fc2-1"), kvLoadBuild.GetNum("fc2-2"), kvLoadBuild.GetNum("fc2-3"));
 				Cel_SetRainbow(iProp, view_as<bool>(kvLoadBuild.GetNum("colorrainbow")));
+				
+				//Other plugins restore what they stored with this entity (teleports, messages, sounds, links, welds).
+				Call_StartForward(g_hOnLoadEntity);
+				
+				Call_PushCell(iClient);
+				Call_PushCell(iProp);
+				Call_PushCell(kvLoadBuild);
+				
+				Call_Finish();
 			}
 			
 			while (kvLoadBuild.GotoNextKey());
@@ -234,6 +391,13 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		iProp = -1;
 		
 		Cel_ReplyToCommand(iClient, "%t", "LoadedBuild", sSaveName);
+		
+		Call_StartForward(g_hOnBuildLoaded);
+		
+		Call_PushCell(iClient);
+		Call_PushString(sSaveName);
+		
+		Call_Finish();
 		
 		return true;
 	}else{
@@ -266,7 +430,12 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 		return false;
 	}
 	
-	Cel_GetAuthID(iClient, sAuthID, sizeof(sAuthID));
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Your build cannot be saved right now: your Steam ID is not known to the server yet. Try again in a moment.");
+		
+		return false;
+	}
 	
 	Format(sRelPath, sizeof(sRelPath), "data/celmod/users/%s/saves/%s.txt", sAuthID, sSaveName);
 	
@@ -309,9 +478,9 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 	{
 		if (Cel_CheckOwner(iClient, i))
 		{
-			if(Cel_IsEntityInLand(i))
+			if(Cel_IsEntityInOwnLand(iClient, i))
 			{
-				iLand = Cel_GetLandOwnerFromEntity(i);
+				iLand = iClient;
 				
 				if(iLand == iClient)
 				{
@@ -445,7 +614,23 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 							
 							kvSaveBuild.SetNum("weaponbittype", Cel_GetWeaponType(i));
 						}
+						case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP:
+						{
+							char sItemId[64];
+							
+							Cel_GetCollectibleId(i, sItemId, sizeof(sItemId));
+							
+							kvSaveBuild.SetString("itemid", sItemId);
+						}
 					}
+					
+					//Other plugins add what they need to rebuild this entity.
+					Call_StartForward(g_hOnSaveEntity);
+					
+					Call_PushCell(i);
+					Call_PushCell(kvSaveBuild);
+					
+					Call_Finish();
 					
 					kvSaveBuild.Rewind();
 				}
@@ -455,11 +640,27 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 		}
 	}
 	
-	kvSaveBuild.ExportToFile(sFile[0]);
+	kvSaveBuild.Rewind();
+	
+	bool bWritten = kvSaveBuild.ExportToFile(sFile[0]);
 	
 	kvSaveBuild.Close();
 	
 	g_iSaveOverride[iClient] = 0;
+	
+	if (!bWritten)
+	{
+		LogError("|CelMod| Could not write the build file '%s'.", sFile[0]);
+		
+		Cel_ReplyToCommand(iClient, "Your build {green}%s{default} could not be written to disk. The server log has the details.", sSaveName);
+		
+		return false;
+	}
+	
+	if (iCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "Nothing was saved: none of your entities are inside your land.");
+	}
 	
 	if (bPropOutside)
 	Cel_ReplyToCommand(iClient, "%t", "PropOutsideLand");

@@ -1,0 +1,60 @@
+// |CelMod| celwep "Fire Sword" for the Custom Guns plugin (github.com/Alienmario/customguns-hl2dm).
+// Players get it by pressing E on a Fire Sword weapon cel they own. Its damage and effects are set in
+// addons/sourcemod/data/celmod/collectibles.txt under "Weapons" -> "firesword".
+WeaponData
+{
+	"viewmodel"			"models/celweps/a5_v.mdl"
+	"playermodel"		"models/celweps/a5.mdl"
+	"anim_prefix"		"crowbar"
+
+	"clip_size"			"-1"
+	"primary_ammo"		"None"
+	"secondary_ammo"	"None"
+
+	"autoswitchto"		"0"
+	"autoswitchfrom"	"0"
+
+	SoundData
+	{
+		"single_shot"		"Weapon_Crowbar.Single"
+		"melee_hit"			"Weapon_Crowbar.Melee_Hit"
+		"melee_hit_world"	"Weapon_Crowbar.Melee_HitWorld"
+	}
+
+	"CustomGunsPluginData"
+	{
+		"name"				"Fire Sword"
+		"model"				"models/celweps/a5.mdl"
+
+		// Everyone may hold it: CelMod decides who gets it.
+		"admin_level"		"-1"
+
+		// Never handed out by Custom Guns itself, only by CelMod.
+		"give_on_spawn"		"0"
+		"give_with_weapon"	""
+		"bind_to_weapon"	""
+		"persistent"		"1"
+
+		"weapon_type"		"custom"
+
+		"custom_settings"
+		{
+			"uses_game_ammo"	"0"
+		}
+
+		"download"
+		{
+			"item"	"models/celweps/a5_v.mdl"
+			"item"	"models/celweps/a5_v.vvd"
+			"item"	"models/celweps/a5_v.dx80.vtx"
+			"item"	"models/celweps/a5_v.dx90.vtx"
+			"item"	"models/celweps/a5_v.sw.vtx"
+			"item"	"models/celweps/a5.mdl"
+			"item"	"models/celweps/a5.vvd"
+			"item"	"models/celweps/a5.phy"
+			"item"	"models/celweps/a5.dx80.vtx"
+			"item"	"models/celweps/a5.dx90.vtx"
+			"item"	"models/celweps/a5.sw.vtx"
+		}
+	}
+}

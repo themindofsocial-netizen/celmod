@@ -32,7 +32,9 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetChargerType", Native_GetChargerType);
 	CreateNative("Cel_GetChargerTypeFromName", Native_GetChargerTypeFromName);
 	CreateNative("Cel_GetChargerTypeName", Native_GetChargerTypeName);
+	CreateNative("Cel_GetTriggerLink", Native_GetTriggerLink);
 	CreateNative("Cel_GetTriggerType", Native_GetTriggerType);
+	CreateNative("Cel_SetTriggerLink", Native_SetTriggerLink);
 	CreateNative("Cel_GetWeaponType", Native_GetWeaponType);
 	CreateNative("Cel_GetWeaponTypeFromName", Native_GetWeaponTypeFromName);
 	CreateNative("Cel_GetWeaponTypeName", Native_GetWeaponTypeName);
@@ -1318,4 +1320,21 @@ public void Hook_WeaponBitTouch(int iEntity, int iClient)
 			g_bTouched[iClient] = true;
 		}
 	}
+}
+
+public int Native_GetTriggerLink(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1);
+	
+	return (iEntity > 0 && iEntity <= MAXENTITIES && g_bHasLink[iEntity]) ? g_iLinkedEntity[iEntity] : -1;
+}
+
+public int Native_SetTriggerLink(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1), iTarget = GetNativeCell(2);
+	
+	g_iLinkedEntity[iEntity] = iTarget;
+	g_bHasLink[iEntity] = (iTarget != -1);
+	
+	return true;
 }
