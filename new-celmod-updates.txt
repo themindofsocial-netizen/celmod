@@ -87,3 +87,4 @@
 	 - 11/27/26: The Power Booth no longer uses a menu: bring 5 of an emblem for the big one, or 2 Errors for a Blue Error, and press E.
 	 - 11/28/26: Celweps are no longer carried over when you rejoin, and no name pops up when you pull one out.
 		 - Dug up junk cannot be broken: carry it to a trash can for a few cleers. Trash cans are placed around every map.
+	 - 11/29/26: One celwep at a time: press E on a celwep to take it, on another to swap, on the same one to put it back. The Custom Guns weapon wheel is gone.

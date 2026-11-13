@@ -9,9 +9,10 @@ These make CelMod's celweps real, separate weapons. They need the
    saw gun, melon launcher, blade bow), plus `models/weapons/hl2meleepack/v_shovel.mdl` for the shovel.
    Their textures go in `materials/celweps/a1/`, `a2/`, `a5/`, `a6/`, `a8/`, `a9/`, `a10/` and `a11/`
    (for example `materials/celweps/a2/axe.vmt`); without them the weapons show a purple and black checkerboard.
-4. Optional: set `customguns_default ""` so Custom Guns does not hand everyone its default weapon.
 
-Players get a celwep by pressing E on a weapon cel they own (`!weapon <name>` spawns one). It goes into their
-weapon menu; Custom Guns' weapon wheel (hold reload) switches to it. Several can be carried at once.
+Players get a celwep by pressing E on a weapon cel they own (`!weapon <name>` spawns one). One celwep is held at a
+time: pressing E on another celwep swaps it in, and pressing E on the one held puts it back. CelMod turns off
+Custom Guns' own weapon wheel (`customguns_global_switcher 0`, Reload is held back while a celwep is out) and its
+default weapon (`customguns_default ""`).
 
 Without Custom Guns, celweps still work: the player gets the stock weapon named by `base` in collectibles.txt.

@@ -377,6 +377,25 @@ public void OnLibraryAdded(const char[] sName)
 	}
 }
 
+// Celweps are taken by pressing E on their cels, one at a time, so Custom Guns' own weapon wheel and its default
+// weapon are switched off. Its settings are set again after every config load, so they stay off.
+public void OnConfigsExecuted()
+{
+	ConVar cvSetting = FindConVar("customguns_global_switcher");
+
+	if (cvSetting != null)
+	{
+		cvSetting.SetBool(false);
+	}
+
+	cvSetting = FindConVar("customguns_default");
+
+	if (cvSetting != null)
+	{
+		cvSetting.SetString("");
+	}
+}
+
 public void OnLibraryRemoved(const char[] sName)
 {
 	if (StrEqual(sName, "customguns"))
@@ -1295,18 +1314,45 @@ public void Hook_ItemUse(int iEntity, int iActivator, int iCaller, UseType utTyp
 		return;
 	}
 
+	// One celwep at a time: taking another puts the current one back, and pressing E on the one held puts it back.
 	if (g_Items[iItem].iKind == KIND_WEAPON && UsesCustomGun(iItem))
 	{
-		SetCelWepTaken(iActivator, iItem, !g_bCelWepTaken[iActivator][iItem]);
-
-		EmitSoundToAll(g_bCelWepTaken[iActivator][iItem] ? SOUND_EQUIP : SOUND_UNEQUIP, iEntity);
-
 		if (g_bCelWepTaken[iActivator][iItem])
 		{
-			Cel_PrintToChat(iActivator, "You took your {green}%s{default}. It is in your weapons now. Press {green}E{default} on it again to put it back.", g_Items[iItem].sName);
-		} else {
+			SetCelWepTaken(iActivator, iItem, false);
+
+			EmitSoundToAll(SOUND_UNEQUIP, iEntity);
+
 			Cel_PrintToChat(iActivator, "You put your {green}%s{default} back.", g_Items[iItem].sName);
+
+			return;
 		}
+
+		for (int i = 0; i < g_iItemCount; i++)
+		{
+			if (i != iItem && g_bCelWepTaken[iActivator][i])
+			{
+				char sKey[64];
+
+				g_bCelWepTaken[iActivator][i] = false;
+
+				Format(sKey, sizeof(sKey), "taken_%s", g_Items[i].sId);
+
+				Inv_SetInt(iActivator, sKey, 0);
+			}
+		}
+
+		// The old celwep leaves the inventory before the new one goes in.
+		if (IsPlayerAlive(iActivator))
+		{
+			CG_ClearInventory(iActivator);
+		}
+
+		SetCelWepTaken(iActivator, iItem, true);
+
+		EmitSoundToAll(SOUND_EQUIP, iEntity);
+
+		Cel_PrintToChat(iActivator, "You took your {green}%s{default}. Press {green}E{default} on it again to put it back.", g_Items[iItem].sName);
 
 		return;
 	}
@@ -1420,6 +1466,21 @@ public Action Hook_HatTransmit(int iEntity, int iClient)
 
 public Action OnPlayerRunCmd(int iClient, int &iButtons)
 {
+	// Custom Guns opens its weapon wheel on Reload or +attack3 while a custom gun is in hand. Celweps never need
+	// reloading, so those buttons are held back from it while one is out. (This runs before Custom Guns does, as
+	// plugins are called in load order.)
+	if (g_bCustomGuns && IsPlayerAlive(iClient) && (iButtons & (IN_RELOAD | IN_ATTACK3)))
+	{
+		char sWeapon[64];
+
+		GetClientWeapon(iClient, sWeapon, sizeof(sWeapon));
+
+		if (FindCustomGunItem(sWeapon) != -1)
+		{
+			iButtons &= ~(IN_RELOAD | IN_ATTACK3);
+		}
+	}
+
 	int iLast = g_iLastButtons[iClient];
 
 	g_iLastButtons[iClient] = iButtons;
@@ -1467,7 +1528,7 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 
 	if (iItem == -1 || !g_bHoldingGravGun[iClient] || !IsPlayerAlive(iClient))
 	{
-		return Plugin_Continue;
+		return Plugin_Changed;
 	}
 
 	// Jump emblems, and any emblem with a "jumpboost", jump higher.
@@ -1507,7 +1568,7 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		SecondaryEmblemPower(iClient, iItem);
 	}
 
-	return Plugin_Continue;
+	return Plugin_Changed;
 }
 
 public void Frame_Jump(any iUserId)
