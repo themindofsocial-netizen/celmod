@@ -133,6 +133,7 @@ v_solid - Client - Enables/disables solidicity on the prop you are looking at.
 v_music - Client - Spawns a music cel: E plays the song, E again stops it.
 v_celmusic - Client - Lists the songs the music cel can play.
 v_sound - Client - Spawns a sound cel that plays a sound when used.
+v_speed - Client - Turns changing your walking speed with the walk key (left Alt) on or off.
 v_spawn - Client - Spawns a prop by name.
 v_stack - Client - Stacks one prop on the x, y and z axis.
 v_stackinfo - Client - Gets the origin difference between props for help stacking.

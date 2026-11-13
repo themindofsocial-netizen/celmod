@@ -112,6 +112,7 @@ v_solid|Enables/disables solidicity on the prop you are looking at.|None|Client|
 v_music|Spawns a music cel: E plays the song, E again stops it.|<song> [speed 50-200]|Client|
 v_celmusic|Lists the songs the music cel can play.|None|Client|
 v_sound|Spawns a sound cel that plays a sound when used.|None|Client|
+v_speed|Turns changing your walking speed with the walk key (left Alt) on or off. Remembered between visits.|None|Client|
 v_spawn|Spawns a prop by name.|v_p, v_s|Client|
 v_stack|Stacks props on the x, y and z axis.|None|Client|
 v_stackinfo|Gets the origin difference between props for help stacking.|None|Client|

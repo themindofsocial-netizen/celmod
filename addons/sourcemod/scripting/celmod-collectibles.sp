@@ -201,6 +201,7 @@ bool g_bSpeedManaged[MAXPLAYERS + 1];
 char g_sWalkTier[][] = { "super slow", "very slow", "slow", "normal", "fast" };
 float g_fWalkTier[] = { 0.25, 0.4, 0.6, 1.0, 1.5 };
 int g_iWalkTier[MAXPLAYERS + 1] = { WALK_NORMAL, ... };
+bool g_bWalkKeyOff[MAXPLAYERS + 1];
 bool g_bThirdPerson[MAXPLAYERS + 1];
 int g_iCameraRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
 
@@ -361,6 +362,7 @@ public void OnPluginStart()
 	RegAdminCmd("v_giveitem", Command_GiveItem, ADMFLAG_SLAY, "|CelMod| Gives an emblem or hat to a player.");
 	RegAdminCmd("v_tune", Command_Tune, ADMFLAG_SLAY, "|CelMod| Sets where held emblems, celweps or your hat sit, and saves it.");
 	RegAdminCmd("v_nudge", Command_Nudge, ADMFLAG_SLAY, "|CelMod| Moves where held emblems, celweps or your hat sit a little, and saves it.");
+	RegConsoleCmd("v_speed", Command_Speed, "|CelMod| Turns changing your walking speed with the walk key (left Alt) on or off.");
 	RegAdminCmd("v_eventemblem", Command_EventEmblem, ADMFLAG_SLAY, "|CelMod| Places an event emblem where you aim (end of a maze or parkour). Each player can only ever get it once.");
 	RegAdminCmd("v_eventitem", Command_EventItem, ADMFLAG_SLAY, "|CelMod| Places an event emblem, hat or celwep where you aim. Each player can only ever get it once.");
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
@@ -549,6 +551,7 @@ public void OnClientPutInServer(int iClient)
 
 	g_bThirdPerson[iClient] = false;
 	g_iWalkTier[iClient] = WALK_NORMAL;
+	g_bWalkKeyOff[iClient] = false;
 
 	SDKHook(iClient, SDKHook_OnTakeDamage, Hook_PlayerTakeDamage);
 
@@ -1953,7 +1956,7 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 	g_iLastButtons[iClient] = iButtons;
 
 	// Tapping the walk key steps the walking speed down a tier: normal, slow, very slow, super slow, then fast.
-	if ((iButtons & IN_WALK) && !(iLast & IN_WALK) && IsPlayerAlive(iClient))
+	if ((iButtons & IN_WALK) && !(iLast & IN_WALK) && IsPlayerAlive(iClient) && !g_bWalkKeyOff[iClient])
 	{
 		g_iWalkTier[iClient] = (g_iWalkTier[iClient] == 0) ? sizeof(g_fWalkTier) - 1 : g_iWalkTier[iClient] - 1;
 
@@ -3427,6 +3430,37 @@ void RestoreWeapon(int iClient)
 	g_iHandEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iHandItem[iClient] = -1;
 	g_iModdedWeaponRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+//The setting is remembered between visits.
+public void OnClientPostAdminCheck(int iClient)
+{
+	g_bWalkKeyOff[iClient] = (Cel_GetClientSettingInt(iClient, "walkkeyoff") == 1);
+}
+
+public Action Command_Speed(int iClient, int iArgs)
+{
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	g_bWalkKeyOff[iClient] = !g_bWalkKeyOff[iClient];
+
+	Cel_SetClientSettingInt(iClient, "walkkeyoff", g_bWalkKeyOff[iClient] ? 1 : 0);
+
+	if (g_bWalkKeyOff[iClient])
+	{
+		// Back to normal speed, so nobody is left stuck at a slow speed with the key turned off.
+		g_iWalkTier[iClient] = WALK_NORMAL;
+		g_bSpeedManaged[iClient] = true;
+
+		Cel_ReplyToCommand(iClient, "The walk key no longer changes your walking speed. Your walking speed is now {green}normal{default}. Type {green}[tag]speed{default} to turn it back on.");
+	} else {
+		Cel_ReplyToCommand(iClient, "Tapping the walk key (left Alt) changes your walking speed again. Type {green}[tag]speed{default} to turn it off.");
+	}
+
+	return Plugin_Handled;
 }
 
 float WalkFactor(int iClient)
