@@ -6336,9 +6336,20 @@ bool FindHiddenBoothSpot(float fBest[3])
 		bGuess = true;
 	}
 
-	for (int iTry = 0; iTry < 300 && iSpots < sizeof(fSpots); iTry++)
+	// CelMod maps are huge: spots come from anywhere inside the whole map, not just around the spawn points.
+	float fWorldMin[3], fWorldMax[3];
+
+	GetEntPropVector(0, Prop_Data, "m_WorldMins", fWorldMin);
+	GetEntPropVector(0, Prop_Data, "m_WorldMaxs", fWorldMax);
+
+	// Never back near last time's spot: a quarter of the map's width away at least.
+	float fAvoidLast = (fWorldMax[0] - fWorldMin[0] + fWorldMax[1] - fWorldMin[1]) * 0.125;
+
+	if (fAvoidLast < 1500.0) fAvoidLast = 1500.0;
+
+	for (int iTry = 0; iTry < 400 && iSpots < sizeof(fSpots); iTry++)
 	{
-		if (!Cel_FindRandomMapSpot(GetRandomInt(0, 1) == 0, BOOTH_HALF_WIDTH, BOOTH_HEIGHT, fCandidate, NULL_VECTOR, 0.0, 3000.0))
+		if (!Cel_FindRandomMapSpot(GetRandomInt(0, 1) == 0, BOOTH_HALF_WIDTH, BOOTH_HEIGHT, fCandidate, NULL_VECTOR, 0.0, 3000.0, 1000000.0))
 		{
 			continue;
 		}
@@ -6372,7 +6383,7 @@ bool FindHiddenBoothSpot(float fBest[3])
 			fSpot[2] = fCandidate[2];
 		}
 
-		if (bSameMap && GetVectorDistance(fSpot, g_fLastBoothSpot) < 1500.0)
+		if (bSameMap && GetVectorDistance(fSpot, g_fLastBoothSpot) < fAvoidLast)
 		{
 			continue;
 		}
@@ -6463,8 +6474,11 @@ bool FindHiddenBoothSpot(float fBest[3])
 
 		if (fNearest > 3000.0) fNearest = 3000.0;
 
-		// Height first (every 100 units up is worth a lot), then the corner, then being hidden and far away.
-		fScores[iSpots] = fHeight / 100.0 * 3.0 + fCorner * 12.0 - iSeen * 1.5 + fNearest / 500.0;
+		// High up counts, but only up to a point: every spot well up in the air scores the same for height, so the
+		// tallest part of the map does not win every time. Then the corner, then being hidden and far away.
+		if (fHeight > 1200.0) fHeight = 1200.0;
+
+		fScores[iSpots] = fHeight / 100.0 + fCorner * 6.0 - iSeen * 1.5 + fNearest / 1000.0;
 		fSpots[iSpots] = fSpot;
 
 		iSpots++;
@@ -6475,10 +6489,13 @@ bool FindHiddenBoothSpot(float fBest[3])
 		return false;
 	}
 
-	// One of the best few, at random, so it is not always in the same place.
-	int iTop[6], iTopCount = 0;
+	// Any of the better third of all the spots found, at random, so it turns up all over the map.
+	int iTop[120], iTopCount = 0;
+	int iWant = iSpots / 3;
 
-	for (int k = 0; k < sizeof(iTop); k++)
+	if (iWant < 1) iWant = 1;
+
+	for (int k = 0; k < iWant; k++)
 	{
 		int iBest = -1;
 

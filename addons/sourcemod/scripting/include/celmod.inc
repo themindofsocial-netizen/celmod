@@ -1624,9 +1624,10 @@ public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)
  * @param fSpot       The spot found: the middle of the box's floor.
  * @param fAvoid      A place the spot must stay away from (another booth), with fAvoidRadius.
  * @param fMaxAir     For spots in the air: the most it can be above the ground.
+ * @param fReach      How far past the spawn points to look. A huge value searches the whole map.
  * @return            True if a spot was found.
  */
-stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3], const float fAvoid[3] = NULL_VECTOR, float fAvoidRadius = 0.0, float fMaxAir = 480.0)
+stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight, float fSpot[3], const float fAvoid[3] = NULL_VECTOR, float fAvoidRadius = 0.0, float fMaxAir = 480.0, float fReach = 4000.0)
 {
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
 	float fCamera[3], fGround[3], fMax[3], fMin[3], fOrigin[3], fTry[3];
@@ -1664,12 +1665,12 @@ stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight,
 
 	for (int k = 0; k < 2; k++)
 	{
-		fMin[k] -= 4000.0;
-		fMax[k] += 4000.0;
+		fMin[k] -= fReach;
+		fMax[k] += fReach;
 	}
 
-	fMin[2] -= 768.0;
-	fMax[2] += 2048.0;
+	fMin[2] -= (fReach > 4000.0) ? fReach : 768.0;
+	fMax[2] += (fReach > 4000.0) ? fReach : 2048.0;
 
 	for (int k = 0; k < 3; k++)
 	{
@@ -1722,7 +1723,7 @@ stock bool Cel_FindRandomMapSpot(bool bOnFloor, float fHalfWidth, float fHeight,
 		float fDown[3];
 
 		fDown = fTry;
-		fDown[2] -= 4096.0;
+		fDown[2] -= 16384.0;
 
 		Handle hTrace = TR_TraceRayFilterEx(fTry, fDown, MASK_PLAYERSOLID, RayType_EndPoint, Cel_FilterWorldOnly, 0);
 
