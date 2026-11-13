@@ -5439,9 +5439,8 @@ int CountAtBooth(int iClient, int iItem, float fBooth[3])
 // The player brings spawned emblems to the booth, then presses E on it. Only emblems sitting at the booth count.
 public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
 {
-	char sInfo[16], sLine[96];
 	float fBooth[3];
-	int iCost = g_cvUpgradeCost.IntValue, iOptions = 0, iOnlyFrom = -1, iOnlyTo = -1;
+	int iCost = g_cvUpgradeCost.IntValue, iFrom = -1, iTo = -1;
 
 	if (!IsRealClient(iActivator))
 	{
@@ -5450,9 +5449,44 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 
 	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fBooth);
 
-	Menu mBooth = new Menu(Menu_Booth);
+	// No menu (in HL2DM menus only show as a small notice that has to be opened with Esc): what is made depends on
+	// how many were brought. Enough for a big emblem makes the big one; otherwise the next emblem up, if it has one.
+	for (int i = 0; i < g_iItemCount && iTo == -1; i++)
+	{
+		if (g_Items[i].iKind != KIND_EMBLEM || g_Items[i].bIsBig)
+		{
+			continue;
+		}
 
-	mBooth.SetTitle("Power Booth\nThe emblems you brought here can become:");
+		int iHere = CountAtBooth(iActivator, i, fBooth);
+
+		if (iHere < 1)
+		{
+			continue;
+		}
+
+		if (g_Items[i].iBig != -1 && iHere >= iCost)
+		{
+			iFrom = i;
+			iTo = g_Items[i].iBig;
+		} else if (g_Items[i].iUpgradeTo != -1 && iHere >= g_Items[i].iUpgradeCost)
+		{
+			iFrom = i;
+			iTo = g_Items[i].iUpgradeTo;
+		}
+	}
+
+	if (iTo != -1)
+	{
+		UpgradeAtBooth(iActivator, iEntity, iFrom, iTo);
+
+		return;
+	}
+
+	EmitSoundToClient(iActivator, SOUND_DENY);
+
+	// Say what was brought and how many more are needed.
+	bool bTold = false;
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
@@ -5468,121 +5502,21 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 			continue;
 		}
 
-		if (g_Items[i].iUpgradeTo != -1 && iHere >= g_Items[i].iUpgradeCost)
+		bTold = true;
+
+		if (g_Items[i].iUpgradeTo != -1)
 		{
-			Format(sInfo, sizeof(sInfo), "%d:%d", i, g_Items[i].iUpgradeTo);
-			Format(sLine, sizeof(sLine), "%d %s  ->  1 %s", g_Items[i].iUpgradeCost, g_Items[i].sName, g_Items[g_Items[i].iUpgradeTo].sName);
-
-			mBooth.AddItem(sInfo, sLine);
-
-			iOptions++;
-			iOnlyFrom = i;
-			iOnlyTo = g_Items[i].iUpgradeTo;
-		}
-
-		if (g_Items[i].iBig != -1 && iHere >= iCost)
+			Cel_PrintToChat(iActivator, "{green}Power Booth:{default} you brought {green}%d %s{default}. A {green}%s{default} needs {green}%d{default}, a {green}%s{default} needs {green}%d{default}.", iHere, g_Items[i].sName, g_Items[g_Items[i].iUpgradeTo].sName, g_Items[i].iUpgradeCost, g_Items[g_Items[i].iBig].sName, iCost);
+		} else if (g_Items[i].iBig != -1)
 		{
-			Format(sInfo, sizeof(sInfo), "%d:%d", i, g_Items[i].iBig);
-			Format(sLine, sizeof(sLine), "%d %s  ->  1 %s", iCost, g_Items[i].sName, g_Items[g_Items[i].iBig].sName);
-
-			mBooth.AddItem(sInfo, sLine);
-
-			iOptions++;
-			iOnlyFrom = i;
-			iOnlyTo = g_Items[i].iBig;
+			Cel_PrintToChat(iActivator, "{green}Power Booth:{default} you brought {green}%d %s{default}. A {green}%s{default} needs {green}%d{default}.", iHere, g_Items[i].sName, g_Items[g_Items[i].iBig].sName, iCost);
 		}
 	}
 
-	if (iOptions == 0)
+	if (!bTold)
 	{
-		delete mBooth;
-
-		EmitSoundToClient(iActivator, SOUND_DENY);
-
-		// Say what was brought and how many more are needed.
-		bool bTold = false;
-
-		for (int i = 0; i < g_iItemCount; i++)
-		{
-			if (g_Items[i].iKind != KIND_EMBLEM || g_Items[i].bIsBig)
-			{
-				continue;
-			}
-
-			int iHere = CountAtBooth(iActivator, i, fBooth);
-
-			if (iHere < 1)
-			{
-				continue;
-			}
-
-			bTold = true;
-
-			if (g_Items[i].iUpgradeTo != -1)
-			{
-				Cel_PrintToChat(iActivator, "{green}Power Booth:{default} you brought {green}%d %s{default}. A {green}%s{default} needs {green}%d{default}, a {green}%s{default} needs {green}%d{default}.", iHere, g_Items[i].sName, g_Items[g_Items[i].iUpgradeTo].sName, g_Items[i].iUpgradeCost, g_Items[g_Items[i].iBig].sName, iCost);
-			} else if (g_Items[i].iBig != -1)
-			{
-				Cel_PrintToChat(iActivator, "{green}Power Booth:{default} you brought {green}%d %s{default}. A {green}%s{default} needs {green}%d{default}.", iHere, g_Items[i].sName, g_Items[g_Items[i].iBig].sName, iCost);
-			}
-		}
-
-		if (bTold)
-		{
-			return;
-		}
-
 		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} spawn your emblems and bring them to me, then press {green}E{default} on me. {green}%d{default} of the same emblem make a big one; two {green}Errors{default} make a {green}Blue Error{default}, two Blue make a {green}Green Error{default}.", iCost);
-
-		return;
 	}
-
-	// Only one thing can be made from what was brought: it is made straight away.
-	if (iOptions == 1)
-	{
-		delete mBooth;
-
-		UpgradeAtBooth(iActivator, iEntity, iOnlyFrom, iOnlyTo);
-
-		return;
-	}
-
-	mBooth.Display(iActivator, 20);
-}
-
-public int Menu_Booth(Menu mBooth, MenuAction maAction, int iClient, int iChoice)
-{
-	char sInfo[16], sParts[2][8];
-
-	if (maAction == MenuAction_End)
-	{
-		delete mBooth;
-
-		return 0;
-	}
-
-	if (maAction != MenuAction_Select || !IsRealClient(iClient))
-	{
-		return 0;
-	}
-
-	int iBooth = EntRefToEntIndex(g_iBoothRef);
-
-	if (iBooth == INVALID_ENT_REFERENCE)
-	{
-		return 0;
-	}
-
-	mBooth.GetItem(iChoice, sInfo, sizeof(sInfo));
-
-	if (ExplodeString(sInfo, ":", sParts, 2, sizeof(sParts[])) != 2)
-	{
-		return 0;
-	}
-
-	UpgradeAtBooth(iClient, iBooth, StringToInt(sParts[0]), StringToInt(sParts[1]));
-
-	return 0;
 }
 
 // Takes the emblems from the booth and puts the new one in their place.

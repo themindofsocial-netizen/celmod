@@ -84,3 +84,4 @@
 	 - 11/25/26: Celweps are shown in your hand and their name appears when you switch to one. Admins can line up held emblems, celweps and hats in game with !nudge and !tune; it is saved.
 	 - 11/26/26: The Guess Booth props are shown again.
 		 - The Guess Booth props and the auction item slowly spin.
+	 - 11/27/26: The Power Booth no longer uses a menu: bring 5 of an emblem for the big one, or 2 Errors for a Blue Error, and press E.
