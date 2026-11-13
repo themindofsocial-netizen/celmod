@@ -6225,16 +6225,19 @@ bool CanSeeSpot(float fFrom[3], float fSpot[3])
 	return bSeen;
 }
 
-// A well hidden spot, picked at random. Many spots are tried all over the map: on ledges, rooftops, in corners
-// and up in the air. Only the most hidden ones are kept (no spawn point or Guess Booth can see them, far from
-// every spawn, boxed in by walls), and the booth goes to any one of those at random, never near where it was last
-// time on this map. If a map has no such spots, the rules are eased a step at a time.
+// A spot as high up as the map goes, tucked into a corner. Random points all over the map are each pushed straight
+// up until just under the ceiling or sky, then scored: how high above the ground it hangs counts most, then how
+// much it is boxed into a corner (two walls close by at right angles), then being out of sight of the spawn points
+// and the Guess Booth. One of the best few is picked at random, never near where it was last time on this map.
+#define BOOTH_HALF_WIDTH 28.0
+#define BOOTH_HEIGHT 72.0
+
 bool FindHiddenBoothSpot(float fBest[3])
 {
 	static const char sSpawns[][] = { "info_player_deathmatch", "info_player_combine", "info_player_rebel", "info_player_start" };
 	char sMap[PLATFORM_MAX_PATH];
-	float fCandidate[3], fGuess[3], fSpawn[64][3], fSpots[160][3], fNearest[160], fOpen[160];
-	int iSeen[160];
+	float fCandidate[3], fGuess[3], fSpawn[64][3], fSpots[120][3], fScores[120];
+	float fMins[3] = { -BOOTH_HALF_WIDTH, -BOOTH_HALF_WIDTH, 0.0 }, fMaxs[3] = { BOOTH_HALF_WIDTH, BOOTH_HALF_WIDTH, BOOTH_HEIGHT };
 	bool bGuess = false;
 	int iSpawns = 0, iSpots = 0, iEntity;
 
@@ -6263,26 +6266,110 @@ bool FindHiddenBoothSpot(float fBest[3])
 		bGuess = true;
 	}
 
-	for (int iTry = 0; iTry < 400 && iSpots < sizeof(fSpots); iTry++)
+	for (int iTry = 0; iTry < 300 && iSpots < sizeof(fSpots); iTry++)
 	{
-		// More often on something (a ledge, a roof, a hidden floor), sometimes floating high up.
-		if (!Cel_FindRandomMapSpot(GetRandomInt(0, 9) < 6, 28.0, 72.0, fCandidate, NULL_VECTOR, 0.0, 900.0))
+		if (!Cel_FindRandomMapSpot(GetRandomInt(0, 1) == 0, BOOTH_HALF_WIDTH, BOOTH_HEIGHT, fCandidate, NULL_VECTOR, 0.0, 3000.0))
 		{
 			continue;
 		}
 
-		if (bSameMap && GetVectorDistance(fCandidate, g_fLastBoothSpot) < 1500.0)
+		// Straight up, as far as the booth fits: just under the ceiling or the sky.
+		float fTop[3], fSpot[3];
+
+		fCandidate[2] += 4.0;
+
+		fTop = fCandidate;
+		fTop[2] += 8192.0;
+
+		Handle hUp = TR_TraceHullFilterEx(fCandidate, fTop, fMins, fMaxs, MASK_PLAYERSOLID, Filter_WorldOnly, 0);
+
+		TR_GetEndPosition(fSpot, hUp);
+
+		bool bStartSolid = TR_StartSolid(hUp);
+
+		CloseHandle(hUp);
+
+		if (bStartSolid || TR_PointOutsideWorld(fSpot))
 		{
 			continue;
 		}
 
-		float fMiddle[3];
+		// A little gap under the ceiling, so it does not look stuck into it.
+		fSpot[2] -= 24.0;
 
-		fMiddle = fCandidate;
-		fMiddle[2] += 36.0;
+		if (fSpot[2] < fCandidate[2])
+		{
+			fSpot[2] = fCandidate[2];
+		}
 
-		fNearest[iSpots] = 999999.0;
-		iSeen[iSpots] = 0;
+		if (bSameMap && GetVectorDistance(fSpot, g_fLastBoothSpot) < 1500.0)
+		{
+			continue;
+		}
+
+		// How high it hangs above whatever is under it.
+		float fDown[3], fGround[3];
+
+		fDown = fSpot;
+		fDown[2] -= 16384.0;
+
+		Handle hDown = TR_TraceRayFilterEx(fSpot, fDown, MASK_PLAYERSOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+		TR_GetEndPosition(fGround, hDown);
+
+		CloseHandle(hDown);
+
+		float fHeight = fSpot[2] - fGround[2];
+
+		// How boxed into a corner it is: the closest pair of walls at right angles to each other, at booth height.
+		float fWall[8], fMiddle[3], fAngles[3], fDirection[3], fEnd[3], fHit[3];
+
+		fMiddle = fSpot;
+		fMiddle[2] += BOOTH_HEIGHT * 0.5;
+
+		for (int k = 0; k < 8; k++)
+		{
+			fAngles[0] = 0.0;
+			fAngles[1] = 45.0 * k;
+			fAngles[2] = 0.0;
+
+			GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
+
+			for (int n = 0; n < 3; n++)
+			{
+				fEnd[n] = fMiddle[n] + fDirection[n] * 800.0;
+			}
+
+			Handle hWall = TR_TraceRayFilterEx(fMiddle, fEnd, MASK_PLAYERSOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+			fHit = fEnd;
+
+			if (TR_DidHit(hWall))
+			{
+				TR_GetEndPosition(fHit, hWall);
+			}
+
+			CloseHandle(hWall);
+
+			fWall[k] = GetVectorDistance(fMiddle, fHit);
+		}
+
+		float fCorner = 0.0;
+
+		for (int k = 0; k < 8; k++)
+		{
+			float fPair = (fWall[k] > fWall[(k + 2) % 8]) ? fWall[k] : fWall[(k + 2) % 8];
+			float fTight = 1.0 - fPair / 800.0;
+
+			if (fTight > fCorner)
+			{
+				fCorner = fTight;
+			}
+		}
+
+		// Out of sight of the spawn points and the Guess Booth, and away from them.
+		float fNearest = 999999.0;
+		int iSeen = 0;
 
 		for (int i = 0; i < iSpawns; i++)
 		{
@@ -6290,24 +6377,25 @@ bool FindHiddenBoothSpot(float fBest[3])
 
 			fPoint = fSpawn[i];
 
-			float fDistance = GetVectorDistance(fCandidate, fPoint);
+			float fDistance = GetVectorDistance(fSpot, fPoint);
 
-			if (fDistance < fNearest[iSpots]) fNearest[iSpots] = fDistance;
+			if (fDistance < fNearest) fNearest = fDistance;
 
-			if (CanSeeSpot(fPoint, fMiddle)) iSeen[iSpots]++;
+			if (CanSeeSpot(fPoint, fMiddle)) iSeen++;
 		}
 
 		if (bGuess)
 		{
-			float fDistance = GetVectorDistance(fCandidate, fGuess);
+			if (GetVectorDistance(fSpot, fGuess) < fNearest) fNearest = GetVectorDistance(fSpot, fGuess);
 
-			if (fDistance < fNearest[iSpots]) fNearest[iSpots] = fDistance;
-
-			if (CanSeeSpot(fGuess, fMiddle)) iSeen[iSpots]++;
+			if (CanSeeSpot(fGuess, fMiddle)) iSeen += 2;
 		}
 
-		fOpen[iSpots] = SpotOpenness(fMiddle);
-		fSpots[iSpots] = fCandidate;
+		if (fNearest > 3000.0) fNearest = 3000.0;
+
+		// Height first (every 100 units up is worth a lot), then the corner, then being hidden and far away.
+		fScores[iSpots] = fHeight / 100.0 * 3.0 + fCorner * 12.0 - iSeen * 1.5 + fNearest / 500.0;
+		fSpots[iSpots] = fSpot;
 
 		iSpots++;
 	}
@@ -6317,30 +6405,31 @@ bool FindHiddenBoothSpot(float fBest[3])
 		return false;
 	}
 
-	// The strictest rules that still leave somewhere to put it: unseen, far away and boxed in first.
-	static const float fMinDistance[] = { 1400.0, 1000.0, 700.0, 400.0, 0.0 };
-	static const float fMaxOpen[] = { 450.0, 600.0, 800.0, 2000.0, 2001.0 };
-	static const int iMaxSeen[] = { 0, 0, 0, 1, 999 };
+	// One of the best few, at random, so it is not always in the same place.
+	int iTop[6], iTopCount = 0;
 
-	int iPick[160], iPicks = 0;
-
-	for (int iRule = 0; iRule < sizeof(fMinDistance) && iPicks == 0; iRule++)
+	for (int k = 0; k < sizeof(iTop); k++)
 	{
+		int iBest = -1;
+
 		for (int i = 0; i < iSpots; i++)
 		{
-			if (iSeen[i] <= iMaxSeen[iRule] && fNearest[i] >= fMinDistance[iRule] && fOpen[i] <= fMaxOpen[iRule])
+			if (fScores[i] > -999999.0 && (iBest == -1 || fScores[i] > fScores[iBest]))
 			{
-				iPick[iPicks++] = i;
+				iBest = i;
 			}
 		}
+
+		if (iBest == -1)
+		{
+			break;
+		}
+
+		iTop[iTopCount++] = iBest;
+		fScores[iBest] = -9999999.0;
 	}
 
-	if (iPicks == 0)
-	{
-		return false;
-	}
-
-	fBest = fSpots[iPick[GetRandomInt(0, iPicks - 1)]];
+	fBest = fSpots[iTop[GetRandomInt(0, iTopCount - 1)]];
 
 	strcopy(g_sLastBoothMap, sizeof(g_sLastBoothMap), sMap);
 	g_fLastBoothSpot = fBest;

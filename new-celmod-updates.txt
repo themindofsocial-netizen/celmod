@@ -111,3 +111,4 @@
 		 - Event and restricted areas now also stop phasing, blinking, portals and teleport pads from getting players in, and emblems give no movement help (speed, sprint, gravity, jump, feather) inside event areas.
 		 - Event items are fixed objects (nothing can move, pick up or break them) for emblems, hats and celweps: !eventitem <emblem/hat/weapon> <name>. Every player can press E on one to claim it, once and only once per item. Reward pickups are fixed objects too.
 		 - !eventitem link <emblem/hat/weapon> <name> makes a map's own object (a prop, button, door or other brush entity) the claimable event item. It is saved by Hammer ID and comes back every time the map loads; !delreward unlinks it.
+	 - 12/06/26: The Power Booth now hangs as high as each map goes (just under the ceiling or sky), preferably tucked into a corner and out of sight of spawns, picked at random from the best few spots.
