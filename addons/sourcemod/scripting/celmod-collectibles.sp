@@ -6771,7 +6771,7 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 
 	if (!bTold)
 	{
-		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} spawn your emblems and bring them to me, then press {green}E{default} on me. {green}%d{default} of the same emblem make a big one; two {green}Errors{default} make a {green}Blue Error{default}, two Blue make a {green}Green Error{default}.", iCost);
+		Cel_PrintToChat(iActivator, "{green}Power Booth:{default} bring your emblems here and press {green}E{default} to upgrade them.");
 	}
 }
 
