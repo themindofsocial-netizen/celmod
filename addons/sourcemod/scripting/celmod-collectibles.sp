@@ -2060,7 +2060,8 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 			{
 				TR_GetEndPosition(fHit, hAim);
 
-				bClose = (GetVectorDistance(fEyes, fHit) <= 120.0);
+				// The game's own +use reach for doors and buttons (PLAYER_USE_RADIUS): 80 units from the eyes.
+				bClose = (GetVectorDistance(fEyes, fHit) <= 80.0);
 			}
 
 			CloseHandle(hAim);
