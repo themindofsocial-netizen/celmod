@@ -19,6 +19,10 @@ StringMap g_smLoadIds[MAXPLAYERS + 1];
 bool g_bHide[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bHideHooked[MAXENTITIES + 1];
 bool g_bLandBan[MAXPLAYERS + 1][MAXPLAYERS + 1];
+bool g_bBlockLands[MAXPLAYERS + 1];
+bool g_bOutsideKnown[MAXPLAYERS + 1];
+float g_fLastOutside[MAXPLAYERS + 1][3];
+float g_fNextBlockNotice[MAXPLAYERS + 1];
 
 char g_sMessage[MAXENTITIES + 1][192];
 char g_sSound[MAXENTITIES + 1][PLATFORM_MAX_PATH];
@@ -75,6 +79,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_palette", Command_Palette, "|CelMod| Colors the prop you are looking at with your own red, green and blue values.");
 	RegConsoleCmd("v_teleport", Command_Teleport, "|CelMod| Spawns a teleport pad. Use it twice: the first pad sends players to the second.");
 	RegConsoleCmd("v_hide", Command_Hide, "|CelMod| Hides another player's entities from your view.");
+	RegConsoleCmd("v_block", Command_Block, "|CelMod| Stops you from entering other players' lands (toggle, or on/off).");
+	CreateTimer(0.1, Timer_BlockLands, _, TIMER_REPEAT);
 	RegConsoleCmd("v_landban", Command_LandBan, "|CelMod| Bans a player from your land.");
 	RegConsoleCmd("v_landunban", Command_LandUnban, "|CelMod| Lets a banned player back into your land.");
 	RegConsoleCmd("v_message", Command_Message, "|CelMod| Spawns a message cel that shows your text to whoever uses it.");
@@ -101,6 +107,9 @@ public void OnClientPutInServer(int iClient)
 	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
 	g_fNextBanNotice[iClient] = 0.0;
 	g_fNextTeleport[iClient] = 0.0;
+	g_bBlockLands[iClient] = false;
+	g_bOutsideKnown[iClient] = false;
+	g_fNextBlockNotice[iClient] = 0.0;
 	
 	g_alUndo[iClient].Clear();
 	
@@ -241,6 +250,105 @@ public Action Hook_HideTransmit(int iEntity, int iClient)
 }
 
 //Banned and recently kicked players are sent back to a spawn point when they step into the land.
+//!block: the player keeps themselves out of every other player's land (their own land is fine).
+public void OnClientPostAdminCheck(int iClient)
+{
+	g_bBlockLands[iClient] = (Cel_GetClientSettingInt(iClient, "blocklands") == 1);
+}
+
+public Action Command_Block(int iClient, int iArgs)
+{
+	char sArg[8];
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	bool bBlock = !g_bBlockLands[iClient];
+	
+	if (iArgs > 0)
+	{
+		GetCmdArg(1, sArg, sizeof(sArg));
+		
+		bBlock = (StrEqual(sArg, "on", false) || StrEqual(sArg, "1"));
+	}
+	
+	g_bBlockLands[iClient] = bBlock;
+	
+	Cel_SetClientSettingInt(iClient, "blocklands", bBlock ? 1 : 0);
+	
+	Cel_ReplyToCommand(iClient, bBlock ? "Block {green}on{default}: you can no longer enter other players' lands." : "Block {green}off{default}: you can enter other players' lands again.");
+	
+	//Turned on while standing in someone's land: put outside it straight away.
+	if (bBlock)
+	{
+		float fOrigin[3];
+		
+		GetClientAbsOrigin(iClient, fOrigin);
+		
+		fOrigin[2] += 16.0;
+		
+		int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+		
+		if (iOwner > 0 && iOwner <= MaxClients && iOwner != iClient && IsPlayerAlive(iClient))
+		{
+			g_bOutsideKnown[iClient] = false;
+			
+			DispatchSpawn(iClient);
+		}
+	}
+	
+	return Plugin_Handled;
+}
+
+//Players with !block on are stopped at the edge of other players' lands: put back where they last stood outside.
+public Action Timer_BlockLands(Handle hTimer)
+{
+	float fOrigin[3], fZero[3];
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!g_bBlockLands[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			g_bOutsideKnown[i] = false;
+			continue;
+		}
+		
+		GetClientAbsOrigin(i, fOrigin);
+		
+		float fCheck[3];
+		
+		fCheck = fOrigin;
+		fCheck[2] += 16.0;
+		
+		int iOwner = Cel_GetLandOwnerFromPosition(fCheck);
+		
+		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
+		{
+			g_fLastOutside[i] = fOrigin;
+			g_bOutsideKnown[i] = true;
+			continue;
+		}
+		
+		if (g_bOutsideKnown[i])
+		{
+			TeleportEntity(i, g_fLastOutside[i], NULL_VECTOR, fZero);
+		} else {
+			DispatchSpawn(i);
+		}
+		
+		if (GetGameTime() >= g_fNextBlockNotice[i])
+		{
+			g_fNextBlockNotice[i] = GetGameTime() + 3.0;
+			
+			Cel_PrintToChat(i, "You have {green}block{default} on, so you can't enter {green}%N{default}'s land. Type {green}[tag]block{default} to turn it off.", iOwner);
+		}
+	}
+	
+	return Plugin_Continue;
+}
+
 public Action Timer_LandBans(Handle hTimer)
 {
 	float fOrigin[3];

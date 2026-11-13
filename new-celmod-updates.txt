@@ -114,3 +114,4 @@
 	 - 12/06/26: The Power Booth now hangs as high as each map goes (just under the ceiling or sky), preferably tucked into a corner and out of sight of spawns, picked at random from the best few spots.
 	 - 12/07/26: Players inside a co-op land show the co-op skull above their head, and players inside a deathmatch land show the deathmatch skull. Everyone can see them, from anywhere (cm_land_skull_scale, cm_land_skull_height).
 	 - 12/08/26: Tapping the walk key (left Alt) changes your walking speed: normal, slow, very slow, super slow, fast, and round again. Fast is capped to normal inside event areas.
+		 - !block stops you from entering other players' lands: you are stopped at the edge. Type it again (or !block off) to turn it off. It is remembered between visits.

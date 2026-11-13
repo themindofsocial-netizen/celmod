@@ -69,6 +69,7 @@ v_hide|Hides another player's entities from your view.|None|Client|
 v_internet|Creates a working internet cel.|None|Client|
 v_ladder|Creates a working ladder cel.|None|Client|
 v_land|Creates a building zone.|None|Client|
+v_block|Stops you from entering other players' lands (toggle, or on/off). Remembered between visits.|[on/off]|Client|
 v_landban|Bans a player from your land.|None|Client|
 v_landcolor|Changes the color of your land's border.|None|Client|
 v_landkick|Kicks a player out of your land for 10 seconds.|None|Client|

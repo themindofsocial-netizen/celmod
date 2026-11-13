@@ -71,6 +71,7 @@ v_internet - Client - Creates a working internet cel.
 v_inventory - Client - Lists the emblems and hats you own.
 v_ladder - Client - Creates a working ladder cel.
 v_land - Client - Creates a building zone.
+v_block - Client - Stops you from entering other players' lands (toggle, or on/off).
 v_landban - Client - Bans a player from your land.
 v_landcolor - Client - Changes the color of your land's border.
 v_landcoop - Client - Changes the mode to co-op within the land.
