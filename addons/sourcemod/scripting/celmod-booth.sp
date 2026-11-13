@@ -20,6 +20,10 @@
 #define KLEINER_HELLO "vo/k_lab/kl_ahhhh.wav"
 
 bool g_bAuction;
+
+float g_fSpinCenter[MAXENTITIES + 1][3];
+float g_fSpinOffset[MAXENTITIES + 1][3];
+float g_fSpinYaw;
 bool g_bBooth;
 
 char g_sAuctionId[64];
@@ -75,6 +79,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_guess", Command_Guess, "|CelMod| Guesses the winning prop at the Guess Booth. One guess per map.");
 	
 	CreateTimer(1.0, Timer_Booth, _, TIMER_REPEAT);
+	CreateTimer(0.05, Timer_Spin, _, TIMER_REPEAT);
 }
 
 public void OnMapStart()
@@ -230,6 +235,17 @@ int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false)
 	}
 	
 	TeleportEntity(iEntity, fOrigin, NULL_VECTOR, NULL_VECTOR);
+	
+	//Kept so the prop can turn around its own middle.
+	if (iEntity <= MAXENTITIES)
+	{
+		g_fSpinCenter[iEntity] = fCenter;
+		
+		for (int i = 0; i < 3; i++)
+		{
+			g_fSpinOffset[iEntity][i] = (fMins[i] + fMaxs[i]) * 0.5;
+		}
+	}
 	
 	return iEntity;
 }
@@ -420,6 +436,44 @@ bool IsInBooth(int iClient)
 	return (g_bBooth && FloatAbs(fOrigin[0] - g_fCenter[0]) <= BOOTH_HALF && FloatAbs(fOrigin[1] - g_fCenter[1]) <= BOOTH_HALF && FloatAbs(fOrigin[2] - g_fCenter[2]) <= 160.0);
 }
 
+//Turns the booth's props and the auction item slowly around their middles, a full turn about every 15 seconds.
+public Action Timer_Spin(Handle hTimer)
+{
+	float fAngles[3], fOrigin[3];
+	
+	g_fSpinYaw += 1.2;
+	
+	if (g_fSpinYaw >= 360.0)
+	{
+		g_fSpinYaw -= 360.0;
+	}
+	
+	float fCos = Cosine(DegToRad(g_fSpinYaw)), fSin = Sine(DegToRad(g_fSpinYaw));
+	
+	fAngles[1] = g_fSpinYaw;
+	
+	for (int i = 0; i < 4; i++)
+	{
+		int iEntity = EntRefToEntIndex(i < 3 ? g_iPropRef[i] : g_iAuctionRef);
+		
+		if (iEntity == INVALID_ENT_REFERENCE || iEntity <= MaxClients || iEntity > MAXENTITIES)
+		{
+			continue;
+		}
+		
+		//The origin swings around the middle as the prop turns, so the middle stays put.
+		float fX = g_fSpinOffset[iEntity][0], fY = g_fSpinOffset[iEntity][1];
+		
+		fOrigin[0] = g_fSpinCenter[iEntity][0] - (fX * fCos - fY * fSin);
+		fOrigin[1] = g_fSpinCenter[iEntity][1] - (fX * fSin + fY * fCos);
+		fOrigin[2] = g_fSpinCenter[iEntity][2] - g_fSpinOffset[iEntity][2];
+		
+		TeleportEntity(iEntity, fOrigin, fAngles, NULL_VECTOR);
+	}
+	
+	return Plugin_Continue;
+}
+
 //Draws the yellow square, tells players near the booth what it is, and ends the auction on time.
 public Action Timer_Booth(Handle hTimer)
 {
@@ -516,11 +570,12 @@ public Action Command_GuessBooth(int iClient, int iArgs)
 	//An auction display moves with the booth.
 	int iDisplay = EntRefToEntIndex(g_iAuctionRef);
 	
-	if (g_bAuction && iDisplay != INVALID_ENT_REFERENCE)
+	if (g_bAuction && iDisplay != INVALID_ENT_REFERENCE && iDisplay <= MAXENTITIES)
 	{
 		fOrigin[2] += 130.0;
 		
-		TeleportEntity(iDisplay, fOrigin, NULL_VECTOR, NULL_VECTOR);
+		//The spin keeps it turning around its new spot.
+		g_fSpinCenter[iDisplay] = fOrigin;
 	}
 	
 	Cel_ReplyToCommand(iClient, "The Guess Booth has been moved here for this map, with new props.");

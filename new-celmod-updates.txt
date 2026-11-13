@@ -83,3 +83,4 @@
 		 - The Power Booth hides in tucked away spots out of sight of spawns and the Guess Booth.
 	 - 11/25/26: Celweps are shown in your hand and their name appears when you switch to one. Admins can line up held emblems, celweps and hats in game with !nudge and !tune; it is saved.
 	 - 11/26/26: The Guess Booth props are shown again.
+		 - The Guess Booth props and the auction item slowly spin.
