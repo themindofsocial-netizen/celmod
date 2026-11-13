@@ -44,7 +44,7 @@ char g_sEventAllowed[][] =
 {
 	"v_balance", "v_buy", "v_cl", "v_emblems", "v_hats", "v_weapons", "v_inventory", "v_thirdperson", "v_firstperson", "v_stuck", 
 	"v_owner", "v_commandlist", "v_cmds", "v_commands", "v_updates", "v_updatelist", "v_switch", "v_guess", "v_bid", 
-	"v_playermodel", "v_playermodels", "v_buymodel", "v_emblem", "v_hat", "v_weapon", "v_zones"
+	"v_playermodel", "v_playermodels", "v_buymodel", "v_emblem", "v_hat", "v_weapon", "v_zones", "v_celmusic", "v_block"
 };
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)

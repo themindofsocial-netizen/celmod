@@ -127,6 +127,8 @@ v_show - Client - Shows a hidden player's entities again.
 v_skin - Client - Changes the skin on the prop you are looking at.
 v_smove - Client - Moves the prop you are looking at on it's origin.
 v_solid - Client - Enables/disables solidicity on the prop you are looking at.
+v_music - Client - Spawns a music cel: E plays the song, E again stops it.
+v_celmusic - Client - Lists the songs the music cel can play.
 v_sound - Client - Spawns a sound cel that plays a sound when used.
 v_spawn - Client - Spawns a prop by name.
 v_stack - Client - Stacks one prop on the x, y and z axis.

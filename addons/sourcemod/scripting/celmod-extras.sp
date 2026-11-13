@@ -27,6 +27,10 @@ float g_fNextBlockNotice[MAXPLAYERS + 1];
 char g_sMessage[MAXENTITIES + 1][192];
 char g_sSound[MAXENTITIES + 1][PLATFORM_MAX_PATH];
 char g_sSoundDB[PLATFORM_MAX_PATH];
+char g_sMusic[MAXENTITIES + 1][PLATFORM_MAX_PATH];
+float g_fMusicLength[MAXENTITIES + 1];
+float g_fMusicEnds[MAXENTITIES + 1];
+int g_iMusicPitch[MAXENTITIES + 1];
 
 float g_fLandKickUntil[MAXPLAYERS + 1][MAXPLAYERS + 1];
 float g_fNextBanNotice[MAXPLAYERS + 1];
@@ -86,6 +90,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_message", Command_Message, "|CelMod| Spawns a message cel that shows your text to whoever uses it.");
 	RegConsoleCmd("v_release", Command_Release, "|CelMod| Releases the entity you are looking at from a weld.");
 	RegConsoleCmd("v_show", Command_Show, "|CelMod| Shows a hidden player's entities again.");
+	RegConsoleCmd("v_music", Command_Music, "|CelMod| Spawns a music cel that plays a song when used (and stops it when used again).");
+	RegConsoleCmd("v_celmusic", Command_CelMusic, "|CelMod| Lists the songs the music cel can play.");
 	RegConsoleCmd("v_sound", Command_Sound, "|CelMod| Spawns a sound cel that plays a sound when used.");
 	RegConsoleCmd("v_undo", Command_Undo, "|CelMod| Removes the last entity you spawned.");
 	RegConsoleCmd("v_weld", Command_Weld, "|CelMod| Welds one of your entities to another so they move together.");
@@ -135,6 +141,8 @@ public void OnMapStart()
 		g_iTrackOwner[i] = 0;
 		g_sMessage[i][0] = '\0';
 		g_sSound[i][0] = '\0';
+		g_sMusic[i][0] = '\0';
+		g_fMusicEnds[i] = 0.0;
 	}
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
@@ -153,6 +161,8 @@ public void OnEntityCreated(int iEntity, const char[] sClassname)
 		g_iTeleportDest[iEntity] = INVALID_ENT_REFERENCE;
 		g_sMessage[iEntity][0] = '\0';
 		g_sSound[iEntity][0] = '\0';
+		g_sMusic[iEntity][0] = '\0';
+		g_fMusicEnds[iEntity] = 0.0;
 		
 		RequestFrame(Frame_TrackEntity, EntIndexToEntRef(iEntity));
 	}
@@ -1071,6 +1081,210 @@ public Action Command_Sound(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+//A music cel that is deleted while playing stops its song for everyone.
+public void OnEntityDestroyed(int iEntity)
+{
+	if (iEntity > MaxClients && iEntity <= MAXENTITIES && g_sMusic[iEntity][0] != '\0' && GetGameTime() < g_fMusicEnds[iEntity])
+	{
+		StopSound(iEntity, SNDCHAN_STATIC, g_sMusic[iEntity]);
+	}
+	
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		g_sMusic[iEntity][0] = '\0';
+		g_fMusicEnds[iEntity] = 0.0;
+	}
+}
+
+//Music cel: plays a song from the "Music" list in data/celmod/sounds.txt. E starts it, E again stops it.
+bool FindSong(const char[] sName, char[] sPath, int iMaxLength, float &fLength)
+{
+	char sValue[PLATFORM_MAX_PATH], sParts[2][PLATFORM_MAX_PATH];
+	
+	KeyValues kvSounds = new KeyValues("Sounds");
+	
+	kvSounds.ImportFromFile(g_sSoundDB);
+	
+	bool bFound = (kvSounds.JumpToKey("Music", false));
+	
+	if (bFound)
+	{
+		kvSounds.GetString(sName, sValue, sizeof(sValue), "");
+		
+		bFound = (sValue[0] != '\0');
+	}
+	
+	delete kvSounds;
+	
+	if (!bFound)
+	{
+		return false;
+	}
+	
+	//"path|length in seconds"
+	int iParts = ExplodeString(sValue, "|", sParts, 2, sizeof(sParts[]));
+	
+	strcopy(sPath, iMaxLength, sParts[0]);
+	
+	fLength = (iParts > 1) ? StringToFloat(sParts[1]) : 0.0;
+	
+	return true;
+}
+
+public Action Command_Music(int iClient, int iArgs)
+{
+	char sName[64], sPath[PLATFORM_MAX_PATH], sPitch[8];
+	float fLength;
+	int iPitch = 100;
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]music{default} <song> [speed 50-200]. Type {green}[tag]celmusic{default} for the list of songs.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sName, sizeof(sName));
+	
+	if (!FindSong(sName, sPath, sizeof(sPath), fLength))
+	{
+		Cel_ReplyToCommand(iClient, "There is no song called {green}%s{default}. Type {green}[tag]celmusic{default} for the list.", sName);
+		return Plugin_Handled;
+	}
+	
+	if (iArgs > 1)
+	{
+		GetCmdArg(2, sPitch, sizeof(sPitch));
+		
+		iPitch = StringToInt(sPitch);
+		
+		if (iPitch < 50) iPitch = 50;
+		if (iPitch > 200) iPitch = 200;
+	}
+	
+	int iProp = SpawnUsableProp(iClient, "music", "models/props_lab/reciever01b.mdl");
+	
+	if (iProp == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	SetupMusicCel(iProp, sPath, fLength, iPitch);
+	
+	Cel_ReplyToCommand(iClient, "Spawned a {green}%s{default} music cel. Press {green}E{default} on it to play it, and again to stop it.", sName);
+	
+	return Plugin_Handled;
+}
+
+void SetupMusicCel(int iProp, const char[] sPath, float fLength, int iPitch)
+{
+	PrecacheSound(sPath);
+	
+	strcopy(g_sMusic[iProp], sizeof(g_sMusic[]), sPath);
+	
+	g_fMusicLength[iProp] = fLength;
+	g_iMusicPitch[iProp] = iPitch;
+	g_fMusicEnds[iProp] = 0.0;
+	
+	SetEntProp(iProp, Prop_Data, "m_spawnflags", GetEntProp(iProp, Prop_Data, "m_spawnflags") | 256);
+	
+	SDKHook(iProp, SDKHook_UsePost, Hook_MusicUse);
+}
+
+public void Hook_MusicUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	if (g_sMusic[iEntity][0] == '\0' || GetGameTime() < g_fNextSoundUse[iEntity] || Cel_IsLocked(iEntity))
+	{
+		return;
+	}
+	
+	g_fNextSoundUse[iEntity] = GetGameTime() + 0.5;
+	
+	//Playing: stop it.
+	if (GetGameTime() < g_fMusicEnds[iEntity])
+	{
+		StopSound(iEntity, SNDCHAN_STATIC, g_sMusic[iEntity]);
+		
+		g_fMusicEnds[iEntity] = 0.0;
+		
+		return;
+	}
+	
+	EmitSoundToAll(g_sMusic[iEntity], iEntity, SNDCHAN_STATIC, SNDLEVEL_NORMAL, SND_NOFLAGS, SNDVOL_NORMAL, g_iMusicPitch[iEntity]);
+	
+	//A faster song ends sooner.
+	float fLength = (g_fMusicLength[iEntity] > 0.0) ? g_fMusicLength[iEntity] : 600.0;
+	
+	g_fMusicEnds[iEntity] = GetGameTime() + fLength * 100.0 / g_iMusicPitch[iEntity];
+}
+
+//The songs a music cel can play, with how long each one is.
+public Action Command_CelMusic(int iClient, int iArgs)
+{
+	char sName[64], sValue[PLATFORM_MAX_PATH], sParts[2][PLATFORM_MAX_PATH], sLine[256];
+	int iCount = 0, iOnLine = 0;
+	
+	KeyValues kvSounds = new KeyValues("Sounds");
+	
+	if (!kvSounds.ImportFromFile(g_sSoundDB) || !kvSounds.JumpToKey("Music", false) || !kvSounds.GotoFirstSubKey(false))
+	{
+		delete kvSounds;
+		
+		Cel_ReplyToCommand(iClient, "There are no songs for the music cel on this server.");
+		return Plugin_Handled;
+	}
+	
+	Cel_ReplyToCommand(iClient, "Music cel songs ({green}[tag]music{default} <song> [speed 50-200]):");
+	
+	sLine[0] = '\0';
+	
+	do
+	{
+		kvSounds.GetSectionName(sName, sizeof(sName));
+		kvSounds.GetString(NULL_STRING, sValue, sizeof(sValue), "");
+		
+		int iLength = (ExplodeString(sValue, "|", sParts, 2, sizeof(sParts[])) > 1) ? RoundToFloor(StringToFloat(sParts[1])) : 0;
+		
+		if (iLength > 0)
+		{
+			Format(sLine, sizeof(sLine), "%s%s{green}%s{default} (%d:%02d)", sLine, iOnLine > 0 ? ", " : "", sName, iLength / 60, iLength % 60);
+		} else {
+			Format(sLine, sizeof(sLine), "%s%s{green}%s{default}", sLine, iOnLine > 0 ? ", " : "", sName);
+		}
+		
+		iCount++;
+		iOnLine++;
+		
+		//A few to a line, so chat does not cut them off.
+		if (iOnLine == 5)
+		{
+			Cel_ReplyToCommand(iClient, "%s", sLine);
+			
+			sLine[0] = '\0';
+			iOnLine = 0;
+		}
+	}
+	while (kvSounds.GotoNextKey(false));
+	
+	delete kvSounds;
+	
+	if (iOnLine > 0)
+	{
+		Cel_ReplyToCommand(iClient, "%s", sLine);
+	}
+	
+	if (iCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "There are no songs for the music cel on this server.");
+	}
+	
+	return Plugin_Handled;
+}
+
 public Action Command_Model(int iClient, int iArgs)
 {
 	char sAlias[64], sCommand[96];
@@ -1254,6 +1468,13 @@ public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
 		kvSave.SetString("x_sound", g_sSound[iEntity]);
 	}
 	
+	if (g_sMusic[iEntity][0] != '\0')
+	{
+		kvSave.SetString("x_music", g_sMusic[iEntity]);
+		kvSave.SetFloat("x_musiclength", g_fMusicLength[iEntity]);
+		kvSave.SetNum("x_musicpitch", g_iMusicPitch[iEntity]);
+	}
+	
 	int iExit = EntRefToEntIndex(g_iTeleportDest[iEntity]);
 	
 	if (g_iTeleportDest[iEntity] != INVALID_ENT_REFERENCE && iExit != INVALID_ENT_REFERENCE)
@@ -1290,6 +1511,15 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 		SetEntProp(iEntity, Prop_Data, "m_spawnflags", GetEntProp(iEntity, Prop_Data, "m_spawnflags") | 256);
 		
 		SDKHook(iEntity, SDKHook_UsePost, Hook_MessageUse);
+	}
+	
+	char sMusic[PLATFORM_MAX_PATH];
+	
+	kvSave.GetString("x_music", sMusic, sizeof(sMusic), "");
+	
+	if (sMusic[0] != '\0')
+	{
+		SetupMusicCel(iEntity, sMusic, kvSave.GetFloat("x_musiclength", 0.0), kvSave.GetNum("x_musicpitch", 100));
 	}
 	
 	kvSave.GetString("x_sound", g_sSound[iEntity], sizeof(g_sSound[]), "");
