@@ -640,7 +640,7 @@ public Action Timer_HUD(Handle hTimer)
 					Cel_GetHudColor(i, iHUDColor);
 				} else if (GetClientAimTarget(i, false) > MaxClients && Cel_GetDropBoxEmblem(GetClientAimTarget(i, false), sPropName, sizeof(sPropName))) {
 					//Emblem drop boxes are nobody's until the map changes, but everyone can see what is inside.
-					Format(sHUDMessage, sizeof(sHUDMessage), "Emblem box: %s\nHold it at map change, or open it (E) in your land", sPropName);
+					Format(sHUDMessage, sizeof(sHUDMessage), "Emblem: %s", sPropName);
 					
 					Cel_GetHudColor(i, iHUDColor);
 				} else if(Cel_IsClientCrosshairInLand(i)){
