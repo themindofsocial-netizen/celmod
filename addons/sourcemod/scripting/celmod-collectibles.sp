@@ -195,6 +195,12 @@ bool g_bCustomGuns;
 bool g_bGravityManaged[MAXPLAYERS + 1];
 bool g_bPortal[MAXPLAYERS + 1][2];
 bool g_bSpeedManaged[MAXPLAYERS + 1];
+
+// Walking speed, changed by tapping the walk key (left Alt): super slow, very slow, slow, normal, fast.
+#define WALK_NORMAL 3
+char g_sWalkTier[][] = { "super slow", "very slow", "slow", "normal", "fast" };
+float g_fWalkTier[] = { 0.25, 0.4, 0.6, 1.0, 1.5 };
+int g_iWalkTier[MAXPLAYERS + 1] = { WALK_NORMAL, ... };
 bool g_bThirdPerson[MAXPLAYERS + 1];
 int g_iCameraRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
 
@@ -542,6 +548,7 @@ public void OnClientPutInServer(int iClient)
 	ResetClient(iClient);
 
 	g_bThirdPerson[iClient] = false;
+	g_iWalkTier[iClient] = WALK_NORMAL;
 
 	SDKHook(iClient, SDKHook_OnTakeDamage, Hook_PlayerTakeDamage);
 
@@ -1945,6 +1952,19 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 
 	g_iLastButtons[iClient] = iButtons;
 
+	// Tapping the walk key steps the walking speed down a tier: normal, slow, very slow, super slow, then fast.
+	if ((iButtons & IN_WALK) && !(iLast & IN_WALK) && IsPlayerAlive(iClient))
+	{
+		g_iWalkTier[iClient] = (g_iWalkTier[iClient] == 0) ? sizeof(g_fWalkTier) - 1 : g_iWalkTier[iClient] - 1;
+
+		// Felt straight away; the emblem speed check puts both together a moment later.
+		SetEntPropFloat(iClient, Prop_Data, "m_flLaggedMovementValue", WalkFactor(iClient));
+
+		g_bSpeedManaged[iClient] = true;
+
+		Cel_PrintToChat(iClient, "Your walking speed is now {green}%s{default}.", g_sWalkTier[g_iWalkTier[iClient]]);
+	}
+
 	// Pressing E while looking at the Power Booth up close.
 	if ((iButtons & IN_USE) && !(iLast & IN_USE) && IsPlayerAlive(iClient) && IsLookingAtBooth(iClient))
 	{
@@ -2369,6 +2389,9 @@ public Action Timer_Think(Handle hTimer)
 				fSpeed = StrEqual(g_Items[iItem].sPower, "speed") ? g_Items[iItem].fValue : g_Items[iItem].fSpeed;
 			}
 		}
+
+		// The walking speed tier the player picked with the walk key.
+		fSpeed *= WalkFactor(i);
 
 		if (fSpeed != 1.0 || g_bSpeedManaged[i])
 		{
@@ -3404,6 +3427,19 @@ void RestoreWeapon(int iClient)
 	g_iHandEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iHandItem[iClient] = -1;
 	g_iModdedWeaponRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+float WalkFactor(int iClient)
+{
+	float fFactor = g_fWalkTier[g_iWalkTier[iClient]];
+
+	// No running faster than normal through a maze or parkour course.
+	if (g_bInEvent[iClient] && fFactor > 1.0)
+	{
+		fFactor = 1.0;
+	}
+
+	return fFactor;
 }
 
 bool IsMovementPower(int iItem)
