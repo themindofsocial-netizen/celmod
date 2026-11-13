@@ -128,6 +128,8 @@ v_straight - Client - Resets the angles on the prop you are looking at.
 v_straighten - Client - Resets the angles on the prop you are looking at.
 v_stuck - Client - Respawns you.
 v_switch - Client - Switches the side the hud is on the screen.
+v_tacticlvl - Client - Shows your tactics level.
+v_tacticxp - Client - Shows your tactics experience towards the next level.
 v_takemodel - Admin - Takes a player model away from a player.
 v_teleport - Client - Spawns a teleport pad. Use it twice: the first pad sends players to the second.
 v_thirdperson - Client - Switches to a third person view so you can see your emblem and hat.

@@ -1327,6 +1327,26 @@ native int Cel_SpawnWeaponBit(int iClient, WeaponBitType wbtType, float fAngles[
 native void Cel_StartSale(int iClient, int iEntity, int iPrice);
 
 /**
+ * Tactics level: a player's level, earned with experience from playing, building and fighting.
+ */
+native int Cel_GetTacticsLevel(int iClient);
+
+/**
+ * Experience towards the next tactics level.
+ */
+native int Cel_GetTacticsXP(int iClient);
+
+/**
+ * Experience the next tactics level needs in total.
+ */
+native int Cel_GetTacticsXPNeeded(int iClient);
+
+/**
+ * Gives a player tactics experience, levelling them up when they have enough.
+ */
+native void Cel_AddTacticsXP(int iClient, int iAmount);
+
+/**
  * Subtracts one from the Cel entity count for a client.
  *
  * @param iClient  The client index.
@@ -1384,6 +1404,34 @@ stock void Cel_ActivateEffect(int iEntity)
 	}
 	
 	Cel_SetEffectActive(iEntity, !Cel_IsEffectActive(iEntity));
+}
+
+#define CEL_MONEYBOX_MODEL "models/celmod/cleers.mdl"
+
+/**
+ * The model for a money box: CelMod's cleers box, or a plain box when the server does not have it.
+ */
+stock void Cel_GetMoneyBoxModel(char[] sModel, int iMaxLength)
+{
+	strcopy(sModel, iMaxLength, FileExists(CEL_MONEYBOX_MODEL, true) ? CEL_MONEYBOX_MODEL : "models/props_lab/box01a.mdl");
+}
+
+/**
+ * The money box skin for an amount: bigger amounts look richer. The cleers box has 7 skins.
+ */
+stock int Cel_GetMoneyBoxSkin(int iAmount)
+{
+	static const int iSteps[] = { 100, 500, 1000, 5000, 25000, 100000 };
+
+	for (int i = 0; i < sizeof(iSteps); i++)
+	{
+		if (iAmount < iSteps[i])
+		{
+			return i;
+		}
+	}
+
+	return 6;
 }
 
 public bool Cel_FilterWorldOnly(int iEntity, int iContentsMask, any aData)

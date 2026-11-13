@@ -612,7 +612,7 @@ public Action Timer_HUD(Handle hTimer)
 					}else if (Cel_IsPlayer(iEntity)) {
 						Cel_GetClientBalanceTranslated(iEntity, sBalance, sizeof(sBalance));
 						
-						Format(sHUDMessage, sizeof(sHUDMessage), "%N\nBalance: %s | Spawned: %d", iEntity, sBalance, Cel_GetCombinedCount(iEntity));
+						Format(sHUDMessage, sizeof(sHUDMessage), "%N\nMoney: %s | Tactics Lvl: %d", iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
 						
 						Cel_GetHudColor(iEntity, iHUDColor);
 					}
@@ -635,14 +635,14 @@ public Action Timer_HUD(Handle hTimer)
 					}else{
 						Cel_GetClientBalanceTranslated(i, sBalance, sizeof(sBalance));
 						
-						Format(sHUDMessage, sizeof(sHUDMessage), "Balance: %s\nSpawned: %d", sBalance, Cel_GetCombinedCount(i));
+						FormatPlayerHUD(i, sBalance, sHUDMessage, sizeof(sHUDMessage));
 						
 						Cel_GetHudColor(i, iHUDColor);
 					}
 				}else{
 					Cel_GetClientBalanceTranslated(i, sBalance, sizeof(sBalance));
 					
-					Format(sHUDMessage, sizeof(sHUDMessage), "Balance: %s\nSpawned: %d", sBalance, Cel_GetCombinedCount(i));
+					FormatPlayerHUD(i, sBalance, sHUDMessage, sizeof(sHUDMessage));
 					
 					Cel_GetHudColor(i, iHUDColor);
 				}
@@ -653,4 +653,22 @@ public Action Timer_HUD(Handle hTimer)
 	}
 	
 	return Plugin_Continue;
+}
+
+//The player's own HUD: money, tactics level, and a bar of ten marks showing experience towards the next level.
+void FormatPlayerHUD(int iClient, const char[] sBalance, char[] sMessage, int iMaxLength)
+{
+	char sBar[16];
+	
+	int iNeeded = Cel_GetTacticsXPNeeded(iClient);
+	int iFilled = (iNeeded > 0) ? (Cel_GetTacticsXP(iClient) * 10) / iNeeded : 0;
+	
+	for (int i = 0; i < 10; i++)
+	{
+		sBar[i] = (i < iFilled) ? '+' : '-';
+	}
+	
+	sBar[10] = '\0';
+	
+	Format(sMessage, iMaxLength, "Money: %s\nTactics Lvl: %d\nEXP: %s", sBalance, Cel_GetTacticsLevel(iClient), sBar);
 }

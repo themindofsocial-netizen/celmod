@@ -161,3 +161,15 @@ materials/models/celmod/cl/amt6.vmt
 materials/models/celmod/cl/amt6.vtf
 materials/models/celmod/cl/amt7.vmt
 materials/models/celmod/cl/amt7.vtf
+models/celmod/physbox8.mdl
+models/celmod/physbox8.vvd
+models/celmod/physbox8.phy
+models/celmod/physbox8.dx80.vtx
+models/celmod/physbox8.dx90.vtx
+models/celmod/physbox8.sw.vtx
+models/celmod/cleers.mdl
+models/celmod/cleers.vvd
+models/celmod/cleers.phy
+models/celmod/cleers.dx80.vtx
+models/celmod/cleers.dx90.vtx
+models/celmod/cleers.sw.vtx

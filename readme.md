@@ -105,6 +105,8 @@ v_stackinfo|Gets the origin difference between props for help stacking.|None|Cli
 v_stand|Resets the angles on the prop you are looking at.|v_straight, v_straighten|Client|
 v_stuck|Respawns you.|None|Client|
 v_switch|Switches the side the hud is on the screen.|None|Client|
+v_tacticlvl|Shows your tactics level.|None|Client|
+v_tacticxp|Shows your tactics experience towards the next level.|None|Client|
 v_takemodel|Takes a player model away from a player.|None|Admin|
 v_teleport|Spawns a teleport pad. Use it twice: the first pad sends players to the second.|None|Client|
 v_thirdperson|Switches to a third person view so you can see your emblem and hat.|None|Client|

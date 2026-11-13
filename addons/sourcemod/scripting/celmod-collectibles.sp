@@ -34,7 +34,8 @@
 
 #define GRAVGUN_CLASS "weapon_physcannon"
 #define GRAVGUN_WORLDMODEL "models/weapons/w_physics.mdl"
-#define DROPBOX_MODEL "models/items/item_item_crate.mdl"
+#define DROPBOX_MODEL "models/celmod/physbox8.mdl"
+#define DROPBOX_FALLBACK "models/items/item_item_crate.mdl"
 
 #define SOUND_EQUIP "buttons/button9.wav"
 #define SOUND_UNEQUIP "buttons/button10.wav"
@@ -48,7 +49,6 @@
 #define SOUND_FLASH "npc/scanner/scanner_photo1.wav"
 #define SOUND_CANISTER "weapons/mortar/mortar_shell_incomming1.wav"
 #define SOUND_DIG "physics/surfaces/sand_impact_bullet1.wav"
-#define MONEYBOX_MODEL "models/props_junk/cardboard_box004a.mdl"
 #define SOUND_TRASH "physics/metal/metal_solid_impact_soft1.wav"
 #define SOUND_HEAL "items/medshot4.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
@@ -130,6 +130,10 @@ ConVar g_cvUpgradeCost;
 int g_iBoothRef = INVALID_ENT_REFERENCE;
 
 char g_sBoothModel[PLATFORM_MAX_PATH];
+char g_sDropModel[PLATFORM_MAX_PATH];
+
+int g_iHeldBox[MAXPLAYERS + 1];
+float g_fHeldBoxTime[MAXPLAYERS + 1];
 char g_sCanisterModel[PLATFORM_MAX_PATH];
 int g_iCelWepItem[MAXPLAYERS + 1];
 int g_iShownGunRef[MAXPLAYERS + 1];
@@ -179,6 +183,7 @@ bool g_bHoldingGravGun[MAXPLAYERS + 1];
 bool g_bInvFromDisk[MAXPLAYERS + 1];
 bool g_bCloaked[MAXPLAYERS + 1];
 bool g_bTinted[MAXPLAYERS + 1];
+bool g_bPhasing[MAXPLAYERS + 1];
 bool g_bCelWepTaken[MAXPLAYERS + 1][MAX_ITEMS];
 bool g_bCustomGuns;
 bool g_bGravityManaged[MAXPLAYERS + 1];
@@ -191,7 +196,6 @@ char g_sItemDB[PLATFORM_MAX_PATH];
 char g_sMap[64];
 char g_sRewardDB[PLATFORM_MAX_PATH];
 
-ConVar g_cvDropClaimTime;
 ConVar g_cvDropCount;
 ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
@@ -297,7 +301,6 @@ public void OnPluginStart()
 		ResetClient(i);
 	}
 
-	g_cvDropClaimTime = CreateConVar("cm_drop_claim_time", "30.0", "Seconds after an emblem drop starts before the crates are checked against player lands.", _, true, 5.0);
 	g_cvDropCount = CreateConVar("cm_drop_count", "5", "Number of crates in one emblem drop.", _, true, 1.0, true, 30.0);
 	g_cvNukeWrecks = CreateConVar("cm_nuke_wrecks_builds", "1", "1: the Nuke emblem unfreezes and scatters props where it lands, as on the original server. 0: builds are safe.", _, true, 0.0, true, 1.0);
 	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
@@ -423,7 +426,10 @@ public void OnMapStart()
 	GetCurrentMap(g_sMap, sizeof(g_sMap));
 
 	PrecacheModel(GRAVGUN_WORLDMODEL, true);
-	PrecacheModel(DROPBOX_MODEL, true);
+	// The emblem box, with the emblem's own skin; a plain crate if the server does not have it.
+	strcopy(g_sDropModel, sizeof(g_sDropModel), FileExists(DROPBOX_MODEL, true) ? DROPBOX_MODEL : DROPBOX_FALLBACK);
+
+	PrecacheModel(g_sDropModel, true);
 
 	PrecacheSound(SOUND_EQUIP, true);
 	PrecacheSound(SOUND_UNEQUIP, true);
@@ -476,7 +482,11 @@ public void OnMapStart()
 		PrecacheModel(g_sJunkModels[i], true);
 	}
 
-	PrecacheModel(MONEYBOX_MODEL, true);
+	char sMoneyBox[PLATFORM_MAX_PATH];
+
+	Cel_GetMoneyBoxModel(sMoneyBox, sizeof(sMoneyBox));
+
+	PrecacheModel(sMoneyBox, true);
 	PrecacheSound(SOUND_TRASH, true);
 	PrecacheSound(SOUND_DIG, true);
 
@@ -1252,6 +1262,7 @@ public Action Event_Death(Event eEvent, const char[] sName, bool bDontBroadcast)
 		RestoreWeapon(iClient);
 
 		g_bHoldingGravGun[iClient] = false;
+		g_bPhasing[iClient] = false;
 		g_fFrozenUntil[iClient] = 0.0;
 
 		if (g_bCloaked[iClient] || g_bFrozenTint[iClient])
@@ -1525,6 +1536,14 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		return Plugin_Changed;
 	}
 
+	// Phantom: holding right click phases through walls.
+	if (StrEqual(g_Items[iItem].sPower, "phase") && (iButtons & IN_ATTACK2) && !g_bPhasing[iClient])
+	{
+		g_bPhasing[iClient] = true;
+
+		SetEntityMoveType(iClient, MOVETYPE_NOCLIP);
+	}
+
 	// Jump emblems, and any emblem with a "jumpboost", jump higher.
 	if ((StrEqual(g_Items[iItem].sPower, "jump") || g_Items[iItem].fJump > 0.0) && (iButtons & IN_JUMP) && !(iLast & IN_JUMP) && (GetEntityFlags(iClient) & FL_ONGROUND))
 	{
@@ -1722,6 +1741,18 @@ public Action Timer_Think(Handle hTimer)
 
 		iWeapon = GetEntPropEnt(i, Prop_Send, "m_hActiveWeapon");
 
+		// Emblem boxes: the one held with the gravity gun is remembered for the map change.
+		if (iWeapon > MaxClients && IsValidEntity(iWeapon) && HasEntProp(iWeapon, Prop_Send, "m_hAttachedObject"))
+		{
+			int iHeld = GetEntPropEnt(iWeapon, Prop_Send, "m_hAttachedObject");
+
+			if (iHeld > MaxClients && iHeld <= MAXENTITIES && g_bDropBox[iHeld])
+			{
+				g_iHeldBox[i] = EntIndexToEntRef(iHeld);
+				g_fHeldBoxTime[i] = GetGameTime();
+			}
+		}
+
 		g_bHoldingGravGun[i] = false;
 
 		if (iWeapon > MaxClients && IsValidEntity(iWeapon))
@@ -1813,15 +1844,29 @@ public Action Timer_Think(Handle hTimer)
 		{
 			g_bTinted[i] = true;
 
-			SetEntityRenderColor(i, g_Items[iItem].iPlayerColor[0], g_Items[iItem].iPlayerColor[1], g_Items[iItem].iPlayerColor[2], 255);
+			// A see-through tint (Phantom) needs the see-through render mode.
+			if (g_Items[iItem].iPlayerColor[3] < 255)
+			{
+				SetEntityRenderMode(i, RENDER_TRANSCOLOR);
+			}
+
+			SetEntityRenderColor(i, g_Items[iItem].iPlayerColor[0], g_Items[iItem].iPlayerColor[1], g_Items[iItem].iPlayerColor[2], g_Items[iItem].iPlayerColor[3]);
 		} else if (g_bTinted[i])
 		{
 			g_bTinted[i] = false;
 
 			if (fNow >= g_fFrozenUntil[i] && !g_bCloaked[i])
 			{
+				SetEntityRenderMode(i, RENDER_NORMAL);
 				SetEntityRenderColor(i, 255, 255, 255, 255);
 			}
+		}
+
+		// Phantom: a player who stops phasing (lets go of right click, puts the emblem away) is put back to walking
+		// as soon as they are not inside anything.
+		if (g_bPhasing[i] && !(g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "phase") && (GetClientButtons(i) & IN_ATTACK2)))
+		{
+			StopPhasing(i);
 		}
 
 		// Cloak: the player is nearly invisible while the emblem is in hand.
@@ -1934,56 +1979,6 @@ public Action Timer_Minute(Handle hTimer)
 	}
 
 	return Plugin_Continue;
-}
-
-public Action Timer_DropSettle(Handle hTimer, any iRef)
-{
-	float fOrigin[3];
-	int iBox = EntRefToEntIndex(iRef);
-
-	if (iBox == INVALID_ENT_REFERENCE || iBox < 1 || !g_bDropBox[iBox])
-	{
-		return Plugin_Stop;
-	}
-
-	int iItem = g_iEntItem[iBox];
-
-	GetEntPropVector(iBox, Prop_Data, "m_vecAbsOrigin", fOrigin);
-
-	g_bDropBox[iBox] = false;
-	g_iEntItem[iBox] = -1;
-
-	AcceptEntityInput(iBox, "kill");
-
-	TE_SetupBeamRingPoint(fOrigin, 10.0, 120.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.6, 6.0, 0.0, g_iOrange, 10, 0);
-	TE_SendToAll();
-
-	if (iItem < 0 || iItem >= g_iItemCount)
-	{
-		return Plugin_Stop;
-	}
-
-	int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
-
-	if (!IsRealClient(iOwner) || !Cel_IsLandCreated(iOwner))
-	{
-		return Plugin_Stop;
-	}
-
-	fOrigin[2] += 8.0;
-
-	int iEntity = SpawnItemEntity(iOwner, iItem, fOrigin, g_fZero);
-
-	if (iEntity != -1)
-	{
-		Cel_DropEntityToFloor(iEntity);
-	}
-
-	SetOwned(iOwner, iItem, GetOwned(iOwner, iItem) + 1);
-
-	Cel_PrintToChatAll("A crate landed in {green}%N{default}'s land and contained a {green}%s{default} %s!", iOwner, g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
-
-	return Plugin_Stop;
 }
 
 //Natives:
@@ -3159,7 +3154,6 @@ void PlayShotSound(int iClient, const char[] sSound)
 void LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], float fSpeed, float fScale, bool bGravity)
 {
 	char sBuffer[64];
-	float fVelocity[3];
 
 	float fDistance = GetVectorDistance(fStart, fEnd);
 
@@ -3192,27 +3186,10 @@ void LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], floa
 
 	DispatchSpawn(iSprite);
 
-	fVelocity[0] = (fEnd[0] - fStart[0]) / fLife;
-	fVelocity[1] = (fEnd[1] - fStart[1]) / fLife;
-	fVelocity[2] = (fEnd[2] - fStart[2]) / fLife;
+	// Moved along its path every frame: a sprite does not move by itself.
+	TeleportEntity(iSprite, fStart, NULL_VECTOR, NULL_VECTOR);
 
-	if (bGravity)
-	{
-		// Thrown upwards just enough to land on the target after falling.
-		fVelocity[2] += 0.5 * FindConVar("sv_gravity").FloatValue * fLife;
-
-		SetEntityMoveType(iSprite, MOVETYPE_FLYGRAVITY);
-	} else {
-		SetEntityMoveType(iSprite, MOVETYPE_NOCLIP);
-	}
-
-	TeleportEntity(iSprite, fStart, NULL_VECTOR, fVelocity);
-
-	Format(sBuffer, sizeof(sBuffer), "OnUser1 !self:Kill::%.2f:1", fLife);
-
-	SetVariantString(sBuffer);
-	AcceptEntityInput(iSprite, "AddOutput");
-	AcceptEntityInput(iSprite, "FireUser1");
+	StartMover(iSprite, fStart, fEnd, fLife, bGravity, true);
 }
 
 // A burst of sprites thrown in a direction, they fall and fade on their own.
@@ -3403,17 +3380,131 @@ void LaunchModel(int iItem, float fStart[3], float fEnd[3], int iColor[4], float
 	MakeVectorFromPoints(fStart, fEnd, fVelocity);
 	GetVectorAngles(fVelocity, fAngles);
 
-	ScaleVector(fVelocity, 1.0 / fLife);
+	TeleportEntity(iModel, fStart, fAngles, NULL_VECTOR);
 
-	SetEntityMoveType(iModel, MOVETYPE_NOCLIP);
+	StartMover(iModel, fStart, fEnd, fLife, false, true);
+}
 
-	TeleportEntity(iModel, fStart, fAngles, fVelocity);
+// Things that fly along a path (shots, the Nuke's canister) are moved here every server frame, because the
+// entities used for them do not move by themselves.
+#define MAX_MOVERS 128
 
-	Format(sBuffer, sizeof(sBuffer), "OnUser1 !self:Kill::%.2f:1", fLife);
+int g_iMoverRef[MAX_MOVERS] = { INVALID_ENT_REFERENCE, ... };
+bool g_bMoverArc[MAX_MOVERS];
+bool g_bMoverKill[MAX_MOVERS];
+float g_fMoverBegin[MAX_MOVERS];
+float g_fMoverEnd[MAX_MOVERS][3];
+float g_fMoverLife[MAX_MOVERS];
+float g_fMoverStart[MAX_MOVERS][3];
 
-	SetVariantString(sBuffer);
-	AcceptEntityInput(iModel, "AddOutput");
-	AcceptEntityInput(iModel, "FireUser1");
+void StartMover(int iEntity, float fStart[3], float fEnd[3], float fLife, bool bArc, bool bKillAtEnd)
+{
+	for (int i = 0; i < MAX_MOVERS; i++)
+	{
+		if (EntRefToEntIndex(g_iMoverRef[i]) != INVALID_ENT_REFERENCE)
+		{
+			continue;
+		}
+
+		g_iMoverRef[i] = EntIndexToEntRef(iEntity);
+		g_fMoverStart[i] = fStart;
+		g_fMoverEnd[i] = fEnd;
+		g_fMoverBegin[i] = GetGameTime();
+		g_fMoverLife[i] = fLife > 0.05 ? fLife : 0.05;
+		g_bMoverArc[i] = bArc;
+		g_bMoverKill[i] = bKillAtEnd;
+
+		return;
+	}
+
+	// Too many things in the air at once: this one is simply removed.
+	AcceptEntityInput(iEntity, "kill");
+}
+
+public void OnGameFrame()
+{
+	float fPos[3];
+	float fNow = GetGameTime();
+
+	for (int i = 0; i < MAX_MOVERS; i++)
+	{
+		if (g_iMoverRef[i] == INVALID_ENT_REFERENCE)
+		{
+			continue;
+		}
+
+		int iEntity = EntRefToEntIndex(g_iMoverRef[i]);
+
+		if (iEntity == INVALID_ENT_REFERENCE)
+		{
+			g_iMoverRef[i] = INVALID_ENT_REFERENCE;
+			continue;
+		}
+
+		float fT = (fNow - g_fMoverBegin[i]) / g_fMoverLife[i];
+
+		if (fT >= 1.0)
+		{
+			g_iMoverRef[i] = INVALID_ENT_REFERENCE;
+
+			if (g_bMoverKill[i])
+			{
+				AcceptEntityInput(iEntity, "kill");
+			} else {
+				TeleportEntity(iEntity, g_fMoverEnd[i], NULL_VECTOR, NULL_VECTOR);
+			}
+
+			continue;
+		}
+
+		for (int k = 0; k < 3; k++)
+		{
+			fPos[k] = g_fMoverStart[i][k] + (g_fMoverEnd[i][k] - g_fMoverStart[i][k]) * fT;
+		}
+
+		// Arcing shots (water) rise and fall on the way.
+		if (g_bMoverArc[i])
+		{
+			fPos[2] += 4.0 * GetVectorDistance(g_fMoverStart[i], g_fMoverEnd[i]) * 0.12 * fT * (1.0 - fT);
+		}
+
+		TeleportEntity(iEntity, fPos, NULL_VECTOR, NULL_VECTOR);
+	}
+}
+
+// Ends phasing once the player is clear of walls and props; while still inside something they stay phased.
+void StopPhasing(int iClient)
+{
+	float fMaxs[3], fMins[3], fOrigin[3];
+
+	if (!IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		g_bPhasing[iClient] = false;
+
+		return;
+	}
+
+	GetClientAbsOrigin(iClient, fOrigin);
+	GetClientMins(iClient, fMins);
+	GetClientMaxs(iClient, fMaxs);
+
+	Handle hTrace = TR_TraceHullFilterEx(fOrigin, fOrigin, fMins, fMaxs, MASK_PLAYERSOLID, Filter_NotSelf, iClient);
+
+	bool bStuck = TR_DidHit(hTrace);
+
+	CloseHandle(hTrace);
+
+	if (bStuck)
+	{
+		return;
+	}
+
+	g_bPhasing[iClient] = false;
+
+	if (GetEntityMoveType(iClient) == MOVETYPE_NOCLIP)
+	{
+		SetEntityMoveType(iClient, MOVETYPE_WALK);
+	}
 }
 
 // Removes an entity after a delay, without a timer of our own.
@@ -3844,9 +3935,9 @@ void NukeStrike(int iClient, int iItem, float fEnd[3])
 	fVelocity[1] = fDirection[1] * 1800.0;
 	fVelocity[2] = fDirection[2] * 1800.0;
 
-	SetEntityMoveType(iCanister, MOVETYPE_NOCLIP);
+	TeleportEntity(iCanister, fStart, fFacing, NULL_VECTOR);
 
-	TeleportEntity(iCanister, fStart, fFacing, fVelocity);
+	StartMover(iCanister, fStart, fEnd, fFlight, false, true);
 
 	// A smoke trail behind it.
 	int iTrail = CreateEntityByName("env_smoketrail");
@@ -3869,8 +3960,6 @@ void NukeStrike(int iClient, int iItem, float fEnd[3])
 		SetVariantString("!activator");
 		AcceptEntityInput(iTrail, "SetParent", iCanister, iTrail);
 	}
-
-	KillAfter(iCanister, fFlight);
 
 	EmitSoundToAll(SOUND_CANISTER, iCanister);
 
@@ -4642,7 +4731,7 @@ int StartDrop(int iCount)
 
 	for (int i = 0; i < iCount; i++)
 	{
-		iItem = PickRandomItem(-1);
+		iItem = PickRandomItem(KIND_EMBLEM);
 
 		if (iItem == -1 || !FindDropPosition(fOrigin))
 		{
@@ -4656,22 +4745,23 @@ int StartDrop(int iCount)
 			continue;
 		}
 
-		DispatchKeyValue(iBox, "model", DROPBOX_MODEL);
+		DispatchKeyValue(iBox, "model", g_sDropModel);
 		DispatchKeyValue(iBox, "classname", "cel_dropbox");
 
 		DispatchSpawn(iBox);
 
 		TeleportEntity(iBox, fOrigin, NULL_VECTOR, NULL_VECTOR);
 
-		// The crate must survive the fall and being thrown around with the gravity gun.
-		SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
+		// The box shows which emblem is inside: the emblem's skin, in the emblem's color.
+		SetEntProp(iBox, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
 		SetEntityRenderColor(iBox, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+
+		// It must survive the fall and being thrown around with the gravity gun until the map changes.
+		SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
 
 		g_bDropBox[iBox] = true;
 		g_iEntItem[iBox] = iItem;
 		g_iRewardId[iBox] = -1;
-
-		CreateTimer(g_cvDropClaimTime.FloatValue, Timer_DropSettle, EntIndexToEntRef(iBox), TIMER_FLAG_NO_MAPCHANGE);
 
 		iSpawned++;
 	}
@@ -4680,7 +4770,7 @@ int StartDrop(int iCount)
 	{
 		EmitSoundToAll(SOUND_DROP);
 
-		Cel_PrintToChatAll("{green}Emblem drop!{default} %d crate%s falling from the sky. Any crate inside your land in {green}%d{default} seconds is yours.", iSpawned, iSpawned == 1 ? " is" : "s are", RoundToFloor(g_cvDropClaimTime.FloatValue));
+		Cel_PrintToChatAll("{green}Emblem drop!{default} %d emblem box%s falling from the sky. Grab one with your gravity gun: the box you are holding when the map changes is yours.", iSpawned, iSpawned == 1 ? " is" : "es are");
 	}
 
 	return iSpawned;
@@ -4851,7 +4941,7 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 		iColor[1] = g_Items[iItem].iColor[1];
 		iColor[2] = g_Items[iItem].iColor[2];
 	} else {
-		strcopy(sModel, sizeof(sModel), iKind == KIND_EMBLEM ? GRAVGUN_WORLDMODEL : DROPBOX_MODEL);
+		strcopy(sModel, sizeof(sModel), iKind == KIND_EMBLEM ? GRAVGUN_WORLDMODEL : g_sDropModel);
 	}
 
 	int iEntity = CreateEntityByName("prop_physics_override");
@@ -4901,6 +4991,7 @@ void ResetClient(int iClient)
 {
 	g_bCloaked[iClient] = false;
 	g_bTinted[iClient] = false;
+	g_bPhasing[iClient] = false;
 	g_bGravityManaged[iClient] = false;
 
 	for (int i = 0; i < MAX_ITEMS; i++)
@@ -4923,6 +5014,8 @@ void ResetClient(int iClient)
 	g_iActiveHat[iClient] = -1;
 	g_iHatEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iLastButtons[iClient] = 0;
+	g_iHeldBox[iClient] = INVALID_ENT_REFERENCE;
+	g_fHeldBoxTime[iClient] = 0.0;
 	g_iShownGunRef[iClient] = INVALID_ENT_REFERENCE;
 
 	for (int i = 0; i < 3; i++)
@@ -5952,7 +6045,11 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 
 	if (fRoll < g_cvDigEmblemChance.FloatValue + g_cvDigMoneyChance.FloatValue)
 	{
-		SpawnDugUp(MONEYBOX_MODEL, fSpot, GetRandomInt(g_cvDigMoneyMin.IntValue, g_cvDigMoneyMax.IntValue));
+		char sMoneyBox[PLATFORM_MAX_PATH];
+
+		Cel_GetMoneyBoxModel(sMoneyBox, sizeof(sMoneyBox));
+
+		SpawnDugUp(sMoneyBox, fSpot, GetRandomInt(g_cvDigMoneyMin.IntValue, g_cvDigMoneyMax.IntValue));
 
 		Cel_PrintToChat(iClient, "You dug up a {green}money box{default}! Press {green}E{default} on it.");
 
@@ -5990,7 +6087,7 @@ void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
 	if (iMoney > 0)
 	{
 		SetEntProp(iProp, Prop_Data, "m_takedamage", 0, 1);
-		SetEntityRenderColor(iProp, 80, 255, 80, 255);
+		SetEntProp(iProp, Prop_Send, "m_nSkin", Cel_GetMoneyBoxSkin(iMoney));
 
 		SDKHook(iProp, SDKHook_UsePost, Hook_MoneyBoxUse);
 
@@ -6364,5 +6461,36 @@ void ThinkTrash()
 
 			break;
 		}
+	}
+}
+
+// The map is changing: every player holding an emblem box (now, or until a moment ago, as the gravity gun lets go
+// when the map ends) keeps the emblem inside.
+public void OnMapEnd()
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		int iBox = EntRefToEntIndex(g_iHeldBox[i]);
+
+		g_iHeldBox[i] = INVALID_ENT_REFERENCE;
+
+		if (!IsRealClient(i) || iBox == INVALID_ENT_REFERENCE || !g_bDropBox[iBox] || GetGameTime() - g_fHeldBoxTime[i] > 1.5)
+		{
+			continue;
+		}
+
+		int iItem = g_iEntItem[iBox];
+
+		// One box can only be won once.
+		g_bDropBox[iBox] = false;
+
+		if (iItem < 0 || iItem >= g_iItemCount)
+		{
+			continue;
+		}
+
+		SetOwned(i, iItem, GetOwned(i, iItem) + 1);
+
+		Cel_PrintToChat(i, "You kept your emblem box: a {green}%s{default} emblem is yours! Type {green}!emblem %s{default} to spawn it.", g_Items[iItem].sName, g_Items[iItem].sId);
 	}
 }

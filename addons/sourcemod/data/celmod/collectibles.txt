@@ -39,6 +39,7 @@
 //               heal      Regenerate health. value = health per second.
 //               armor     Regenerate suit power. value = suit power per second.
 //               resist    Take less damage. value = damage multiplier (0.5 = half).
+//               phase     Hold right click to pass through walls (playercolor makes the holder see-through green).
 //               cloak     Turn translucent. value = how visible you stay (0 to 255).
 //               drain     Hurts its own holder. value = damage per second.
 //               gold      Earn money. value = CL per minute while enabled.
@@ -1519,6 +1520,19 @@
 			"power"			"none"
 			"glow"			"1"
 			"dropweight"	"4"
+		}
+		"phantom"
+		{
+			"name"			"Phantom"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"8"
+			"color"			"80 255 140 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"phase"
+			"playercolor"	"60 255 120 120"
+			"dropweight"	"3"
 		}
 	}
 

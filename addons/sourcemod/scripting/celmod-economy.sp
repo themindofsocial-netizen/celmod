@@ -20,6 +20,14 @@ enum struct Economy
 }
 
 int g_iCleerAmount[MAXENTITIES + 1];
+int g_iTacticsLevel[MAXPLAYERS + 1];
+int g_iTacticsXP[MAXPLAYERS + 1];
+
+float g_fNextBuildXP[MAXPLAYERS + 1];
+
+ConVar g_cvXPBuild;
+ConVar g_cvXPKill;
+ConVar g_cvXPMinute;
 int g_iEntityPrice[MAXENTITIES + 1];
 int g_iTradeEntityRef[MAXPLAYERS + 1];
 int g_iTradeTarget[MAXPLAYERS + 1];
@@ -45,6 +53,10 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_SetClientBalance", Native_SetClientBalance);
 	CreateNative("Cel_StartSale", Native_StartSale);
 	CreateNative("Cel_SubFromClientBalance", Native_SubFromClientBalance);
+	CreateNative("Cel_AddTacticsXP", Native_AddTacticsXP);
+	CreateNative("Cel_GetTacticsLevel", Native_GetTacticsLevel);
+	CreateNative("Cel_GetTacticsXP", Native_GetTacticsXP);
+	CreateNative("Cel_GetTacticsXPNeeded", Native_GetTacticsXPNeeded);
 	
 	g_bLate = bLate;
 	
@@ -88,7 +100,18 @@ public void OnPluginStart()
 	
 	g_cvCleerModel.GetString(g_sCleerModel, sizeof(g_sCleerModel));
 	
+	g_cvXPMinute = CreateConVar("cm_tactics_xp_minute", "3", "Tactics experience for each minute played.", _, true, 0.0);
+	g_cvXPKill = CreateConVar("cm_tactics_xp_kill", "5", "Tactics experience for killing another player.", _, true, 0.0);
+	g_cvXPBuild = CreateConVar("cm_tactics_xp_build", "1", "Tactics experience for spawning a prop or cel (at most once every 3 seconds).", _, true, 0.0);
+	
 	AutoExecConfig(true, "celmod.economy");
+	
+	HookEvent("player_death", Event_TacticsDeath, EventHookMode_Post);
+	
+	CreateTimer(60.0, Timer_TacticsMinute, _, TIMER_REPEAT);
+	
+	RegConsoleCmd("v_tacticlvl", Command_TacticsLevel, "|CelMod| Shows your tactics level.");
+	RegConsoleCmd("v_tacticxp", Command_TacticsLevel, "|CelMod| Shows your tactics experience towards the next level.");
 	
 	RegAdminCmd("v_setbalance", Command_SetBalance, ADMFLAG_SLAY, "|CelMod| Sets the balance of the client you are specifing.");
 	RegConsoleCmd("v_balance", Command_Balance, "|CelMod| Gets the players current balance.");
@@ -101,6 +124,20 @@ public void OnPluginStart()
 
 public void OnClientPutInServer(int iClient)
 {
+	g_iTacticsLevel[iClient] = Cel_GetClientSettingInt(iClient, "tactics_level");
+	g_iTacticsXP[iClient] = Cel_GetClientSettingInt(iClient, "tactics_xp");
+	g_fNextBuildXP[iClient] = 0.0;
+	
+	if (g_iTacticsLevel[iClient] < 1)
+	{
+		g_iTacticsLevel[iClient] = 1;
+	}
+	
+	if (g_iTacticsXP[iClient] < 0)
+	{
+		g_iTacticsXP[iClient] = 0;
+	}
+	
 	if(Cel_GetClientSettingInt(iClient, "balance") != -1)
 	{
 		Cel_SetClientBalance(iClient, Cel_GetClientSettingInt(iClient, "balance"));
@@ -112,6 +149,8 @@ public void OnClientPutInServer(int iClient)
 public void OnClientDisconnect(int iClient)
 {
 	Cel_SetClientSettingInt(iClient, "balance", Cel_GetClientBalance(iClient));
+	
+	SaveTactics(iClient);
 	
 	g_iTradeTarget[iClient] = 0;
 	
@@ -326,9 +365,10 @@ public Action Command_Cleer(int iClient, int iArgs)
 	
 	strcopy(sModel, sizeof(sModel), g_sCleerModel);
 	
+	//The cleers money box, unless the server sets another model.
 	if (sModel[0] == '\0')
 	{
-		strcopy(sModel, sizeof(sModel), "models/props_lab/box01a.mdl");
+		Cel_GetMoneyBoxModel(sModel, sizeof(sModel));
 	}
 	
 	int iBox = CreateEntityByName("prop_physics_override");
@@ -360,7 +400,7 @@ public Action Command_Cleer(int iClient, int iArgs)
 	TeleportEntity(iBox, fOrigin, fAngles, NULL_VECTOR);
 	
 	SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
-	SetEntityRenderColor(iBox, 0, 255, 0, 255);
+	SetEntProp(iBox, Prop_Send, "m_nSkin", Cel_GetMoneyBoxSkin(iAmount));
 	
 	g_iCleerAmount[iBox] = iAmount;
 	
@@ -716,4 +756,143 @@ public int Native_SubFromClientBalance(Handle hPlugin, int iNumParams)
 	Cel_SetClientBalance(iClient, iNewBalance);
 	
 	return true;
+}
+
+//Tactics level:
+//Experience comes from playing, building and fighting. Each level needs a little more than the last.
+int TacticsXPNeeded(int iLevel)
+{
+	return 50 + iLevel * 10;
+}
+
+void SaveTactics(int iClient)
+{
+	if (g_iTacticsLevel[iClient] < 1)
+	{
+		return;
+	}
+	
+	Cel_SetClientSettingInt(iClient, "tactics_level", g_iTacticsLevel[iClient]);
+	Cel_SetClientSettingInt(iClient, "tactics_xp", g_iTacticsXP[iClient]);
+}
+
+void AddTacticsXP(int iClient, int iAmount)
+{
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || IsFakeClient(iClient) || iAmount < 1 || g_iTacticsLevel[iClient] < 1)
+	{
+		return;
+	}
+	
+	g_iTacticsXP[iClient] += iAmount;
+	
+	bool bLevelled = false;
+	
+	while (g_iTacticsXP[iClient] >= TacticsXPNeeded(g_iTacticsLevel[iClient]))
+	{
+		g_iTacticsXP[iClient] -= TacticsXPNeeded(g_iTacticsLevel[iClient]);
+		g_iTacticsLevel[iClient]++;
+		
+		bLevelled = true;
+	}
+	
+	if (bLevelled)
+	{
+		SaveTactics(iClient);
+		
+		EmitSoundToClient(iClient, "buttons/bell1.wav");
+		
+		Cel_PrintToChat(iClient, "Tactics level up! You are now {green}level %d{default}.", g_iTacticsLevel[iClient]);
+	}
+}
+
+public Action Timer_TacticsMinute(Handle hTimer)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) > 1)
+		{
+			AddTacticsXP(i, g_cvXPMinute.IntValue);
+			
+			//Saved now and then, so a crash loses little.
+			SaveTactics(i);
+		}
+	}
+	
+	return Plugin_Continue;
+}
+
+public void OnMapStart()
+{
+	PrecacheSound("buttons/bell1.wav", true);
+}
+
+public Action Event_TacticsDeath(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	int iVictim = GetClientOfUserId(eEvent.GetInt("userid"));
+	int iAttacker = GetClientOfUserId(eEvent.GetInt("attacker"));
+	
+	if (iAttacker > 0 && iAttacker != iVictim)
+	{
+		AddTacticsXP(iAttacker, g_cvXPKill.IntValue);
+	}
+	
+	return Plugin_Continue;
+}
+
+void BuildXP(int iOwner)
+{
+	if (iOwner > 0 && iOwner <= MaxClients && GetGameTime() >= g_fNextBuildXP[iOwner])
+	{
+		g_fNextBuildXP[iOwner] = GetGameTime() + 3.0;
+		
+		AddTacticsXP(iOwner, g_cvXPBuild.IntValue);
+	}
+}
+
+public void Cel_OnPropSpawn(int iProp, int iOwner, EntityType etEntityType)
+{
+	BuildXP(iOwner);
+}
+
+public void Cel_OnCelSpawn(int iCel, int iOwner, EntityType etEntityType)
+{
+	BuildXP(iOwner);
+}
+
+public Action Command_TacticsLevel(int iClient, int iArgs)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	Cel_ReplyToCommand(iClient, "Tactics level {green}%d{default}, {green}%d{default} of {green}%d{default} experience to the next level.", g_iTacticsLevel[iClient], g_iTacticsXP[iClient], TacticsXPNeeded(g_iTacticsLevel[iClient]));
+	
+	return Plugin_Handled;
+}
+
+public int Native_AddTacticsXP(Handle hPlugin, int iNumParams)
+{
+	AddTacticsXP(GetNativeCell(1), GetNativeCell(2));
+	
+	return true;
+}
+
+public int Native_GetTacticsLevel(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1);
+	
+	return g_iTacticsLevel[iClient] < 1 ? 1 : g_iTacticsLevel[iClient];
+}
+
+public int Native_GetTacticsXP(Handle hPlugin, int iNumParams)
+{
+	return g_iTacticsXP[GetNativeCell(1)];
+}
+
+public int Native_GetTacticsXPNeeded(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1);
+	
+	return TacticsXPNeeded(g_iTacticsLevel[iClient] < 1 ? 1 : g_iTacticsLevel[iClient]);
 }
