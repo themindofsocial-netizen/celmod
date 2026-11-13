@@ -97,6 +97,15 @@ public Plugin myinfo =
 	url = CEL_URL
 };
 
+//Skulls over the heads of players in a co-op or deathmatch land, seen by everyone.
+#define SKULL_COOP "celmod/faces/skull_coop.vmt"
+#define SKULL_DM "celmod/faces/skull2.vmt"
+
+int g_iSkullRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+int g_iSkullMode[MAXPLAYERS + 1];
+ConVar g_cvSkullScale;
+ConVar g_cvSkullHeight;
+
 public void OnPluginStart()
 {
 	LoadTranslations("celmod.phrases");
@@ -119,6 +128,11 @@ public void OnPluginStart()
 	g_fMaxLandSize = g_cvMaxLandSize.FloatValue;
 	
 	AutoExecConfig(true, "celmod.land");
+	
+	g_cvSkullScale = CreateConVar("cm_land_skull_scale", "0.25", "Size of the co-op and deathmatch skulls shown over players' heads in a land.", _, true, 0.01, true, 4.0);
+	g_cvSkullHeight = CreateConVar("cm_land_skull_height", "90", "How high above a player's feet the land skull floats.", _, true, 60.0, true, 200.0);
+	
+	CreateTimer(0.25, Timer_Skulls, _, TIMER_REPEAT);
 	
 	RegConsoleCmd("v_coop", Command_LandCoop, "|CelMod| Changes the mode to co-op within the land.");
 	RegConsoleCmd("v_deathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
@@ -163,6 +177,8 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
+	RemoveSkull(iClient);
+	
 	Cel_ClearLand(iClient);
 	
 	if(g_hGettingTop[iClient] != INVALID_HANDLE)
@@ -183,6 +199,139 @@ public void OnMapStart()
 	g_iLand = PrecacheModel("materials/sprites/spotlight.vmt");
 	g_iLaser = PrecacheModel("materials/sprites/laser.vmt");
 	g_iPhys = PrecacheModel("materials/sprites/physbeam.vmt");
+	
+	PrecacheSkull(SKULL_COOP);
+	PrecacheSkull(SKULL_DM);
+	
+	for (int i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_iSkullRef[i] = INVALID_ENT_REFERENCE;
+		g_iSkullMode[i] = 0;
+	}
+}
+
+//Sent to players along with its texture, when the server has the files.
+void PrecacheSkull(const char[] sMaterial)
+{
+	char sFile[PLATFORM_MAX_PATH];
+	
+	PrecacheModel(sMaterial, true);
+	
+	Format(sFile, sizeof(sFile), "materials/%s", sMaterial);
+	
+	if (FileExists(sFile, false))
+	{
+		AddFileToDownloadsTable(sFile);
+	}
+	
+	ReplaceString(sFile, sizeof(sFile), ".vmt", ".vtf");
+	
+	if (FileExists(sFile, false))
+	{
+		AddFileToDownloadsTable(sFile);
+	}
+}
+
+//Co-op land: skull_coop over the head. Deathmatch land: skull2. Shown to everyone, wherever they are.
+public Action Timer_Skulls(Handle hTimer)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i))
+		{
+			continue;
+		}
+		
+		int iMode = 0;
+		
+		if (IsPlayerAlive(i) && g_liLand[i].bInsideLand)
+		{
+			if (g_liLand[i].bInDeathmatchMode)
+			{
+				iMode = 2;
+			} else if (g_liLand[i].bInCoopMode)
+			{
+				iMode = 1;
+			}
+		}
+		
+		if (iMode == g_iSkullMode[i] && (iMode == 0 || EntRefToEntIndex(g_iSkullRef[i]) != INVALID_ENT_REFERENCE))
+		{
+			continue;
+		}
+		
+		RemoveSkull(i);
+		
+		if (iMode != 0)
+		{
+			CreateSkull(i, iMode);
+		}
+	}
+	
+	return Plugin_Continue;
+}
+
+void CreateSkull(int iClient, int iMode)
+{
+	float fOrigin[3];
+	
+	int iSkull = CreateEntityByName("env_sprite");
+	
+	if (iSkull == -1)
+	{
+		return;
+	}
+	
+	DispatchKeyValue(iSkull, "model", iMode == 2 ? SKULL_DM : SKULL_COOP);
+	DispatchKeyValue(iSkull, "rendermode", "1");
+	DispatchKeyValue(iSkull, "renderamt", "255");
+	DispatchKeyValue(iSkull, "rendercolor", "255 255 255");
+	DispatchKeyValue(iSkull, "spawnflags", "1");
+	DispatchKeyValue(iSkull, "classname", "cel_landskull");
+	DispatchKeyValueFloat(iSkull, "scale", g_cvSkullScale.FloatValue);
+	
+	DispatchSpawn(iSkull);
+	
+	GetClientAbsOrigin(iClient, fOrigin);
+	
+	fOrigin[2] += g_cvSkullHeight.FloatValue;
+	
+	TeleportEntity(iSkull, fOrigin, NULL_VECTOR, NULL_VECTOR);
+	
+	//Parented to the player, so it moves with them smoothly on everyone's screen.
+	SetVariantString("!activator");
+	AcceptEntityInput(iSkull, "SetParent", iClient, iSkull);
+	
+	AcceptEntityInput(iSkull, "ShowSprite");
+	
+	g_iSkullRef[iClient] = EntIndexToEntRef(iSkull);
+	g_iSkullMode[iClient] = iMode;
+	
+	SDKHook(iSkull, SDKHook_SetTransmit, Hook_SkullTransmit);
+}
+
+void RemoveSkull(int iClient)
+{
+	int iSkull = EntRefToEntIndex(g_iSkullRef[iClient]);
+	
+	if (g_iSkullRef[iClient] != INVALID_ENT_REFERENCE && iSkull != INVALID_ENT_REFERENCE && iSkull > MaxClients)
+	{
+		AcceptEntityInput(iSkull, "kill");
+	}
+	
+	g_iSkullRef[iClient] = INVALID_ENT_REFERENCE;
+	g_iSkullMode[iClient] = 0;
+}
+
+//Everyone sees the skull, except its own player in first person (it would float in their view when looking up).
+public Action Hook_SkullTransmit(int iEntity, int iClient)
+{
+	if (iClient > 0 && iClient <= MaxClients && EntRefToEntIndex(g_iSkullRef[iClient]) == iEntity && GetEntProp(iClient, Prop_Send, "m_iObserverMode") == 0)
+	{
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
 }
 
 public void OnMapEnd()

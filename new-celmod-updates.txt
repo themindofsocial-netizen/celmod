@@ -112,3 +112,4 @@
 		 - Event items are fixed objects (nothing can move, pick up or break them) for emblems, hats and celweps: !eventitem <emblem/hat/weapon> <name>. Every player can press E on one to claim it, once and only once per item. Reward pickups are fixed objects too.
 		 - !eventitem link <emblem/hat/weapon> <name> makes a map's own object (a prop, button, door or other brush entity) the claimable event item. It is saved by Hammer ID and comes back every time the map loads; !delreward unlinks it.
 	 - 12/06/26: The Power Booth now hangs as high as each map goes (just under the ceiling or sky), preferably tucked into a corner and out of sight of spawns, picked at random from the best few spots.
+	 - 12/07/26: Players inside a co-op land show the co-op skull above their head, and players inside a deathmatch land show the deathmatch skull. Everyone can see them, from anywhere (cm_land_skull_scale, cm_land_skull_height).
