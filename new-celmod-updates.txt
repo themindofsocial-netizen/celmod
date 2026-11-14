@@ -211,3 +211,9 @@
 		   at nothing now follows !switch too.
 		 - The Fire emblem's flamethrower burns and sets alight enemies (dungeon and spawn pad zombies and the rest), not
 		   just players.
+		 - Fixed: land skins (and everything after them in celmod-land) failed on map load with "Not enough space on the heap".
+		 - The Invisible emblem's model and materials are made by the server from phys8 when they're missing.
+		 - With an emblem that has a power, the gravity gun's left-click punt (its electric shock on enemies) is held back;
+		   throwing a prop you're holding still works.
+		 - A proper |CelMod| welcome page (motd.txt): getting started, commands, collecting, money and the rules.
+		   !motd or !rules shows it again.

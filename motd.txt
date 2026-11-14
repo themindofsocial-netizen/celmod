@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>|CelMod| - A Living Project</title>
+<style>
+	body {
+		margin: 0;
+		padding: 14px 18px;
+		background: #222222;
+		color: #FFB200;
+		font-family: 'Raleway', Tahoma, Verdana, sans-serif;
+		font-size: 14px;
+		line-height: 1.4;
+	}
+	.frame {
+		max-width: 760px;
+		margin: 0 auto;
+		border: 1px solid #000;
+		background: #3a3a3a;
+		box-shadow: inset 6px 0 0 #2f6db5, inset -6px 0 0 #2f6db5;
+		padding: 12px 22px 16px;
+	}
+	h1 {
+		margin: 0 0 2px;
+		text-align: center;
+		color: #99CCFF;
+		font-size: 26px;
+		letter-spacing: 1px;
+		text-shadow: 0 1px 2px #000;
+	}
+	.tagline {
+		text-align: center;
+		color: #AA8;
+		margin-bottom: 12px;
+	}
+	h2 {
+		margin: 14px 0 6px;
+		color: #99CCFF;
+		font-size: 15px;
+		border-bottom: 1px solid #000;
+		padding-bottom: 2px;
+	}
+	.cols {
+		width: 100%;
+		border-collapse: collapse;
+	}
+	.cols td {
+		vertical-align: top;
+		width: 50%;
+		padding: 0 8px 0 0;
+	}
+	.c {
+		color: #71E100;
+		font-weight: bold;
+	}
+	.well {
+		background: rgba(0, 0, 0, 0.28);
+		border: 1px solid #000;
+		padding: 6px 10px;
+		margin: 4px 0;
+	}
+	ul {
+		margin: 4px 0;
+		padding-left: 18px;
+	}
+	li {
+		margin: 2px 0;
+	}
+	.muted {
+		color: #AA8;
+		font-size: 12px;
+	}
+	.foot {
+		text-align: center;
+		margin-top: 14px;
+		color: #AA8;
+		font-size: 12px;
+	}
+	a {
+		color: #FFB200;
+		font-weight: bold;
+		text-decoration: none;
+	}
+</style>
+</head>
+<body>
+<div class="frame">
+	<h1>|CelMod|</h1>
+	<div class="tagline">A Living Project - build, collect and explore. Welcome!</div>
+
+	<div class="well">New here? Type <span class="c">!land</span> to claim your building space, then spawn props with
+	<span class="c">!spawn &lt;name&gt;</span> (or just <span class="c">!&lt;name&gt;</span>). Every command is listed with <span class="c">!cmds</span>.</div>
+
+	<table class="cols"><tr>
+	<td>
+		<h2>Building</h2>
+		<ul>
+			<li><span class="c">!land</span> - claim your land</li>
+			<li><span class="c">!spawn</span>, <span class="c">!props</span> - spawn and browse props</li>
+			<li><span class="c">!color</span>, <span class="c">!alpha</span>, <span class="c">!skin</span> - style them</li>
+			<li><span class="c">!freeze</span>, <span class="c">!stack</span>, <span class="c">!weld</span> - build with them</li>
+			<li><span class="c">!save</span> / <span class="c">!load</span> - keep your builds</li>
+			<li><span class="c">!landskin</span>, <span class="c">!spawnpoint</span> - make your land yours</li>
+		</ul>
+	</td>
+	<td>
+		<h2>Collecting</h2>
+		<ul>
+			<li><span class="c">!emblems</span> - your emblems, hats and celweps</li>
+			<li><span class="c">!emblem &lt;name&gt;</span> - press E on it to use its power</li>
+			<li>Emblem boxes drop from the sky: get one into your land</li>
+			<li>Find the <b>Power Booth</b> to upgrade emblems</li>
+			<li><span class="c">!spawnpads</span> - earn enemy spawn pads in the dungeons</li>
+			<li><span class="c">!tacticlvl</span> - your tactics level</li>
+		</ul>
+	</td>
+	</tr></table>
+
+	<table class="cols"><tr>
+	<td>
+		<h2>Money</h2>
+		<ul>
+			<li><span class="c">!balance</span> - your cleers (CL)</li>
+			<li><span class="c">!buy</span>, <span class="c">!catalog</span> - the shop (seasonal shops too)</li>
+			<li><span class="c">!give</span>, <span class="c">!trade</span>, <span class="c">!cl</span> - deal with other players</li>
+		</ul>
+	</td>
+	<td>
+		<h2>Handy</h2>
+		<ul>
+			<li><span class="c">!fly</span> - fly around (not in event areas)</li>
+			<li><span class="c">!thirdperson</span> - see your emblem and hat</li>
+			<li><span class="c">!switch</span> - move the HUD to the other side</li>
+			<li><span class="c">!motd</span> - see this page again</li>
+		</ul>
+	</td>
+	</tr></table>
+
+	<h2>Rules</h2>
+	<ul>
+		<li>Be friendly. No harassment, hate or spam.</li>
+		<li>Don't wreck, steal from or block other players' builds. Use <span class="c">!landban</span> if someone bothers you.</li>
+		<li>No exploits, crash props or lag machines.</li>
+		<li>Event areas (mazes and parkour) are walked, not flown. No building inside them.</li>
+		<li>Listen to the admins.</li>
+	</ul>
+
+	<div class="foot">Shop, leaderboards, updates and the Emblem Editor on the website:
+	<a href="https://delaware.rockzehh.net">delaware.rockzehh.net</a><br>
+	|CelMod| - A Living Project. Have fun building!</div>
+</div>
+</body>
+</html>

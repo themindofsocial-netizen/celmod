@@ -4,6 +4,9 @@
 
 #pragma newdecls required
 
+//Room for the larger local buffers (land skin materials, item lists); the default is too small and runs out.
+#pragma dynamic 131072
+
 /*
  * |CelMod| Collectibles
  *
@@ -2430,6 +2433,14 @@ public Action Timer_Think(Handle hTimer)
 		// gravity gun. The player's own first person view model is never touched.
 		int iShow = (g_bHoldingGravGun[i] && iItem != -1) ? iItem : -1;
 
+		// With an emblem that has a power, the left click is the emblem's: the gravity gun's own punt (its electric
+		// shock on enemies and players) is held back. Throwing a prop the gravity gun is holding still works.
+		if (g_bHoldingGravGun[i] && iItem != -1 && !StrEqual(g_Items[iItem].sPower, "none")
+			&& !(HasEntProp(iWeapon, Prop_Send, "m_bActive") && GetEntProp(iWeapon, Prop_Send, "m_bActive")))
+		{
+			SetEntPropFloat(iWeapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime() + 0.5);
+		}
+
 		// A celwep is shown the same way while its weapon is the one in hand.
 		if (iShow == -1 && g_iCelWepItem[i] != -1 && iWeapon > MaxClients && EntRefToEntIndex(g_iCelWepRef[i]) == iWeapon)
 		{
@@ -2856,6 +2867,8 @@ public int Native_SpawnCollectible(Handle hPlugin, int iNumParams)
 void LoadItems()
 {
 	g_iItemCount = 0;
+
+	EnsureInvisibleEmblemFiles();
 
 	KeyValues kvItems = new KeyValues("Collectibles");
 
@@ -8004,7 +8017,7 @@ void AddFolderToDownloads(const char[] sFolder)
 
 	if (dlFolder == null)
 	{
-		LogError("|CelMod| The player model materials folder '%s' does not exist.", sFolder);
+		LogError("|CelMod| The materials folder '%s' does not exist, so its files can't be sent to players.", sFolder);
 
 		return;
 	}
@@ -8994,4 +9007,153 @@ public void Hook_PresentUse(int iEntity, int iActivator, int iCaller, UseType ut
 
 	Cel_PrintToChatAll("{green}%N{default} unwrapped a present from {green}%s{default}: a {green}%s{default} %s!", iActivator, sFrom, g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
 	Cel_PrintToChat(iActivator, "Type {green}!%s %s{default} to spawn it.", g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sId);
+}
+
+//The Invisible emblem's files: models/celmod/phys8_inv.* (phys8 reading its materials from emblemi instead of
+//emblem3) and materials/models/celmod/emblemi/s1-s15.vmt ($no_draw). Made here from phys8 when the server is
+//missing them, so the emblem works without uploading them by hand.
+void EnsureInvisibleEmblemFiles()
+{
+	char sFile[PLATFORM_MAX_PATH];
+	int iWritten = 0;
+
+	static const char sDirs[][] = { "materials/models", "materials/models/celmod", "materials/models/celmod/emblemi" };
+
+	for (int i = 0; i < sizeof(sDirs); i++)
+	{
+		if (!DirExists(sDirs[i], false))
+		{
+			CreateDirectory(sDirs[i], 511, false);
+		}
+	}
+
+	for (int i = 1; i <= 15; i++)
+	{
+		Format(sFile, sizeof(sFile), "materials/models/celmod/emblemi/s%d.vmt", i);
+
+		if (FileExists(sFile, false))
+		{
+			continue;
+		}
+
+		File fMaterial = OpenFile(sFile, "w", false);
+
+		if (fMaterial == null)
+		{
+			continue;
+		}
+
+		fMaterial.WriteLine("// Invisible emblem (phys8_inv.mdl): never drawn, but still opaque, so it casts shadows (the flashlight too).");
+		fMaterial.WriteLine("\"VertexLitGeneric\"");
+		fMaterial.WriteLine("{");
+		fMaterial.WriteLine("\t\"$basetexture\" \"models/celmod/emblem3/s2\"");
+		fMaterial.WriteLine("\t\"$no_draw\" \"1\"");
+		fMaterial.WriteLine("}");
+
+		delete fMaterial;
+		iWritten++;
+	}
+
+	// The model: phys8's files copied, with the material folder (and the model's own name) changed in the .mdl.
+	if (!FileExists("models/celmod/phys8_inv.mdl", false) && FileExists("models/celmod/phys8.mdl", false))
+	{
+		static const char sExtensions[][] = { ".vvd", ".phy", ".dx80.vtx", ".dx90.vtx", ".sw.vtx" };
+		char sFrom[PLATFORM_MAX_PATH], sTo[PLATFORM_MAX_PATH];
+
+		for (int i = 0; i < sizeof(sExtensions); i++)
+		{
+			Format(sFrom, sizeof(sFrom), "models/celmod/phys8%s", sExtensions[i]);
+			Format(sTo, sizeof(sTo), "models/celmod/phys8_inv%s", sExtensions[i]);
+
+			if (FileExists(sFrom, false))
+			{
+				CopyBinaryFile(sFrom, sTo, false);
+			}
+		}
+
+		if (CopyBinaryFile("models/celmod/phys8.mdl", "models/celmod/phys8_inv.mdl", true))
+		{
+			iWritten++;
+		}
+	}
+
+	if (iWritten > 0)
+	{
+		LogMessage("|CelMod| Made the Invisible emblem's files (models/celmod/phys8_inv.* and materials/models/celmod/emblemi). If players download from a FastDL website (sv_downloadurl), copy them there too.");
+	}
+}
+
+//Copies a file byte for byte. For the Invisible emblem's .mdl (bPatchModel), "emblem3" becomes "emblemi" (the
+//material folder, same length so nothing else moves) and the model's name at offset 12 becomes celmod/phys8_inv.mdl.
+bool CopyBinaryFile(const char[] sFrom, const char[] sTo, bool bPatchModel)
+{
+	File fIn = OpenFile(sFrom, "rb", false);
+
+	if (fIn == null)
+	{
+		return false;
+	}
+
+	int iSize = FileSize(sFrom, false);
+
+	if (iSize <= 0 || iSize > 4 * 1024 * 1024)
+	{
+		delete fIn;
+		return false;
+	}
+
+	int[] iData = new int[iSize];
+
+	int iRead = fIn.Read(iData, iSize, 1);
+
+	delete fIn;
+
+	if (iRead != iSize)
+	{
+		return false;
+	}
+
+	if (bPatchModel)
+	{
+		static const char sFind[] = "emblem3";
+
+		for (int i = 0; i + 7 <= iSize; i++)
+		{
+			bool bMatch = true;
+
+			for (int k = 0; k < 7; k++)
+			{
+				if ((iData[i + k] & 0xFF) != sFind[k])
+				{
+					bMatch = false;
+					break;
+				}
+			}
+
+			if (bMatch)
+			{
+				iData[i + 6] = 'i';
+			}
+		}
+
+		static const char sName[] = "celmod/phys8_inv.mdl";
+
+		for (int i = 0; i < 64 && 12 + i < iSize; i++)
+		{
+			iData[12 + i] = i < strlen(sName) ? view_as<int>(sName[i]) : 0;
+		}
+	}
+
+	File fOut = OpenFile(sTo, "wb", false);
+
+	if (fOut == null)
+	{
+		return false;
+	}
+
+	bool bOk = fOut.Write(iData, iSize, 1);
+
+	delete fOut;
+
+	return bOk;
 }

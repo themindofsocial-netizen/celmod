@@ -4,6 +4,9 @@
 
 #pragma newdecls required
 
+//Room for the larger local buffers (land skin materials, item lists); the default is too small and runs out.
+#pragma dynamic 131072
+
 #define LAND_MODEL "models/error.mdl"
 
 bool g_bLandColor[MAXPLAYERS + 1];

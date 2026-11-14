@@ -71,6 +71,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_props", Command_PropList, "|CelMod| Displays the prop list.");
 	RegConsoleCmd("v_updatelist", Command_UpdateList, "|CelMod| Displays the update list.");
 	RegConsoleCmd("v_updates", Command_UpdateList, "|CelMod| Displays the update list.");
+	RegConsoleCmd("v_motd", Command_Motd, "|CelMod| Shows the server's welcome page (MOTD) again.");
+	RegConsoleCmd("v_rules", Command_Motd, "|CelMod| Shows the server's welcome page and rules.");
 	
 	RegServerCmd("cm_exportcolorlist", Command_ExportColorList, "CelMod-Server: Exports the color list into a text or html file in 'data/celmod/exports'.");
 	RegServerCmd("cm_exportcommandlist", Command_ExportCommandList, "CelMod-Server: Exports the command list into a text or html file in 'data/celmod/exports'.");
@@ -538,4 +540,17 @@ public int Native_OpenMOTDOnClient(Handle hPlugin, int iNumParams)
 	delete kvMOTD;
 	
 	return true;
+}
+
+//The welcome page players see when they join (motd.txt in the game folder).
+public Action Command_Motd(int iClient, int iArgs)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	ShowMOTDPanel(iClient, "|CelMod| - A Living Project", "motd", MOTDPANEL_TYPE_INDEX);
+	
+	return Plugin_Handled;
 }
