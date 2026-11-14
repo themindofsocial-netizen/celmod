@@ -193,3 +193,4 @@
 		 - Fixed: land skins were wiped right after being drawn, because clearing old decals reached players after the new ones.
 		   Admins can check what land skins see with !landskin debug.
 		 - Land skins write their own decal materials when the server is missing them, so they work without uploading the folder.
+		 - Fixed: the land border flickered (each redraw ran out just before the next one).

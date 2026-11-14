@@ -2060,7 +2060,9 @@ public Action Timer_Land(Handle hTimer, any iPlayer)
 	
 	if(g_liLand[iClient].bLandDrawing)
 	{
-		Cel_DrawLandBorders(g_liLand[iClient].fLandPosStarting, g_liLand[iClient].fLandPosTop, 0.1, iColor, true);
+		//Redrawn every 0.1 seconds, but each beam lasts a little longer than that: timers and the network are never
+		//exactly on time, and beams that only lasted 0.1 seconds left gaps between redraws, so the border flickered.
+		Cel_DrawLandBorders(g_liLand[iClient].fLandPosStarting, g_liLand[iClient].fLandPosTop, 0.25, iColor, true);
 	}
 	
 	return Plugin_Continue;
