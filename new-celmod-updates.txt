@@ -203,3 +203,5 @@
 		   rewards (50) and other rewards (15), winning emblem boxes (10), Power Booth upgrades (15) and right guesses at the
 		   Guess Booth (15). Player kills still give 5. All of them are cm_tactics_xp_* settings.
 		 - The server browser's Game column shows |CM| again, like the original server (cm_game_description, SteamWorks).
+		 - The |CM| game name no longer needs the SteamWorks extension (SourceMod's SDKHooks sets it); SteamWorks now loads by
+		   itself when the server can run it (extensions/SteamWorks.autoload).

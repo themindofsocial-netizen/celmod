@@ -1410,7 +1410,29 @@ public int Native_SubFromPropCount(Handle hPlugin, int iNumParams)
 	return true;
 }
 
-//Server browser game name:
+//Server browser game name: SourceMod's own SDKHooks answers the browser's queries with it, and the SteamWorks
+//extension (when it loads) also tells Steam's master server.
+public Action OnGetGameDescription(char sGameDesc[64])
+{
+	char sDescription[64];
+	
+	if (g_cvGameDescription == null)
+	{
+		return Plugin_Continue;
+	}
+	
+	g_cvGameDescription.GetString(sDescription, sizeof(sDescription));
+	
+	if (sDescription[0] == '\0')
+	{
+		return Plugin_Continue;
+	}
+	
+	strcopy(sGameDesc, sizeof(sGameDesc), sDescription);
+	
+	return Plugin_Changed;
+}
+
 public void OnConfigsExecuted()
 {
 	ApplyGameDescription();
@@ -1427,16 +1449,8 @@ void ApplyGameDescription()
 	
 	g_cvGameDescription.GetString(sDescription, sizeof(sDescription));
 	
-	if (sDescription[0] == '\0')
+	if (sDescription[0] != '\0' && GetFeatureStatus(FeatureType_Native, "SteamWorks_SetGameDescription") == FeatureStatus_Available)
 	{
-		return;
+		SteamWorks_SetGameDescription(sDescription);
 	}
-	
-	if (GetFeatureStatus(FeatureType_Native, "SteamWorks_SetGameDescription") != FeatureStatus_Available)
-	{
-		LogMessage("|CelMod| The SteamWorks extension isn't loaded, so the server browser keeps showing the game's own name instead of \"%s\".", sDescription);
-		return;
-	}
-	
-	SteamWorks_SetGameDescription(sDescription);
 }
