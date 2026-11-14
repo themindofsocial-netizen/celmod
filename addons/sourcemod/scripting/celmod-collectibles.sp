@@ -4167,37 +4167,51 @@ void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
 	fMuzzle[1] = fStart[1] + fDirection[1] * 30.0;
 	fMuzzle[2] = fStart[2] + fDirection[2] * 30.0 - 12.0;
 
-	// A stream of flames that grows wider further from the emblem.
-	for (int i = 0; i < 6; i++)
-	{
-		float fFlame[3];
-		float fAlong = g_Items[iItem].fRange * (i + GetRandomFloat(0.0, 1.0)) / 6.0;
-		float fSpread = 4.0 + fAlong * 0.12;
-
-		fFlame[0] = fMuzzle[0] + fDirection[0] * fAlong + GetRandomFloat(-fSpread, fSpread);
-		fFlame[1] = fMuzzle[1] + fDirection[1] * fAlong + GetRandomFloat(-fSpread, fSpread);
-		fFlame[2] = fMuzzle[2] + fDirection[2] * fAlong + GetRandomFloat(-fSpread, fSpread);
-
-		TE_SetupGlowSprite(fFlame, g_Items[iItem].iSpriteIndex, GetRandomFloat(0.1, 0.2), 0.25 + fAlong / g_Items[iItem].fRange * 1.1, 230);
-		TE_SendToAll();
-	}
-
-	// A rippling heat haze through the flames and the glow they throw on the walls around them.
+	// A Pyro-style stream: a dense cone of fire that widens and rises as it goes, and stops at the first wall.
 	float fFar[3], fMid[3];
-	int iHeat[4];
+	float fReach = g_Items[iItem].fRange;
 
 	for (int k = 0; k < 3; k++)
 	{
-		fFar[k] = fMuzzle[k] + fDirection[k] * g_Items[iItem].fRange;
-		fMid[k] = fMuzzle[k] + fDirection[k] * g_Items[iItem].fRange * 0.5;
+		fFar[k] = fMuzzle[k] + fDirection[k] * fReach;
 	}
+
+	Handle hWall = TR_TraceRayFilterEx(fMuzzle, fFar, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+	if (TR_DidHit(hWall))
+	{
+		TR_GetEndPosition(fFar, hWall);
+
+		fReach = GetVectorDistance(fMuzzle, fFar);
+	}
+
+	CloseHandle(hWall);
+
+	for (int k = 0; k < 3; k++)
+	{
+		fMid[k] = fMuzzle[k] + fDirection[k] * fReach * 0.5;
+	}
+
+	for (int i = 0; i < 8; i++)
+	{
+		float fFlame[3];
+		float fAlong = fReach * (i + GetRandomFloat(0.0, 1.0)) / 8.0;
+		float fSpread = 3.0 + fAlong * 0.14;
+
+		fFlame[0] = fMuzzle[0] + fDirection[0] * fAlong + GetRandomFloat(-fSpread, fSpread);
+		fFlame[1] = fMuzzle[1] + fDirection[1] * fAlong + GetRandomFloat(-fSpread, fSpread);
+		fFlame[2] = fMuzzle[2] + fDirection[2] * fAlong + GetRandomFloat(-fSpread, fSpread) + fAlong * 0.06;
+
+		TE_SetupGlowSprite(fFlame, g_Items[iItem].iSpriteIndex, GetRandomFloat(0.12, 0.25), 0.2 + fAlong / g_Items[iItem].fRange * 1.3, 230);
+		TE_SendToAll();
+	}
+
+	int iHeat[4];
 
 	iHeat[0] = g_Items[iItem].iBeamColor[0];
 	iHeat[1] = g_Items[iItem].iBeamColor[1];
 	iHeat[2] = g_Items[iItem].iBeamColor[2];
-	iHeat[3] = 160;
-
-	Fx_Beam(fMuzzle, fFar, g_iBmPhys, 6.0, 40.0, 0.15, 4.0, iHeat, 0, 30);
+	iHeat[3] = 255;
 
 	// Where the flames reach a wall or floor they scorch it, now and then.
 	if (GetRandomInt(0, 3) == 0)
