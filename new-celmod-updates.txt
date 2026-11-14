@@ -129,3 +129,6 @@
 		 - Announcements made in the website's admin panel show in chat as |CelMod| <message> (once, repeated every few minutes, and/or when players join).
 	 - 12/15/26: Fixed hats, Dr. Kleiner's traffic cone and other plugin-made props disappearing: they were renamed before spawning, so the game deleted any whose model is a physics-only prop.
 		 - Hats and held emblems/celweps can be resized in game: !nudge hat scale 0.1 (or -0.1), or a scale at the end of !tune. Saved in data/celmod/tuning.txt with the position.
+	 - 12/16/26: Celweps fixed. The hidden weapon behind each celwep no longer fires bullets of its own, so melee celweps only swing.
+		 - The Melon Launcher fires melons that roll for 2 seconds and then explode; the Saw Gun fires spinning saw blades; the Blade Bow fires swords that fly and stick where they land.
+		 - The Fire Sword sets players on fire (5 seconds), the Ice Blade freezes them solid (2 seconds), and the Power Blade hits hard (85 damage). Each hit has its own effect.

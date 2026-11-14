@@ -92,9 +92,12 @@
 //               (scripts/weapon_cm_axe.txt). It is then a separate weapon with its own view model, several can be
 //               carried at once, and base/damage/hand keys are not used. Without Custom Guns, base is used instead.
 //   attack      melee (default): a swing. ranged: a shot at whatever is aimed at, looking like its "fx" (range,
-//               fx, sprite, beamcolor). melon: throws a watermelon ("range" is how fast).
+//               fx, sprite, beamcolor). Projectiles that really fly (projectile = model, projectilespeed):
+//               melon: rolls for "fuse" seconds, then explodes (hitdamage = explosion strength).
+//               saw: spinning saw blades that cut every player they pass. blade: flying swords that stick where
+//               they land.
 //   hitdamage   Damage of one hit (Custom Guns celweps). hitrange = reach, refire = seconds between swings.
-//   ignite, slow  Seconds a hit sets a player on fire, or slows them.
+//   ignite, slow, freeze  Seconds a hit sets a player on fire, slows them, or freezes them solid.
 //   digs        Emblem ids a hit on the ground can dig up. Most digs find junk; see cm_dig_chance,
 //               cm_dig_emblem_chance, cm_dig_money_chance, cm_dig_money_min and cm_dig_money_max.
 //
@@ -1656,9 +1659,10 @@
 			"name"			"Fire Sword"
 			"model"			"models/celweps/a5.mdl"
 			"customgun"		"weapon_cm_firesword"
-			"hitdamage"		"30"
+			"hitdamage"		"35"
 			"refire"		"0.5"
-			"ignite"		"3.0"
+			"ignite"		"5.0"
+			"beamcolor"		"255 120 30 255"
 			"base"			"weapon_crowbar"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"
@@ -1671,9 +1675,10 @@
 			"name"			"Ice Blade"
 			"model"			"models/celweps/a1.mdl"
 			"customgun"		"weapon_cm_iceblade"
-			"hitdamage"		"15"
+			"hitdamage"		"20"
 			"refire"		"0.4"
-			"slow"			"1.5"
+			"freeze"		"2.0"
+			"beamcolor"		"170 220 255 255"
 			"base"			"weapon_crowbar"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"
@@ -1686,8 +1691,10 @@
 			"name"			"Power Blade"
 			"model"			"models/celweps/a1.mdl"
 			"customgun"		"weapon_cm_powerblade"
-			"hitdamage"		"40"
-			"refire"		"0.7"
+			"hitdamage"		"85"
+			"refire"		"0.8"
+			"hitrange"		"90"
+			"beamcolor"		"255 230 150 255"
 			"base"			"weapon_crowbar"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"
@@ -1743,12 +1750,12 @@
 			"name"			"Saw Gun"
 			"model"			"models/celweps/a10.mdl"
 			"customgun"		"weapon_cm_sawgun"
-			"attack"		"ranged"
-			"hitdamage"		"4"
-			"refire"		"0.08"
-			"range"			"1500"
-			"fx"			"laser"
+			"attack"		"saw"
+			"hitdamage"		"30"
+			"refire"		"0.4"
 			"beamcolor"		"255 200 0 255"
+			"projectilespeed"	"1800"
+			"projectile"	"models/props_junk/sawblade001a.mdl"
 			"base"			"weapon_smg1"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"
@@ -1762,8 +1769,11 @@
 			"model"			"models/celweps/a9.mdl"
 			"customgun"		"weapon_cm_meloncannon"
 			"attack"		"melon"
-			"refire"		"0.4"
-			"range"			"1600"
+			"refire"		"0.9"
+			"hitdamage"		"120"
+			"projectilespeed"	"1000"
+			"fuse"			"2.0"
+			"projectile"	"models/props_junk/watermelon01.mdl"
 			"base"			"weapon_rpg"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"
@@ -1776,14 +1786,13 @@
 			"name"			"Blade Bow"
 			"model"			"models/celweps/a6.mdl"
 			"customgun"		"weapon_cm_bladebow"
-			"attack"		"ranged"
-			"hitdamage"		"40"
-			"refire"		"1.2"
-			"range"			"3000"
-			"fx"			"ice"
-			"sprite"		"sprites/blueglow2.vmt"
+			"attack"		"blade"
+			"hitdamage"		"45"
+			"refire"		"1.0"
 			"slow"			"1.0"
 			"beamcolor"		"140 200 255 255"
+			"projectilespeed"	"2600"
+			"projectile"	"models/celweps/a1.mdl"
 			"base"			"weapon_crossbow"
 			"color"			"255 255 255 255"
 			"handscale"		"1.0"

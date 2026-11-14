@@ -108,6 +108,10 @@ enum struct Item
 	char sDigs[64];
 	char sHandModel[PLATFORM_MAX_PATH];
 	char sAttack[16];
+	char sProjectile[PLATFORM_MAX_PATH];
+	float fProjSpeed;
+	float fFuse;
+	float fFreeze;
 	char sBase[32];
 	float fDamage;
 }
@@ -222,6 +226,7 @@ ConVar g_cvGiftDays;
 ConVar g_cvShowSelf;
 
 float g_fFrozenUntil[MAXPLAYERS + 1];
+float g_fIcedUntil[MAXPLAYERS + 1];
 float g_fSkyward[3] = { 0.0, 0.0, 1.0 };
 float g_fNextPower[MAXPLAYERS + 1];
 float g_fNextSecondary[MAXPLAYERS + 1];
@@ -499,6 +504,7 @@ public void OnMapStart()
 	PrecacheSound(SOUND_BLINK, true);
 	PrecacheSound(SOUND_DROP, true);
 	PrecacheSound(SOUND_REWARD, true);
+	PrecacheSound("physics/flesh/flesh_impact_bullet1.wav", true);
 
 	for (int i = 0; i <= MAXENTITIES; i++)
 	{
@@ -554,6 +560,10 @@ public void OnClientPutInServer(int iClient)
 	g_bWalkKeyOff[iClient] = false;
 
 	SDKHook(iClient, SDKHook_OnTakeDamage, Hook_PlayerTakeDamage);
+	SDKHook(iClient, SDKHook_WeaponEquipPost, Hook_CelWepEquip);
+	SDKHook(iClient, SDKHook_WeaponSwitchPost, Hook_CelWepEquip);
+
+	g_fIcedUntil[iClient] = 0.0;
 
 	Inv_Close(iClient);
 	Inv_Open(iClient);
@@ -2376,6 +2386,8 @@ public Action Timer_Think(Handle hTimer)
 
 		if (iGun != -1)
 		{
+			DisarmBaseWeapon(iWeapon);
+
 			if (iShow == -1)
 			{
 				iShow = iGun;
@@ -2404,7 +2416,11 @@ public Action Timer_Think(Handle hTimer)
 		// Movement speed: slowed by a blizzard emblem, or boosted by the player's own speed emblem.
 		fSpeed = 1.0;
 
-		if (fNow < g_fFrozenUntil[i])
+		if (fNow < g_fIcedUntil[i])
+		{
+			// Frozen solid by the Ice Blade: can't move at all.
+			fSpeed = 0.0;
+		} else if (fNow < g_fFrozenUntil[i])
 		{
 			fSpeed = 0.35;
 		} else {
@@ -2933,6 +2949,15 @@ void ReadItem(KeyValues kvItems, int iKind)
 	kvItems.GetString("customgun", g_Items[iItem].sCustomGun, sizeof(Item::sCustomGun), "");
 	kvItems.GetString("digs", g_Items[iItem].sDigs, sizeof(Item::sDigs), "");
 	kvItems.GetString("attack", g_Items[iItem].sAttack, sizeof(Item::sAttack), "melee");
+	kvItems.GetString("projectile", g_Items[iItem].sProjectile, sizeof(Item::sProjectile), "");
+	g_Items[iItem].fProjSpeed = kvItems.GetFloat("projectilespeed", 1500.0);
+	g_Items[iItem].fFuse = kvItems.GetFloat("fuse", 2.0);
+	g_Items[iItem].fFreeze = kvItems.GetFloat("freeze", 0.0);
+
+	if (g_Items[iItem].sProjectile[0] != '\0')
+	{
+		PrecacheModel(g_Items[iItem].sProjectile, true);
+	}
 
 	g_Items[iItem].iUpgradeTo = -1;
 	g_Items[iItem].iUpgradeCost = kvItems.GetNum("upgradecost", 2);
@@ -4194,6 +4219,8 @@ public void OnGameFrame()
 	float fNow = GetGameTime();
 
 	UpdateThirdPersonCameras();
+
+	ThinkCelWepProjectiles();
 
 	for (int i = 0; i < MAX_MOVERS; i++)
 	{
@@ -7102,7 +7129,7 @@ public void CG_OnPrimaryAttack(int iClient, int iWeapon)
 	CG_SetPlayerAnimation(iClient, CG_PLAYER_ATTACK1);
 
 	// Guns and launchers instead of a swing.
-	if (StrEqual(g_Items[iItem].sAttack, "ranged") || StrEqual(g_Items[iItem].sAttack, "melon"))
+	if (StrEqual(g_Items[iItem].sAttack, "ranged") || StrEqual(g_Items[iItem].sAttack, "melon") || StrEqual(g_Items[iItem].sAttack, "saw") || StrEqual(g_Items[iItem].sAttack, "blade"))
 	{
 		CG_PlayActivity(iWeapon, CG_ACT_VM_PRIMARYATTACK);
 
@@ -7165,10 +7192,19 @@ public void CG_OnPrimaryAttack(int iClient, int iWeapon)
 
 				SetEntityRenderColor(iHit, 90, 160, 255, 255);
 			}
+
+			if (g_Items[iItem].fFreeze > 0.0)
+			{
+				FreezePlayer(iHit, g_Items[iItem].fFreeze);
+			}
 		}
+
+		CelWepHitEffect(iItem, fHit);
 
 		return;
 	}
+
+	CelWepHitEffect(iItem, fHit);
 
 	// Loose physics props get knocked about; nobody else's frozen build is touched.
 	if (iHit > MaxClients && GetEntityMoveType(iHit) == MOVETYPE_VPHYSICS && (!Cel_IsEntity(iHit) || Cel_CheckOwner(iClient, iHit)))
@@ -7473,47 +7509,10 @@ void CelWepShoot(int iClient, int iItem)
 	GetClientEyeAngles(iClient, fAngles);
 	GetAngleVectors(fAngles, fDirection, NULL_VECTOR, NULL_VECTOR);
 
-	if (StrEqual(g_Items[iItem].sAttack, "melon"))
+	// Melon Launcher, Saw Gun and Blade Bow fire real things that fly: see LaunchCelWepProjectile.
+	if (StrEqual(g_Items[iItem].sAttack, "melon") || StrEqual(g_Items[iItem].sAttack, "saw") || StrEqual(g_Items[iItem].sAttack, "blade"))
 	{
-		if (GetEntityCount() > GetMaxEntities() - 200)
-		{
-			return;
-		}
-
-		int iMelon = CreateEntityByName("prop_physics_override");
-
-		if (iMelon == -1)
-		{
-			return;
-		}
-
-		float fOrigin[3], fVelocity[3];
-
-		fOrigin[0] = fStart[0] + fDirection[0] * 40.0;
-		fOrigin[1] = fStart[1] + fDirection[1] * 40.0;
-		fOrigin[2] = fStart[2] + fDirection[2] * 40.0;
-
-		DispatchKeyValue(iMelon, "model", "models/props_junk/watermelon01.mdl");
-		DispatchKeyValue(iMelon, "classname", "cel_melon");
-
-		DispatchSpawn(iMelon);
-
-		// Kills by the melon count as the shooter's.
-		if (HasEntProp(iMelon, Prop_Data, "m_hPhysicsAttacker"))
-		{
-			SetEntPropEnt(iMelon, Prop_Data, "m_hPhysicsAttacker", iClient);
-			SetEntPropFloat(iMelon, Prop_Data, "m_flLastPhysicsAttackerTime", GetGameTime() + 10.0);
-		}
-
-		fVelocity[0] = fDirection[0] * g_Items[iItem].fRange;
-		fVelocity[1] = fDirection[1] * g_Items[iItem].fRange;
-		fVelocity[2] = fDirection[2] * g_Items[iItem].fRange;
-
-		TeleportEntity(iMelon, fOrigin, fAngles, fVelocity);
-
-		KillAfter(iMelon, 8.0);
-
-		EmitGameSoundToAll("Weapon_RPG.Single", iClient);
+		LaunchCelWepProjectile(iClient, iItem, fStart, fAngles, fDirection);
 
 		return;
 	}
@@ -7559,6 +7558,355 @@ void CelWepShoot(int iClient, int iItem)
 			g_bFrozenTint[iHit] = true;
 
 			SetEntityRenderColor(iHit, 90, 160, 255, 255);
+		}
+	}
+}
+
+// Celweps are built on a hidden Custom Guns weapon that would also fire bullets of its own whenever the player has
+// ammo for it. Without an ammo type it never fires: every attack is CelMod's.
+void DisarmBaseWeapon(int iWeapon)
+{
+	if (HasEntProp(iWeapon, Prop_Send, "m_iPrimaryAmmoType") && GetEntProp(iWeapon, Prop_Send, "m_iPrimaryAmmoType") != -1)
+	{
+		SetEntProp(iWeapon, Prop_Send, "m_iPrimaryAmmoType", -1);
+	}
+
+	if (HasEntProp(iWeapon, Prop_Send, "m_iSecondaryAmmoType") && GetEntProp(iWeapon, Prop_Send, "m_iSecondaryAmmoType") != -1)
+	{
+		SetEntProp(iWeapon, Prop_Send, "m_iSecondaryAmmoType", -1);
+	}
+}
+
+public void Hook_CelWepEquip(int iClient, int iWeapon)
+{
+	char sClassname[64];
+
+	if (iWeapon <= MaxClients || !IsValidEntity(iWeapon))
+	{
+		return;
+	}
+
+	GetEntityClassname(iWeapon, sClassname, sizeof(sClassname));
+
+	if (FindCustomGunItem(sClassname) != -1)
+	{
+		DisarmBaseWeapon(iWeapon);
+	}
+}
+
+// Frozen solid: can't move for a moment, tinted icy blue, with a burst of frost.
+void FreezePlayer(int iClient, float fSeconds)
+{
+	float fOrigin[3];
+	int iIce[4] = { 170, 220, 255, 255 };
+
+	g_fIcedUntil[iClient] = GetGameTime() + fSeconds;
+	g_fFrozenUntil[iClient] = GetGameTime() + fSeconds;
+	g_bFrozenTint[iClient] = true;
+
+	SetEntPropFloat(iClient, Prop_Data, "m_flLaggedMovementValue", 0.0);
+	g_bSpeedManaged[iClient] = true;
+
+	SetEntityRenderColor(iClient, 120, 190, 255, 255);
+
+	GetClientAbsOrigin(iClient, fOrigin);
+
+	fOrigin[2] += 8.0;
+
+	Fx_Ring(fOrigin, 10.0, 70.0, g_iBmCrystal, 6.0, 0.5, 0.0, iIce);
+
+	fOrigin[2] += 40.0;
+
+	Fx_Glow(fOrigin, g_iFxBlueGlow, 0.8, 0.6, 220);
+
+	EmitSoundToAll(SOUND_ICE, iClient);
+}
+
+// What a melee celwep's hit looks like: flames for fire, frost for ice, a burst of power for heavy blades.
+void CelWepHitEffect(int iItem, float fHit[3])
+{
+	float fUp[3] = { 0.0, 0.0, 1.0 };
+	int iColor[4];
+
+	iColor[0] = g_Items[iItem].iBeamColor[0];
+	iColor[1] = g_Items[iItem].iBeamColor[1];
+	iColor[2] = g_Items[iItem].iBeamColor[2];
+	iColor[3] = 255;
+
+	if (g_Items[iItem].fIgnite > 0.0)
+	{
+		SpriteSpray(fHit, fUp, g_iFxFlame, 120, 0.6, 5);
+
+		int iFire[4] = { 255, 120, 30, 255 };
+
+		Fx_Light(fHit, iFire, 120.0, 0.4, 5);
+	} else if (g_Items[iItem].fFreeze > 0.0 || g_Items[iItem].fSlow > 0.0)
+	{
+		int iIce[4] = { 170, 220, 255, 255 };
+
+		Fx_Ring(fHit, 4.0, 40.0, g_iBmCrystal, 4.0, 0.4, 0.0, iIce);
+		Fx_Glow(fHit, g_iFxBlueGlow, 0.3, 0.4, 220);
+	} else if (g_Items[iItem].fHitDamage >= 60.0)
+	{
+		int iPower[4] = { 255, 230, 150, 255 };
+
+		Fx_Ring(fHit, 4.0, 60.0, g_iBmLaser, 6.0, 0.3, 0.0, iPower);
+		Fx_Sparks(fHit, fUp, 4, 3);
+	}
+}
+
+//Celwep projectiles: melons that roll then blow up, saw blades, and the Blade Bow's flying swords.
+#define MAX_CELWEP_SHOTS 48
+int g_iShotRef[MAX_CELWEP_SHOTS] = { INVALID_ENT_REFERENCE, ... };
+int g_iShotOwner[MAX_CELWEP_SHOTS];
+int g_iShotItem[MAX_CELWEP_SHOTS];
+float g_fShotStart[MAX_CELWEP_SHOTS];
+bool g_bShotStuck[MAX_CELWEP_SHOTS];
+bool g_bShotHit[MAX_CELWEP_SHOTS][MAXPLAYERS + 1];
+
+void LaunchCelWepProjectile(int iClient, int iItem, float fStart[3], float fAngles[3], float fDirection[3])
+{
+	char sModel[PLATFORM_MAX_PATH];
+	float fOrigin[3], fVelocity[3], fShotAngles[3];
+
+	if (GetEntityCount() > GetMaxEntities() - 200)
+	{
+		return;
+	}
+
+	int iSlot = -1;
+
+	for (int i = 0; i < MAX_CELWEP_SHOTS && iSlot == -1; i++)
+	{
+		if (EntRefToEntIndex(g_iShotRef[i]) == INVALID_ENT_REFERENCE)
+		{
+			iSlot = i;
+		}
+	}
+
+	if (iSlot == -1)
+	{
+		return;
+	}
+
+	bool bMelon = StrEqual(g_Items[iItem].sAttack, "melon");
+	bool bSaw = StrEqual(g_Items[iItem].sAttack, "saw");
+
+	if (g_Items[iItem].sProjectile[0] != '\0')
+	{
+		strcopy(sModel, sizeof(sModel), g_Items[iItem].sProjectile);
+	} else {
+		strcopy(sModel, sizeof(sModel), bMelon ? "models/props_junk/watermelon01.mdl" : (bSaw ? "models/props_junk/sawblade001a.mdl" : "models/celweps/a1.mdl"));
+	}
+
+	int iShot = CreateEntityByName("prop_physics_override");
+
+	if (iShot == -1)
+	{
+		return;
+	}
+
+	PrecacheModel(sModel);
+
+	DispatchKeyValue(iShot, "model", sModel);
+	DispatchKeyValue(iShot, "spawnflags", "4");
+
+	DispatchSpawn(iShot);
+
+	DispatchKeyValue(iShot, "classname", bMelon ? "cel_melon" : (bSaw ? "cel_sawblade" : "cel_flyingblade"));
+
+	SetEntProp(iShot, Prop_Data, "m_takedamage", 0, 1);
+
+	// Kills by it count as the shooter's.
+	if (HasEntProp(iShot, Prop_Data, "m_hPhysicsAttacker"))
+	{
+		SetEntPropEnt(iShot, Prop_Data, "m_hPhysicsAttacker", iClient);
+		SetEntPropFloat(iShot, Prop_Data, "m_flLastPhysicsAttackerTime", GetGameTime() + 30.0);
+	}
+
+	// Out in front of the barrel, so it does not hit the shooter.
+	for (int k = 0; k < 3; k++)
+	{
+		fOrigin[k] = fStart[k] + fDirection[k] * 48.0;
+		fVelocity[k] = fDirection[k] * g_Items[iItem].fProjSpeed;
+	}
+
+	// Melons are lobbed a little upward; saw blades fly flat; swords point the way they fly.
+	if (bMelon)
+	{
+		fVelocity[2] += 150.0;
+	}
+
+	fShotAngles = fAngles;
+
+	if (bSaw)
+	{
+		fShotAngles[0] = 0.0;
+		fShotAngles[2] = 0.0;
+	}
+
+	TeleportEntity(iShot, fOrigin, fShotAngles, fVelocity);
+
+	// Saw blades spin as they fly.
+	if (bSaw && HasEntProp(iShot, Prop_Data, "m_vecAngVelocity"))
+	{
+		float fSpin[3] = { 0.0, 1500.0, 0.0 };
+
+		SetEntPropVector(iShot, Prop_Data, "m_vecAngVelocity", fSpin);
+	}
+
+	g_iShotRef[iSlot] = EntIndexToEntRef(iShot);
+	g_iShotOwner[iSlot] = GetClientUserId(iClient);
+	g_iShotItem[iSlot] = iItem;
+	g_fShotStart[iSlot] = GetGameTime();
+	g_bShotStuck[iSlot] = false;
+
+	for (int i = 0; i <= MaxClients; i++)
+	{
+		g_bShotHit[iSlot][i] = false;
+	}
+
+	if (!bMelon)
+	{
+		int iColor[4];
+
+		iColor[0] = g_Items[iItem].iBeamColor[0];
+		iColor[1] = g_Items[iItem].iBeamColor[1];
+		iColor[2] = g_Items[iItem].iBeamColor[2];
+		iColor[3] = 200;
+
+		TE_SetupBeamFollow(iShot, g_iBmLaser, g_iBmHalo, 0.3, 4.0, 0.5, 1, iColor);
+		TE_SendToAll();
+	}
+
+	// Melons roll for a moment before they go off; the rest are cleared away after a while.
+	KillAfter(iShot, bMelon ? g_Items[iItem].fFuse + 1.0 : 6.0);
+
+	EmitGameSoundToAll(bMelon ? "Weapon_RPG.Single" : (bSaw ? "Weapon_Crossbow.Single" : "Weapon_Crossbow.Single"), iClient);
+}
+
+void ThinkCelWepProjectiles()
+{
+	float fShot[3], fPlayer[3], fVelocity[3], fNow = GetGameTime();
+
+	for (int s = 0; s < MAX_CELWEP_SHOTS; s++)
+	{
+		if (g_iShotRef[s] == INVALID_ENT_REFERENCE)
+		{
+			continue;
+		}
+
+		int iShot = EntRefToEntIndex(g_iShotRef[s]);
+
+		if (iShot == INVALID_ENT_REFERENCE)
+		{
+			g_iShotRef[s] = INVALID_ENT_REFERENCE;
+			continue;
+		}
+
+		int iItem = g_iShotItem[s];
+		int iOwner = GetClientOfUserId(g_iShotOwner[s]);
+
+		GetEntPropVector(iShot, Prop_Data, "m_vecAbsOrigin", fShot);
+
+		// Melon: after rolling for its fuse, it blows up.
+		if (StrEqual(g_Items[iItem].sAttack, "melon"))
+		{
+			if (fNow - g_fShotStart[s] >= g_Items[iItem].fFuse)
+			{
+				g_iShotRef[s] = INVALID_ENT_REFERENCE;
+
+				int iExplosion = CreateEntityByName("env_explosion");
+
+				if (iExplosion != -1)
+				{
+					DispatchKeyValueFloat(iExplosion, "iMagnitude", g_Items[iItem].fHitDamage);
+					DispatchKeyValue(iExplosion, "spawnflags", "0");
+
+					if (iOwner > 0)
+					{
+						SetEntPropEnt(iExplosion, Prop_Data, "m_hOwnerEntity", iOwner);
+					}
+
+					DispatchSpawn(iExplosion);
+
+					TeleportEntity(iExplosion, fShot, NULL_VECTOR, NULL_VECTOR);
+
+					AcceptEntityInput(iExplosion, "Explode");
+					AcceptEntityInput(iExplosion, "kill");
+				}
+
+				// Bits of melon everywhere.
+				AcceptEntityInput(iShot, "Break");
+				AcceptEntityInput(iShot, "kill");
+			}
+
+			continue;
+		}
+
+		if (g_bShotStuck[s])
+		{
+			continue;
+		}
+
+		// Saw blades and swords stop being dangerous once they hit something and slow right down; swords stick.
+		GetEntPropVector(iShot, Prop_Data, "m_vecAbsVelocity", fVelocity);
+
+		if (fNow - g_fShotStart[s] > 0.15 && GetVectorLength(fVelocity) < 250.0)
+		{
+			g_bShotStuck[s] = true;
+
+			if (StrEqual(g_Items[iItem].sAttack, "blade"))
+			{
+				AcceptEntityInput(iShot, "DisableMotion");
+			}
+
+			continue;
+		}
+
+		// Hits every player it passes close to, once each.
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (g_bShotHit[s][i] || iOwner < 1 || !CanBeHurt(iOwner, i))
+			{
+				continue;
+			}
+
+			GetClientAbsOrigin(i, fPlayer);
+
+			// Close to the player's body, from the feet up to the head.
+			float fDz = fShot[2] - fPlayer[2];
+
+			fPlayer[2] = fShot[2];
+
+			if (fDz < -8.0 || fDz > 80.0 || GetVectorDistance(fShot, fPlayer) > 30.0)
+			{
+				continue;
+			}
+
+			g_bShotHit[s][i] = true;
+
+			SDKHooks_TakeDamage(i, iShot, iOwner, g_Items[iItem].fHitDamage, DMG_SLASH);
+
+			if (g_Items[iItem].fIgnite > 0.0)
+			{
+				IgniteEntity(i, g_Items[iItem].fIgnite);
+			}
+
+			if (g_Items[iItem].fSlow > 0.0)
+			{
+				g_fFrozenUntil[i] = fNow + g_Items[iItem].fSlow;
+				g_bFrozenTint[i] = true;
+
+				SetEntityRenderColor(i, 90, 160, 255, 255);
+			}
+
+			if (g_Items[iItem].fFreeze > 0.0)
+			{
+				FreezePlayer(i, g_Items[iItem].fFreeze);
+			}
+
+			EmitSoundToAll("physics/flesh/flesh_impact_bullet1.wav", i);
 		}
 	}
 }
