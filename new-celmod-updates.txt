@@ -144,5 +144,5 @@
 		 - New top tier emblems: Volcano (eruptions that rain lava bombs), Permafrost (freezes targets solid), Maelstrom (a whirlpool that drags players in), Tempest (lightning that jumps to 3 more players) and Plague (a lingering poison cloud).
 	 - 12/18/26: Fixes. Land skins now lie flat on the floor (they stood up and turned to face you). Tiles are sized from each texture (cm_landskin_tile, cm_landskin_brightness).
 		 - Celweps sit in the hand properly: their models are merged onto the player's hand bone exactly as they were made.
-		 - Celwep guns use the right player animations (Saw Gun like an SMG, Melon Launcher like a rocket launcher, Blade Bow like a crossbow).
+		 - Celwep guns use the right player animations (Saw Gun like the gravity gun, Melon Launcher like a rocket launcher, Blade Bow like a crossbow).
 		 - Fixed emblem shots, Demon towers and melon explosions stopping with an error (a wrong effect name).
