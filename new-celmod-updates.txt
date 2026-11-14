@@ -132,3 +132,5 @@
 	 - 12/16/26: Celweps fixed. The hidden weapon behind each celwep no longer fires bullets of its own, so melee celweps only swing.
 		 - The Melon Launcher fires melons that roll for 2 seconds and then explode; the Saw Gun fires spinning saw blades; the Blade Bow fires swords that fly and stick where they land.
 		 - The Fire Sword sets players on fire (5 seconds), the Ice Blade freezes them solid (2 seconds), and the Power Blade hits hard (85 damage). Each hit has its own effect.
+		 - Celweps and emblem attacks now go by whether the game can actually hurt a player (so they work in deathmatch lands), and tell you when the player you hit has god mode on.
+		 - Fixed celwep projectiles (melons, saw blades, swords) not launching on HL2DM.

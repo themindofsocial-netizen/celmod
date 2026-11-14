@@ -2517,7 +2517,7 @@ public Action Timer_Think(Handle hTimer)
 		}
 
 		// Drain: the emblem slowly hurts its own holder, once a second.
-		if (g_iTick % 5 == 0 && g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "drain") && !Cel_GetNoKill(i))
+		if (g_iTick % 5 == 0 && g_bHoldingGravGun[i] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "drain") && !IsProtected(i))
 		{
 			SDKHooks_TakeDamage(i, i, i, g_Items[iItem].fValue, DMG_RADIATION);
 		}
@@ -3699,7 +3699,7 @@ void FireEmblemShot(int iClient, int iItem)
 
 		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i) || Cel_GetNoKill(i))
+			if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i) || IsProtected(i))
 			{
 				continue;
 			}
@@ -3721,7 +3721,7 @@ void FireEmblemShot(int iClient, int iItem)
 	}
 
 	// Only players who can be hurt are affected, so players with !nokill enabled are left alone.
-	if (iTarget < 1 || iTarget > MaxClients || !IsClientInGame(iTarget) || !IsPlayerAlive(iTarget) || Cel_GetNoKill(iTarget))
+	if (iTarget < 1 || iTarget > MaxClients || !IsClientInGame(iTarget) || !IsPlayerAlive(iTarget) || IsProtected(iTarget))
 	{
 		return;
 	}
@@ -4022,7 +4022,29 @@ int TraceEmblemAim(int iClient, float fRange, float fStart[3], float fDirection[
 
 bool CanBeHurt(int iAttacker, int iVictim)
 {
-	return (iVictim > 0 && iVictim <= MaxClients && iVictim != iAttacker && IsClientInGame(iVictim) && IsPlayerAlive(iVictim) && !Cel_GetNoKill(iVictim));
+	return (iVictim > 0 && iVictim <= MaxClients && iVictim != iAttacker && IsClientInGame(iVictim) && IsPlayerAlive(iVictim) && !IsProtected(iVictim));
+}
+
+// Whether the game will not let this player be hurt right now. CelMod's god mode setting (!nokill) stays on inside a
+// deathmatch land even though the player can be hurt there, so what counts is whether the game takes damage.
+// Tells an attacker (now and then) that the player they hit has god mode on, so a hit doing nothing is not a mystery.
+float g_fNextProtectedNotice[MAXPLAYERS + 1];
+
+void ProtectedNotice(int iAttacker, int iVictim)
+{
+	if (iVictim < 1 || iVictim > MaxClients || iVictim == iAttacker || !IsClientInGame(iVictim) || !IsProtected(iVictim) || GetGameTime() < g_fNextProtectedNotice[iAttacker])
+	{
+		return;
+	}
+
+	g_fNextProtectedNotice[iAttacker] = GetGameTime() + 4.0;
+
+	Cel_PrintToChat(iAttacker, "{green}%N{default} can't be hurt right now (god mode is on for them).", iVictim);
+}
+
+bool IsProtected(int iClient)
+{
+	return (GetEntProp(iClient, Prop_Data, "m_takedamage") != 2);
 }
 
 void CreateExplosion(int iClient, float fOrigin[3], float fMagnitude)
@@ -4526,7 +4548,7 @@ void ThinkSmog()
 
 			for (int i = 1; i <= MaxClients; i++)
 			{
-				if (!IsClientInGame(i) || !IsPlayerAlive(i) || Cel_GetNoKill(i) || (i == iOwner))
+				if (!IsClientInGame(i) || !IsPlayerAlive(i) || IsProtected(i) || (i == iOwner))
 				{
 					continue;
 				}
@@ -5228,7 +5250,7 @@ void ThrowTarget(int iClient, int iTarget, float fDirection[3], float fForce)
 
 	if (iTarget <= MaxClients)
 	{
-		if (!IsPlayerAlive(iTarget) || Cel_GetNoKill(iTarget))
+		if (!IsPlayerAlive(iTarget) || IsProtected(iTarget))
 		{
 			return;
 		}
@@ -7197,6 +7219,8 @@ public void CG_OnPrimaryAttack(int iClient, int iWeapon)
 			{
 				FreezePlayer(iHit, g_Items[iItem].fFreeze);
 			}
+		} else {
+			ProtectedNotice(iClient, iHit);
 		}
 
 		CelWepHitEffect(iItem, fHit);
