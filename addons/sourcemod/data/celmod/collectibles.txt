@@ -1194,7 +1194,7 @@
 		"mossman"	{ "name" "Mossman"		"model" "models/mossman.mdl"		"price" "75000" }
 		"breen"		{ "name" "Dr. Breen"	"model" "models/breen.mdl"			"price" "150000" }
 		"gman"		{ "name" "G-Man"		"model" "models/gman_high.mdl"		"price" "500000" }
-		"freeman"	{ "name" "Gordon Freeman"	"model" "models/humans/group03/male_01.mdl"	"price" "750000" }
+		"freeman"	{ "name" "Gordon Freeman"	"model" "models/humans/freeman/freeman.mdl"	"price" "750000" }
 		// Halloween shop exclusive. Its textures must be on the server: add "materials" "<folder>" if they are not sent.
 		"skeleton"	{ "name" "Skeleton"		"model" "models/humans/skeleton/skeleton.mdl"	"price" "1000000"	"season" "halloween" }
 		"admin"		{ "name" "Combine Elite"	"model" "models/combine_super_soldier.mdl"	"price" "0"	"admin" "b" }
