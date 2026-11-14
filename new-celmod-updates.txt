@@ -217,3 +217,5 @@
 		   throwing a prop you're holding still works.
 		 - A proper |CelMod| welcome page (motd.txt): getting started, commands, collecting, money and the rules.
 		   !motd or !rules shows it again.
+		 - Emblem boxes can be picked up with the gravity gun again. Hold one when the map changes (or get it into your land)
+		   and its emblem is yours; picking one up tells you which emblem is inside.

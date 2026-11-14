@@ -2399,6 +2399,14 @@ public Action Timer_Think(Handle hTimer)
 
 			if (iHeld > MaxClients && iHeld <= MAXENTITIES && g_bDropBox[iHeld])
 			{
+				// The first moment a player picks a box up, they're told how to keep it.
+				if (EntRefToEntIndex(g_iHeldBox[i]) != iHeld || GetGameTime() - g_fHeldBoxTime[i] > 2.0)
+				{
+					int iBoxItem = g_iEntItem[iHeld];
+
+					Cel_PrintToChat(i, "You've got a {green}%s{default} emblem box! Keep holding it when the map changes, or get it into your land, and the emblem is yours.", (iBoxItem >= 0 && iBoxItem < g_iItemCount) ? g_Items[iBoxItem].sName : "mystery");
+				}
+
 				g_iHeldBox[i] = EntIndexToEntRef(iHeld);
 				g_fHeldBoxTime[i] = GetGameTime();
 			}
@@ -6214,9 +6222,13 @@ int SpawnDropBox()
 	}
 
 	DispatchKeyValue(iBox, "model", g_sDropModel);
-	DispatchKeyValue(iBox, "classname", "cel_dropbox");
+	// "Always pick up": the gravity gun can always lift it, whatever the model weighs.
+	DispatchKeyValue(iBox, "spawnflags", "1048576");
 
 	DispatchSpawn(iBox);
+	// Named after spawning: renamed before, the prop_physics_override loses its override (the same as hats), and the
+	// gravity gun couldn't pick the box up.
+	DispatchKeyValue(iBox, "classname", "cel_dropbox");
 
 	TeleportEntity(iBox, fOrigin, NULL_VECTOR, NULL_VECTOR);
 
