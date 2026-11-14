@@ -169,3 +169,4 @@
 		 - New player models: Gordon Freeman (750,000 CL) and the Skeleton (1,000,000 CL, Halloween shop only).
 		   Player models can now be seasonal ("season" in collectibles.txt), and owners keep wearing them all year.
 		 - Admins: !forceseason <season> <on/off/auto> opens or closes a seasonal shop for testing.
+		 - The Core emblem now shoots small coreballs.
