@@ -35,6 +35,7 @@ char g_sSpawnDB[PLATFORM_MAX_PATH];
 char g_sBoothDB[PLATFORM_MAX_PATH];
 
 ConVar g_cvReward;
+ConVar g_cvXPGuess;
 
 float g_fAuctionEnd;
 float g_fCenter[3];
@@ -63,6 +64,13 @@ public Plugin myinfo =
 	url = CEL_URL
 };
 
+public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
+{
+	MarkNativeAsOptional("Cel_AddTacticsXP");
+	
+	return APLRes_Success;
+}
+
 public void OnPluginStart()
 {
 	LoadTranslations("common.phrases");
@@ -72,6 +80,7 @@ public void OnPluginStart()
 	
 	g_smGuessed = new StringMap();
 	
+	g_cvXPGuess = CreateConVar("cm_tactics_xp_guess", "15", "Tactics experience for a correct guess at the Guess Booth.", _, true, 0.0);
 	g_cvReward = CreateConVar("cm_guess_reward", "5000", "Cleers paid for a correct guess at the Guess Booth.", _, true, 0.0);
 	
 	AutoExecConfig(true, "celmod.booth");
@@ -811,6 +820,7 @@ public Action Command_Guess(int iClient, int iArgs)
 	if (iGuess == g_iAnswer)
 	{
 		Cel_AddToClientBalance(iClient, g_cvReward.IntValue);
+		Cel_AddXP(iClient, g_cvXPGuess.IntValue);
 		
 		EmitSoundToClient(iClient, "buttons/button9.wav");
 		

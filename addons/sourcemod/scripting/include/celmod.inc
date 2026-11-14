@@ -1509,6 +1509,15 @@ native int Cel_GetTacticsXPNeeded(int iClient);
  */
 native void Cel_AddTacticsXP(int iClient, int iAmount);
 
+/** Cel_AddTacticsXP when the economy plugin is loaded (mark Cel_AddTacticsXP optional to use it). */
+stock void Cel_AddXP(int iClient, int iAmount)
+{
+	if (iAmount > 0 && GetFeatureStatus(FeatureType_Native, "Cel_AddTacticsXP") == FeatureStatus_Available)
+	{
+		Cel_AddTacticsXP(iClient, iAmount);
+	}
+}
+
 /**
  * Spawns a cleers box: an owned money box only its owner can open (E). It can be given away with !give.
  *

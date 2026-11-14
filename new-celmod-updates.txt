@@ -199,3 +199,6 @@
 		 - Dungeon and spawn pad enemies have Half-Life 2's normal health and damage (HL2DM left them at 0), spawn spread out
 		   instead of stacked inside each other, and go after the nearest player they can see (cm_dungeon_hunt_range).
 		 - Fixed: dungeon and spawn pad enemies never attacked (HL2DM leaves them neutral to players); they hate players now.
+		 - More ways to raise your tactics level: killing dungeon enemies (1 XP for every 50 of their health), claiming event
+		   rewards (50) and other rewards (15), winning emblem boxes (10), Power Booth upgrades (15) and right guesses at the
+		   Guess Booth (15). Player kills still give 5. All of them are cm_tactics_xp_* settings.

@@ -230,6 +230,10 @@ ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
 ConVar g_cvGiftChance;
+ConVar g_cvXPEvent;
+ConVar g_cvXPReward;
+ConVar g_cvXPBox;
+ConVar g_cvXPUpgrade;
 ConVar g_cvGiftDays;
 ConVar g_cvShowSelf;
 
@@ -291,6 +295,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	MarkNativeAsOptional("CG_GiveGun");
 	MarkNativeAsOptional("Cel_IsSeasonOpen");
 	MarkNativeAsOptional("Cel_AddPlayerStat");
+	MarkNativeAsOptional("Cel_AddTacticsXP");
 	MarkNativeAsOptional("Cel_SetPlayerStat");
 	MarkNativeAsOptional("Cel_GetZoneType");
 	MarkNativeAsOptional("Cel_IsZoneExempt");
@@ -373,6 +378,10 @@ public void OnPluginStart()
 	g_cvDropInterval = CreateConVar("cm_drop_interval", "0", "Minutes between automatic emblem drops. 0 disables automatic drops.", _, true, 0.0);
 	g_cvDropMinPlayers = CreateConVar("cm_drop_min_players", "2", "Players needed on the server for an automatic emblem drop.", _, true, 1.0);
 	g_cvDropRadius = CreateConVar("cm_drop_radius", "1200.0", "How far from a player or land a crate can fall.", _, true, 64.0);
+	g_cvXPEvent = CreateConVar("cm_tactics_xp_event", "50", "Tactics experience for claiming an event reward (the end of a maze or parkour course).", _, true, 0.0);
+	g_cvXPReward = CreateConVar("cm_tactics_xp_reward", "15", "Tactics experience for claiming any other reward pickup.", _, true, 0.0);
+	g_cvXPBox = CreateConVar("cm_tactics_xp_box", "10", "Tactics experience for winning an emblem box from an emblem drop.", _, true, 0.0);
+	g_cvXPUpgrade = CreateConVar("cm_tactics_xp_upgrade", "15", "Tactics experience for upgrading emblems at the Power Booth.", _, true, 0.0);
 	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
 	g_cvGiftDays = CreateConVar("cm_emblem_gift_days", "3", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
 
@@ -2008,6 +2017,9 @@ public void Hook_RewardUse(int iEntity, int iActivator, int iCaller, UseType utT
 	}
 
 	GiveItem(iActivator, iItem);
+
+	// Finishing an event (a maze or parkour course) is worth a lot of tactics experience; other rewards less.
+	Cel_AddXP(iActivator, g_bRewardEvent[iEntity] ? g_cvXPEvent.IntValue : g_cvXPReward.IntValue);
 
 	EmitSoundToAll(SOUND_REWARD, iEntity);
 
@@ -6162,6 +6174,8 @@ void ClaimDropBox(int iClient, int iBox, const char[] sHow)
 	// One box can only be won once.
 	g_bDropBox[iBox] = false;
 
+	Cel_AddXP(iClient, g_cvXPBox.IntValue);
+
 	if (iItem < 0 || iItem >= g_iItemCount)
 	{
 		return;
@@ -7339,6 +7353,8 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 void UpgradeAtBooth(int iClient, int iBooth, int iFrom, int iTo)
 {
 	float fBooth[3], fOrigin[3], fSpot[3];
+
+	Cel_AddXP(iClient, g_cvXPUpgrade.IntValue);
 
 	if (iFrom < 0 || iFrom >= g_iItemCount || iTo < 0 || iTo >= g_iItemCount)
 	{
