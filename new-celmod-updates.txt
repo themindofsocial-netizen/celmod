@@ -166,3 +166,6 @@
 		 - !spawnpoint: a spawn point cel for your land. Anyone who dies inside your land respawns on it.
 		 - Christmas presents: !wrap <player> <emblem/hat/weapon> <name> wraps one of your items in a present only that player can open
 		   (press E on it). !presents brings back any present that went missing, so a wrapped item is never lost.
+		 - New player models: Gordon Freeman (750,000 CL) and the Skeleton (1,000,000 CL, Halloween shop only).
+		   Player models can now be seasonal ("season" in collectibles.txt), and owners keep wearing them all year.
+		 - Admins: !forceseason <season> <on/off/auto> opens or closes a seasonal shop for testing.

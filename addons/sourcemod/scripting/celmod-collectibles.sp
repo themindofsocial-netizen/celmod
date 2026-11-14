@@ -127,6 +127,7 @@ enum struct PlayerModel
 	char sModel[PLATFORM_MAX_PATH];
 	int iPrice;
 	int iAdminFlags;
+	char sSeason[32];
 }
 
 char g_sKindClass[][] = { "cel_emblem", "cel_hat", "cel_weapon" };
@@ -300,6 +301,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetCollectibleCount", Native_GetCollectibleCount);
 	CreateNative("Cel_GetPlayerModelCount", Native_GetPlayerModelCount);
 	CreateNative("Cel_GetPlayerModelInfo", Native_GetPlayerModelInfo);
+	CreateNative("Cel_GetPlayerModelSeason", Native_GetPlayerModelSeason);
 	CreateNative("Cel_OwnsPlayerModel", Native_OwnsPlayerModel);
 	CreateNative("Cel_GivePlayerModel", Native_GivePlayerModel);
 
@@ -2687,6 +2689,26 @@ public int Native_GetPlayerModelCount(Handle hPlugin, int iNumParams)
 	return g_iPlayerModelCount;
 }
 
+public int Native_GetPlayerModelSeason(Handle hPlugin, int iNumParams)
+{
+	int iModel = GetNativeCell(1);
+
+	SetNativeString(2, (iModel >= 0 && iModel < g_iPlayerModelCount) ? g_PlayerModels[iModel].sSeason : "", GetNativeCell(3));
+
+	return 0;
+}
+
+//A seasonal player model (Halloween's Skeleton) is only sold while its season is on. Owners wear it all year.
+bool PlayerModelOnSale(int iModel)
+{
+	if (g_PlayerModels[iModel].sSeason[0] == '\0')
+	{
+		return true;
+	}
+
+	return GetFeatureStatus(FeatureType_Native, "Cel_IsSeasonOpen") == FeatureStatus_Available && Cel_IsSeasonOpen(g_PlayerModels[iModel].sSeason);
+}
+
 public int Native_GetPlayerModelInfo(Handle hPlugin, int iNumParams)
 {
 	int iModel = GetNativeCell(1);
@@ -2893,6 +2915,7 @@ void LoadItems()
 			kvItems.GetString("model", g_PlayerModels[iModel].sModel, sizeof(PlayerModel::sModel), "");
 
 			g_PlayerModels[iModel].iPrice = kvItems.GetNum("price", 0);
+			kvItems.GetString("season", g_PlayerModels[iModel].sSeason, sizeof(PlayerModel::sSeason), "");
 
 			char sFlags[32], sMaterials[PLATFORM_MAX_PATH];
 
@@ -6384,6 +6407,12 @@ public Action Command_PlayerModels(int iClient, int iArgs)
 			continue;
 		}
 
+		// Seasonal models out of season are only listed for those who have them.
+		if (!PlayerModelOnSale(i) && !OwnsPlayerModel(iClient, i))
+		{
+			continue;
+		}
+
 		if (OwnsPlayerModel(iClient, i))
 		{
 			Format(sEntry, sizeof(sEntry), "%s {green}(owned)%s{default}", g_PlayerModels[i].sId, g_iPlayerModel[iClient] == i ? " [on]" : "");
@@ -6451,6 +6480,12 @@ public Action Command_BuyModel(int iClient, int iArgs)
 	if (g_PlayerModels[iModel].iAdminFlags != 0 && g_PlayerModels[iModel].iPrice < 1)
 	{
 		Cel_ReplyToCommand(iClient, "The {green}%s{default} player model is not for sale.", g_PlayerModels[iModel].sName);
+		return Plugin_Handled;
+	}
+
+	if (!PlayerModelOnSale(iModel))
+	{
+		Cel_ReplyToCommand(iClient, "The {green}%s{default} player model is only sold in a seasonal shop. Type {green}[tag]seasons{default} to see when it opens.", g_PlayerModels[iModel].sName);
 		return Plugin_Handled;
 	}
 

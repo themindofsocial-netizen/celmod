@@ -41,6 +41,7 @@ enum struct ShopItem
 ArrayList g_alItems;
 StringMap g_smSeasonOpen;
 char g_sOpenShops[256];
+StringMap g_smSeasonForced;
 KeyValues g_kvStock;
 
 char g_sShopDB[PLATFORM_MAX_PATH];
@@ -75,6 +76,7 @@ public void OnPluginStart()
 {
 	g_alItems = new ArrayList(sizeof(ShopItem));
 	g_smSeasonOpen = new StringMap();
+	g_smSeasonForced = new StringMap();
 
 	BuildPath(Path_SM, g_sShopDB, sizeof(g_sShopDB), "data/celmod/shop.txt");
 	BuildPath(Path_SM, g_sStockDB, sizeof(g_sStockDB), "data/celmod/shopstock.txt");
@@ -85,6 +87,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_catalog", Command_Catalog, "|CelMod| Lists everything in the shop: commands, rare props, player models, emblems and hats.");
 	RegConsoleCmd("v_shopitems", Command_Catalog, "|CelMod| Lists everything in the shop: commands, rare props, player models, emblems and hats.");
 	RegConsoleCmd("v_seasons", Command_Seasons, "|CelMod| Lists the seasonal shops and when they open.");
+	RegAdminCmd("v_forceseason", Command_ForceSeason, ADMFLAG_ROOT, "|CelMod| Testing: forces a seasonal shop open or closed (on/off), or back to its dates (auto).");
 	RegAdminCmd("cm_shop_reload", Command_Reload, ADMFLAG_ROOT, "|CelMod| Reloads the shop catalog from shop.txt and collectibles.txt.");
 }
 
@@ -219,6 +222,17 @@ void LoadCatalog()
 			continue;
 		}
 
+		// Seasonal models are only for sale while their season is on.
+		char sSeason[32];
+		bool bOpen;
+
+		Cel_GetPlayerModelSeason(i, sSeason, sizeof(sSeason));
+
+		if (sSeason[0] != '\0' && (!g_smSeasonOpen.GetValue(sSeason, bOpen) || !bOpen))
+		{
+			continue;
+		}
+
 		FormatEx(sKey, sizeof(sKey), "model_%s", sId);
 		StringToLowerCase(sKey);
 
@@ -278,6 +292,14 @@ void LoadSeasons(KeyValues kvShop)
 			bOpen = (iStart <= iEnd) ? (iToday >= iStart && iToday <= iEnd) : (iToday >= iStart || iToday <= iEnd);
 		}
 
+		// !forceseason overrides the dates while testing.
+		bool bForced;
+
+		if (g_smSeasonForced.GetValue(sKey, bForced))
+		{
+			bOpen = bForced;
+		}
+
 		g_smSeasonOpen.SetValue(sKey, bOpen);
 
 		if (bOpen)
@@ -327,6 +349,58 @@ public Action Timer_SeasonNotice(Handle hTimer, any iUserId)
 	}
 
 	return Plugin_Stop;
+}
+
+//Testing: !forceseason <season> <on/off/auto>. Lasts until it is set back to auto or the server restarts.
+public Action Command_ForceSeason(int iClient, int iArgs)
+{
+	char sSeason[32], sState[8];
+	bool bKnown;
+
+	if (iArgs < 2)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]forceseason{default} <halloween/christmas/newyears/clockday> <on/off/auto>");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sSeason, sizeof(sSeason));
+	GetCmdArg(2, sState, sizeof(sState));
+	StringToLowerCase(sSeason);
+
+	if (!g_smSeasonOpen.GetValue(sSeason, bKnown))
+	{
+		Cel_ReplyToCommand(iClient, "There is no season called {green}%s{default}. Type {green}[tag]seasons{default} to see them.", sSeason);
+		return Plugin_Handled;
+	}
+
+	if (StrEqual(sState, "on", false))
+	{
+		g_smSeasonForced.SetValue(sSeason, true);
+	}
+	else if (StrEqual(sState, "off", false))
+	{
+		g_smSeasonForced.SetValue(sSeason, false);
+	}
+	else if (StrEqual(sState, "auto", false))
+	{
+		g_smSeasonForced.Remove(sSeason);
+	}
+	else
+	{
+		Cel_ReplyToCommand(iClient, "Use {green}on{default}, {green}off{default} or {green}auto{default}.");
+		return Plugin_Handled;
+	}
+
+	//Rebuilds the catalog so the season's items appear or disappear right away.
+	LoadCatalog();
+
+	bool bOpen;
+
+	g_smSeasonOpen.GetValue(sSeason, bOpen);
+
+	Cel_ReplyToCommand(iClient, "The {green}%s{default} season is now {green}%s{default}%s.", sSeason, bOpen ? "open" : "closed", StrEqual(sState, "auto", false) ? " (back to its dates)" : " (forced for testing)");
+
+	return Plugin_Handled;
 }
 
 public Action Command_Seasons(int iClient, int iArgs)

@@ -585,6 +585,11 @@ native int Cel_GetPlayerModelCount();
 native bool Cel_GetPlayerModelInfo(int iIndex, char[] sId, int iIdLength, char[] sName, int iNameLength, int &iPrice, int &iAdminFlags);
 
 /**
+ * The seasonal shop a player model is only sold in (a key from "Seasons" in shop.txt), or "" for all year.
+ */
+native void Cel_GetPlayerModelSeason(int iIndex, char[] sSeason, int iMaxLength);
+
+/**
  * Whether a client owns a player model (bought, given, free, or through admin flags).
  *
  * @return  1 owned, 0 not owned, -1 no such model.
