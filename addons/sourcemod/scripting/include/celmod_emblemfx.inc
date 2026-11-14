@@ -16,9 +16,12 @@
 int g_iFxGlow, g_iFxSoftGlow, g_iFxFlame, g_iFxEmber, g_iFxSteam, g_iFxBlueGlow, g_iFxPurpleGlow, g_iFxRedGlow, g_iFxYellowGlow, g_iFxGreenGlow, g_iFxOrangeGlow, g_iFxBlackBall, g_iFxExplosion;
 int g_iBmLaser, g_iBmLightning, g_iBmPhys, g_iBmCrystal, g_iBmXBeam, g_iBmBlue, g_iBmShock, g_iBmSpine, g_iBmHalo;
 
-char g_sFxZap[PLATFORM_MAX_PATH], g_sFxBoom[PLATFORM_MAX_PATH], g_sFxSplash[PLATFORM_MAX_PATH], g_sFxGlass[PLATFORM_MAX_PATH], g_sFxPulse[PLATFORM_MAX_PATH], g_sFxThunder[PLATFORM_MAX_PATH];
+char g_sFxWind[PLATFORM_MAX_PATH], g_sFxZap[PLATFORM_MAX_PATH], g_sFxBoom[PLATFORM_MAX_PATH], g_sFxSplash[PLATFORM_MAX_PATH], g_sFxGlass[PLATFORM_MAX_PATH], g_sFxPulse[PLATFORM_MAX_PATH], g_sFxThunder[PLATFORM_MAX_PATH];
 
 float g_fNextAura[MAXPLAYERS + 1];
+float g_fNextWind[MAXPLAYERS + 1];
+int g_iSteamRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+float g_fSteamUntil[MAXPLAYERS + 1];
 float g_fAuraLast[MAXPLAYERS + 1][3];
 float g_fAuraSpin[MAXPLAYERS + 1];
 
@@ -78,6 +81,133 @@ void Fx_Precache()
 	Fx_PrecacheSound(g_sFxThunder, sizeof(g_sFxThunder), "ambient/levels/labs/electric_explosion4.wav", "ambient/levels/labs/electric_explosion1.wav");
 
 	Fx_PrecachePhysical();
+
+	// Winter wind for the Blizzard: the first of these the game has.
+	static const char sWind[][] = { "ambient/wind/wind_snippet2.wav", "ambient/wind/wind_snippet1.wav", "ambient/wind/windgust.wav", "ambient/wind/wind_hit2.wav" };
+
+	strcopy(g_sFxWind, sizeof(g_sFxWind), "player/sprayer.wav");
+
+	for (int i = 0; i < sizeof(sWind); i++)
+	{
+		char sFile[PLATFORM_MAX_PATH];
+
+		Format(sFile, sizeof(sFile), "sound/%s", sWind[i]);
+
+		if (FileExists(sFile, true))
+		{
+			strcopy(g_sFxWind, sizeof(g_sFxWind), sWind[i]);
+			break;
+		}
+	}
+
+	PrecacheSound(g_sFxWind, true);
+
+	for (int i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_iSteamRef[i] = INVALID_ENT_REFERENCE;
+	}
+}
+
+//The Blizzard's snow stream: a jet of white steam held in front of the player while they keep firing.
+void Fx_BlizzardStream(int iClient, int iItem)
+{
+	g_fSteamUntil[iClient] = GetGameTime() + 0.3;
+
+	int iSteam = EntRefToEntIndex(g_iSteamRef[iClient]);
+
+	if (iSteam != INVALID_ENT_REFERENCE)
+	{
+		return;
+	}
+
+	if (GetEntityCount() > GetMaxEntities() - 150)
+	{
+		return;
+	}
+
+	iSteam = CreateEntityByName("env_steam");
+
+	if (iSteam == -1)
+	{
+		return;
+	}
+
+	char sColor[24];
+
+	Format(sColor, sizeof(sColor), "%d %d %d", 225 + g_Items[iItem].iColor[0] / 10, 235 + g_Items[iItem].iColor[1] / 25, 245);
+
+	float fJet = g_Items[iItem].fRange * 0.6;
+
+	if (fJet > 500.0) fJet = 500.0;
+
+	DispatchKeyValue(iSteam, "SpreadSpeed", "18");
+	DispatchKeyValue(iSteam, "Speed", "520");
+	DispatchKeyValue(iSteam, "StartSize", "8");
+	DispatchKeyValue(iSteam, "EndSize", "70");
+	DispatchKeyValue(iSteam, "Rate", "70");
+	DispatchKeyValueFloat(iSteam, "JetLength", fJet);
+	DispatchKeyValue(iSteam, "rendercolor", sColor);
+	DispatchKeyValue(iSteam, "renderamt", "235");
+	DispatchKeyValue(iSteam, "type", "0");
+	DispatchKeyValue(iSteam, "spawnflags", "1");
+
+	DispatchSpawn(iSteam);
+
+	Fx_PlaceStream(iClient, iSteam);
+
+	AcceptEntityInput(iSteam, "TurnOn");
+
+	g_iSteamRef[iClient] = EntIndexToEntRef(iSteam);
+}
+
+// In front of the player's hand, pointing where they aim.
+void Fx_PlaceStream(int iClient, int iSteam)
+{
+	float fEye[3], fAngles[3], fForward[3], fRight[3], fUp[3], fPos[3];
+
+	GetClientEyePosition(iClient, fEye);
+	GetClientEyeAngles(iClient, fAngles);
+	GetAngleVectors(fAngles, fForward, fRight, fUp);
+
+	for (int k = 0; k < 3; k++)
+	{
+		fPos[k] = fEye[k] + fForward[k] * 28.0 + fRight[k] * 8.0 - fUp[k] * 12.0;
+	}
+
+	TeleportEntity(iSteam, fPos, fAngles, NULL_VECTOR);
+}
+
+// Every frame: streams follow their players, and stop once fire has been let go (the snow drifts away first).
+public void Fx_ThinkStreams()
+{
+	float fNow = GetGameTime();
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_iSteamRef[i] == INVALID_ENT_REFERENCE)
+		{
+			continue;
+		}
+
+		int iSteam = EntRefToEntIndex(g_iSteamRef[i]);
+
+		if (iSteam == INVALID_ENT_REFERENCE)
+		{
+			g_iSteamRef[i] = INVALID_ENT_REFERENCE;
+			continue;
+		}
+
+		if (fNow > g_fSteamUntil[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			AcceptEntityInput(iSteam, "TurnOff");
+			KillAfter(iSteam, 3.0);
+
+			g_iSteamRef[i] = INVALID_ENT_REFERENCE;
+			continue;
+		}
+
+		Fx_PlaceStream(i, iSteam);
+	}
 }
 
 // Writes a temp entity property only if this game has it, so a missing one can never stop an effect with an error.
@@ -753,24 +883,27 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 	// ---- Ice ----
 	} else if (StrEqual(sFx, "snowstorm"))
 	{
-		// Blizzard: a gust of snow and hail that shatters into ice where it hits.
-		Fx_Missile(iItem, fStart, fEnd, iCore, 1200.0, 0.35, false, 2.0, 0.3);
+		// Blizzard: a thick blast of snow streaming from the emblem while fire is held, flakes glittering in it,
+		// and the howl of winter wind (as on the original server).
+		Fx_BlizzardStream(iClient, iItem);
 
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 3; i++)
 		{
-			Fx_Lerp(fStart, fEnd, GetRandomFloat(0.2, 0.95), fPoint);
+			Fx_Lerp(fStart, fEnd, GetRandomFloat(0.15, 0.9), fPoint);
 
-			fPoint[0] += GetRandomFloat(-24.0, 24.0);
-			fPoint[1] += GetRandomFloat(-24.0, 24.0);
-			fPoint[2] += GetRandomFloat(-16.0, 16.0);
+			fPoint[0] += GetRandomFloat(-30.0, 30.0);
+			fPoint[1] += GetRandomFloat(-30.0, 30.0);
+			fPoint[2] += GetRandomFloat(-20.0, 20.0);
 
-			Fx_Glow(fPoint, g_iFxGlow, GetRandomFloat(0.1, 0.2), GetRandomFloat(0.4, 0.9), 200);
+			Fx_Glow(fPoint, g_iFxGlow, GetRandomFloat(0.05, 0.12), GetRandomFloat(0.4, 0.9), 255);
 		}
 
-		Fx_Gibs(fBack, g_iGibIce, 5, 200.0, 1.5, 1);
-		Fx_Puff(fBack, 10.0);
+		if (GetGameTime() >= g_fNextWind[iClient])
+		{
+			g_fNextWind[iClient] = GetGameTime() + 1.6;
 
-		PlayShotSound(iClient, SOUND_ICE);
+			EmitSoundToAll(g_sFxWind, iClient, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.8, GetRandomInt(90, 110));
+		}
 	} else if (StrEqual(sFx, "frostline"))
 	{
 		// Frost: a thin freezing ray that frosts over what it touches.

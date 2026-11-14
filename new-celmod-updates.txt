@@ -150,3 +150,4 @@
 		 - Only a few basics upgrade at the Power Booth (3 of one): Fire > Inferno, Water > Tsunami and Blizzard > Glacier, plus the Error chain. Inferno, Tsunami and Glacier are only made by upgrading.
 		 - New collectibles: the gems Ruby, Emerald, Sapphire and Amethyst, and the very rare Diamond (glowing, no power); plain colors Crimson, Lime, Cyan, Midnight, Sunset and Party; and Bunny (jump), Feather (slow fall), Warp (blink) and Lifeline (healing).
 		 - Removed the other added emblems, including Volcano, Permafrost, Maelstrom, Tempest and Plague. Anyone who owned one keeps it in their inventory file; it comes back if the emblem is ever added again.
+	 - 12/20/26: The Blizzard emblem is a blast of snow again, as on the original server: a thick white stream from the emblem while you hold fire, glittering flakes and a winter wind.

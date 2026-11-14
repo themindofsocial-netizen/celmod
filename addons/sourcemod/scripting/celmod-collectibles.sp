@@ -4349,6 +4349,8 @@ public void OnGameFrame()
 
 	UpdateThirdPersonCameras();
 
+	Fx_ThinkStreams();
+
 	ThinkCelWepProjectiles();
 
 	for (int i = 0; i < MAX_MOVERS; i++)
