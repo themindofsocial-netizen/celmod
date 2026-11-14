@@ -3035,9 +3035,8 @@ void ReadItem(KeyValues kvItems, int iKind)
 		g_Items[iItem].iColor[0] = 255;
 		g_Items[iItem].iColor[1] = 255;
 		g_Items[iItem].iColor[2] = 255;
+		g_Items[iItem].iColor[3] = 255;
 	}
-
-	g_Items[iItem].iColor[3] = 255;
 
 	g_Items[iItem].fValue = kvItems.GetFloat("value", 1.0);
 	g_Items[iItem].fCooldown = kvItems.GetFloat("cooldown", 2.0);

@@ -170,3 +170,4 @@
 		   Player models can now be seasonal ("season" in collectibles.txt), and owners keep wearing them all year.
 		 - Admins: !forceseason <season> <on/off/auto> opens or closes a seasonal shop for testing.
 		 - The Core emblem now shoots small coreballs.
+		 - Fixed: Invisible (and Phantom) showed fully solid, because an emblem's color alpha was always reset to 255.
