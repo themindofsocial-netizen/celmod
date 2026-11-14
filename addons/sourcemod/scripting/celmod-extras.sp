@@ -3,6 +3,8 @@
 #include <celmod>
 
 #define TELEPORT_MODEL "models/props_lab/teleplatform.mdl"
+#define HOOPIE_MODEL "models/celmod/hoopie.mdl"
+#define HOOPIE_SOUND "weapons/physcannon/energy_bounce1.wav"
 
 #pragma newdecls required
 
@@ -46,6 +48,8 @@ int g_iTeleportRef[MAXPLAYERS + 1];
 int g_iWeldRef[MAXPLAYERS + 1];
 
 float g_fNextTeleport[MAXPLAYERS + 1];
+float g_fNextBounce[MAXPLAYERS + 1];
+ConVar g_cvHoopieBounce;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
@@ -67,6 +71,8 @@ public void OnPluginStart()
 {
 	LoadTranslations("celmod.phrases");
 	LoadTranslations("common.phrases");
+	
+	g_cvHoopieBounce = CreateConVar("cm_hoopie_bounce", "650", "How hard a hoopie bounces players off it.", _, true, 0.0, true, 3000.0);
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
@@ -143,6 +149,7 @@ public void OnClientPutInServer(int iClient)
 public void OnMapStart()
 {
 	PrecacheSound("ambient/machines/teleport1.wav", true);
+	PrecacheSound(HOOPIE_SOUND, true);
 	PrecacheModel(TELEPORT_MODEL, true);
 	
 	for (int i = 0; i <= MAXENTITIES; i++)
@@ -186,6 +193,16 @@ public void Frame_TrackEntity(any iRef)
 	if (iEntity == INVALID_ENT_REFERENCE || iEntity <= MaxClients || iEntity > MAXENTITIES || !Cel_IsEntity(iEntity))
 	{
 		return;
+	}
+	
+	//Hoopies bounce players off their face.
+	char sModel[PLATFORM_MAX_PATH];
+	
+	GetEntPropString(iEntity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+	
+	if (StrEqual(sModel, HOOPIE_MODEL, false))
+	{
+		SDKHook(iEntity, SDKHook_StartTouchPost, Hook_HoopieTouch);
 	}
 	
 	int iOwner = Cel_GetOwner(iEntity);
@@ -1543,6 +1560,49 @@ public Action Command_Teleport(int iClient, int iArgs)
 	Cel_ReplyToCommand(iClient, "Spawned the teleport exit. Walking onto the blue pad now takes players to the orange one.");
 	
 	return Plugin_Handled;
+}
+
+//Launches a player off a hoopie, along the side of its face they touched, so tilted hoopies throw them sideways.
+public void Hook_HoopieTouch(int iEntity, int iOther)
+{
+	if (iOther < 1 || iOther > MaxClients || !IsPlayerAlive(iOther) || GetGameTime() < g_fNextBounce[iOther])
+	{
+		return;
+	}
+	
+	g_fNextBounce[iOther] = GetGameTime() + 0.25;
+	
+	float fAngles[3], fUp[3], fPropOrigin[3], fPlayerOrigin[3], fToPlayer[3], fVelocity[3];
+	
+	GetEntPropVector(iEntity, Prop_Data, "m_angAbsRotation", fAngles);
+	GetAngleVectors(fAngles, NULL_VECTOR, NULL_VECTOR, fUp);
+	
+	Cel_GetEntityOrigin(iEntity, fPropOrigin);
+	GetClientAbsOrigin(iOther, fPlayerOrigin);
+	fPlayerOrigin[2] += 36.0;
+	
+	MakeVectorFromPoints(fPropOrigin, fPlayerOrigin, fToPlayer);
+	
+	if (GetVectorDotProduct(fToPlayer, fUp) < 0.0)
+	{
+		NegateVector(fUp);
+	}
+	
+	GetEntPropVector(iOther, Prop_Data, "m_vecVelocity", fVelocity);
+	
+	float fStrength = g_cvHoopieBounce.FloatValue;
+	
+	//Keep the run-up's sideways speed, replace the speed into the hoopie with the bounce.
+	float fInto = GetVectorDotProduct(fVelocity, fUp);
+	
+	for (int i = 0; i < 3; i++)
+	{
+		fVelocity[i] += fUp[i] * (fStrength - fInto);
+	}
+	
+	TeleportEntity(iOther, NULL_VECTOR, NULL_VECTOR, fVelocity);
+	
+	EmitSoundToAll(HOOPIE_SOUND, iEntity, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.8, GetRandomInt(95, 120));
 }
 
 public void Hook_TeleportTouch(int iEntity, int iOther)

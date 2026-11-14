@@ -934,6 +934,19 @@
 			"dropweight"	"4"
 		}
 		// Decorative: the grey combine shield skin, no power.
+		// Decorative: rusted tram metal, no power.
+		"rust"
+		{
+			"name"			"Rust"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"11"
+			"color"			"210 110 80 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
 		"force"
 		{
 			"name"			"Force"
@@ -972,13 +985,13 @@
 			"power"			"none"
 			"dropweight"	"4"
 		}
-		// Decorative: fully invisible, only its flashlight shadow gives it away, no power.
+		// Decorative: almost invisible, only its flashlight shadow and a faint shimmer up close give it away, no power.
 		"invisible"
 		{
 			"name"			"Invisible"
 			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
-			"color"			"255 255 255 0"
+			"color"			"255 255 255 6"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
