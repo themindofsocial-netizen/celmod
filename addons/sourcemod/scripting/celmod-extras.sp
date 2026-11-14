@@ -1709,6 +1709,35 @@ public Action Command_Teleport(int iClient, int iArgs)
 }
 
 //Launches a player off a hoopie, along the side of its face they touched, so tilted hoopies throw them sideways.
+//Standing on (or landing on) a hoopie bounces the player. Checked every frame from what each player is standing on,
+//because physics props don't always report players touching them.
+public void OnGameFrame()
+{
+	char sModel[PLATFORM_MAX_PATH];
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			continue;
+		}
+		
+		int iGround = GetEntPropEnt(i, Prop_Send, "m_hGroundEntity");
+		
+		if (iGround <= MaxClients || !IsValidEntity(iGround))
+		{
+			continue;
+		}
+		
+		GetEntPropString(iGround, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+		
+		if (StrEqual(sModel, HOOPIE_MODEL, false))
+		{
+			Hook_HoopieTouch(iGround, i);
+		}
+	}
+}
+
 public void Hook_HoopieTouch(int iEntity, int iOther)
 {
 	if (iOther < 1 || iOther > MaxClients || !IsPlayerAlive(iOther) || GetGameTime() < g_fNextBounce[iOther])

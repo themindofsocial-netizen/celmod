@@ -1,0 +1,6 @@
+// Invisible emblem (phys8_inv.mdl): never drawn, but still opaque, so it casts shadows (the flashlight too).
+"VertexLitGeneric"
+{
+	"$basetexture" "models/celmod/emblem3/s2"
+	"$no_draw" "1"
+}

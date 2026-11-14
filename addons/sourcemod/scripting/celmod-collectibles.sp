@@ -85,6 +85,7 @@ enum struct Item
 	float fSecondaryValue;
 	float fSecondaryCooldown;
 	char sSprite[PLATFORM_MAX_PATH];
+	char sNearModel[PLATFORM_MAX_PATH];
 	int iSpriteIndex;
 	float fSlow;
 	float fKnockback;
@@ -3112,6 +3113,25 @@ void ReadItem(KeyValues kvItems, int iKind)
 
 	g_Items[iItem].iModelIndex = PrecacheModel(g_Items[iItem].sModel, true);
 
+	// The model a see-through emblem's close-up shimmer shows (Invisible's own model draws nothing).
+	kvItems.GetString("nearmodel", g_Items[iItem].sNearModel, sizeof(Item::sNearModel), "");
+
+	if (g_Items[iItem].sNearModel[0] != '\0')
+	{
+		PrecacheModel(g_Items[iItem].sNearModel, true);
+	}
+
+	// A custom model of its own (Invisible's phys8_inv.mdl) and its materials are sent to players.
+	char sMaterials[PLATFORM_MAX_PATH];
+
+	kvItems.GetString("materials", sMaterials, sizeof(sMaterials), "");
+
+	if (sMaterials[0] != '\0')
+	{
+		AddModelToDownloads(g_Items[iItem].sModel);
+		AddFolderToDownloads(sMaterials);
+	}
+
 	g_iItemCount++;
 }
 
@@ -3537,7 +3557,12 @@ void AttachShimmer(int iEntity, int iItem, int iHolder)
 
 	char sModel[PLATFORM_MAX_PATH];
 
-	GetEntPropString(iEntity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+	if (g_Items[iItem].sNearModel[0] != '\0')
+	{
+		strcopy(sModel, sizeof(sModel), g_Items[iItem].sNearModel);
+	} else {
+		GetEntPropString(iEntity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+	}
 
 	int iShimmer = CreateEntityByName("prop_dynamic_override");
 

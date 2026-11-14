@@ -175,3 +175,4 @@
 		 - Fixed: after !playermodel, a held emblem or celwep stayed where it sat on the old model until you switched weapons.
 		 - Invisible is now truly invisible from a distance and only shimmers into view when you are right up close to it.
 		   Its emblem box stays visible so it can still be found.
+		 - Hoopies bounce players who land or stand on them (checked every frame now), and the Hoopie is a shop exclusive.

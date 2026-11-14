@@ -163,8 +163,9 @@
 		"hoopie"
 		{
 			"name"			"Hoopie"
-			"category"		"CelMod Props"
+			"category"		"Shop Exclusives"
 			"price"			"30000"
+			"description"	"Only sold here. Bounces anyone who lands on it."
 			"spawn"			"prop_physics_override|models/celmod/hoopie.mdl"
 		}
 		"piano"
