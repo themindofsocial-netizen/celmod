@@ -76,6 +76,33 @@ void Fx_Precache()
 	Fx_PrecacheSound(g_sFxGlass, sizeof(g_sFxGlass), "physics/glass/glass_sheet_break1.wav", "physics/glass/glass_impact_bullet4.wav");
 	Fx_PrecacheSound(g_sFxPulse, sizeof(g_sFxPulse), "weapons/airboat/airboat_gun_energy1.wav", "ambient/energy/zap1.wav");
 	Fx_PrecacheSound(g_sFxThunder, sizeof(g_sFxThunder), "ambient/levels/labs/electric_explosion4.wav", "ambient/levels/labs/electric_explosion1.wav");
+
+	Fx_PrecachePhysical();
+}
+
+// Writes a temp entity property only if this game has it, so a missing one can never stop an effect with an error.
+void Fx_WriteNum(const char[] sProp, int iValue)
+{
+	if (TE_IsValidProp(sProp))
+	{
+		TE_WriteNum(sProp, iValue);
+	}
+}
+
+void Fx_WriteFloat(const char[] sProp, float fValue)
+{
+	if (TE_IsValidProp(sProp))
+	{
+		TE_WriteFloat(sProp, fValue);
+	}
+}
+
+void Fx_WriteVector(const char[] sProp, const float fValue[3])
+{
+	if (TE_IsValidProp(sProp))
+	{
+		TE_WriteVector(sProp, fValue);
+	}
 }
 
 //Building blocks:
@@ -157,14 +184,14 @@ void Fx_Dot(const float fPos[3], const int iColor[4], float fSize, float fLife)
 void Fx_Light(const float fPos[3], const int iColor[4], float fRadius, float fTime, int iExponent = 5)
 {
 	TE_Start("Dynamic Light");
-	TE_WriteVector("m_vecOrigin", fPos);
-	TE_WriteNum("r", iColor[0]);
-	TE_WriteNum("g", iColor[1]);
-	TE_WriteNum("b", iColor[2]);
-	TE_WriteNum("exponent", iExponent);
-	TE_WriteFloat("m_fRadius", fRadius);
-	TE_WriteFloat("m_fTime", fTime);
-	TE_WriteFloat("m_fDecay", fRadius / fTime);
+	Fx_WriteVector("m_vecOrigin", fPos);
+	Fx_WriteNum("r", iColor[0]);
+	Fx_WriteNum("g", iColor[1]);
+	Fx_WriteNum("b", iColor[2]);
+	Fx_WriteNum("exponent", iExponent);
+	Fx_WriteFloat("m_fRadius", fRadius);
+	Fx_WriteFloat("m_fTime", fTime);
+	Fx_WriteFloat("m_fDecay", fRadius / fTime);
 	TE_SendToAll();
 }
 
@@ -293,11 +320,196 @@ void Fx_Missile(int iItem, const float fStart[3], const float fEnd[3], const int
 	}
 }
 
+//Physical effects: decals, liquids, splashes, gibs and flames, for emblems made of real stuff.
+// Decals (marks left on walls and floors), each only used when the server has it.
+int g_iDecalScorch = -1, g_iDecalSmallScorch = -1, g_iDecalCrater = -1, g_iDecalWet = -1, g_iDecalAcid = -1, g_iDecalGlass = -1, g_iDecalGlow = -1;
+// Model pieces that burst out of an impact.
+int g_iGibIce = -1, g_iGibRock = -1, g_iGibMelon = -1, g_iGibMetal = -1;
+// What the shot being drawn hit: 0 the world (decals go on it), a player or prop, or -1 nothing.
+int g_iFxShotTarget = -1;
+
+int Fx_PrecacheDecal(const char[] sName)
+{
+	char sFile[PLATFORM_MAX_PATH];
+
+	Format(sFile, sizeof(sFile), "materials/%s.vmt", sName);
+
+	return FileExists(sFile, true) ? PrecacheDecal(sName, true) : -1;
+}
+
+// The first of these models the server has, or -1.
+int Fx_PrecacheGib(const char[][] sModels, int iCount)
+{
+	for (int i = 0; i < iCount; i++)
+	{
+		if (FileExists(sModels[i], true))
+		{
+			return PrecacheModel(sModels[i], true);
+		}
+	}
+
+	return -1;
+}
+
+void Fx_PrecachePhysical()
+{
+	static const char sIce[][] = { "models/gibs/glass_shard01.mdl", "models/gibs/glass_shard02.mdl", "models/props_junk/garbage_glassbottle001a_chunk01.mdl" };
+	static const char sRock[][] = { "models/props_debris/concrete_chunk05g.mdl", "models/props_debris/concrete_chunk04a.mdl", "models/props_junk/rock001a.mdl" };
+	static const char sMelon[][] = { "models/props_junk/watermelon01_chunk01a.mdl", "models/props_junk/watermelon01_chunk02a.mdl" };
+	static const char sMetal[][] = { "models/gibs/metal_gib1.mdl", "models/gibs/metal_gib2.mdl" };
+
+	g_iDecalScorch = Fx_PrecacheDecal("decals/scorch1");
+	g_iDecalSmallScorch = Fx_PrecacheDecal("decals/smscorch1");
+	g_iDecalCrater = Fx_PrecacheDecal("decals/rollermine_crater");
+	g_iDecalWet = Fx_PrecacheDecal("decals/beersplash");
+	g_iDecalAcid = Fx_PrecacheDecal("decals/yblood1");
+	g_iDecalGlass = Fx_PrecacheDecal("decals/glass/shot1");
+	g_iDecalGlow = Fx_PrecacheDecal("decals/redglowfade");
+
+	if (g_iDecalSmallScorch == -1) g_iDecalSmallScorch = g_iDecalScorch;
+	if (g_iDecalCrater == -1) g_iDecalCrater = g_iDecalScorch;
+
+	g_iGibIce = Fx_PrecacheGib(sIce, sizeof(sIce));
+	g_iGibRock = Fx_PrecacheGib(sRock, sizeof(sRock));
+	g_iGibMelon = Fx_PrecacheGib(sMelon, sizeof(sMelon));
+	g_iGibMetal = Fx_PrecacheGib(sMetal, sizeof(sMetal));
+
+	PrecacheSound("ambient/fire/ignite.wav", true);
+}
+
+// A mark on the wall or floor the shot hit (never floating on a player).
+void Fx_Decal(const float fPos[3], int iDecal)
+{
+	if (iDecal < 0 || g_iFxShotTarget != 0)
+	{
+		return;
+	}
+
+	TE_Start("World Decal");
+	Fx_WriteVector("m_vecOrigin", fPos);
+	Fx_WriteNum("m_nIndex", iDecal);
+	TE_SendToAll();
+}
+
+// A coloured spurt of liquid (water, acid, lava) thrown in a direction.
+void Fx_Liquid(const float fPos[3], const float fDirection[3], int iR, int iG, int iB, int iAmount)
+{
+	TE_Start("Blood Stream");
+	Fx_WriteVector("m_vecOrigin", fPos);
+	Fx_WriteVector("m_vecDirection", fDirection);
+	Fx_WriteNum("r", iR);
+	Fx_WriteNum("g", iG);
+	Fx_WriteNum("b", iB);
+	Fx_WriteNum("a", 255);
+	Fx_WriteNum("m_nAmount", iAmount);
+	TE_SendToAll();
+}
+
+// The game's own water splash.
+void Fx_Splash(const float fPos[3], float fScale)
+{
+	if (GetEntityCount() > GetMaxEntities() - 150)
+	{
+		return;
+	}
+
+	int iSplash = CreateEntityByName("env_splash");
+
+	if (iSplash == -1)
+	{
+		return;
+	}
+
+	DispatchKeyValueFloat(iSplash, "scale", fScale);
+	DispatchSpawn(iSplash);
+
+	TeleportEntity(iSplash, fPos, NULL_VECTOR, NULL_VECTOR);
+
+	AcceptEntityInput(iSplash, "Splash");
+
+	KillAfter(iSplash, 1.0);
+}
+
+// Pieces (ice shards, rubble, melon) bursting out of a point. iFlags: 1 glass sounds, 2 metal, 4 flesh, 8 wood.
+void Fx_Gibs(const float fPos[3], int iModel, int iCount, float fSpeed, float fLife, int iFlags)
+{
+	float fSize[3] = { 16.0, 16.0, 16.0 }, fVelocity[3];
+
+	if (iModel < 0)
+	{
+		return;
+	}
+
+	fVelocity[2] = fSpeed;
+
+	TE_Start("Break Model");
+	Fx_WriteVector("m_vecOrigin", fPos);
+	Fx_WriteFloat("m_angRotation[0]", 0.0);
+	Fx_WriteFloat("m_angRotation[1]", GetRandomFloat(0.0, 360.0));
+	Fx_WriteFloat("m_angRotation[2]", 0.0);
+	Fx_WriteVector("m_vecSize", fSize);
+	Fx_WriteVector("m_vecVelocity", fVelocity);
+	Fx_WriteNum("m_nModelIndex", iModel);
+	Fx_WriteNum("m_nRandomization", 100);
+	Fx_WriteNum("m_nCount", iCount);
+	Fx_WriteFloat("m_fTime", fLife);
+	Fx_WriteNum("m_nFlags", iFlags);
+	TE_SendToAll();
+}
+
+// A short-lived patch of real flames on the ground (it does no damage itself).
+void Fx_FirePatch(const float fPos[3], float fSize, float fSeconds)
+{
+	if (GetEntityCount() > GetMaxEntities() - 150)
+	{
+		return;
+	}
+
+	int iFire = CreateEntityByName("env_fire");
+
+	if (iFire == -1)
+	{
+		return;
+	}
+
+	DispatchKeyValueFloat(iFire, "firesize", fSize);
+	DispatchKeyValueFloat(iFire, "health", fSeconds);
+	DispatchKeyValue(iFire, "fireattack", "1");
+	DispatchKeyValue(iFire, "damagescale", "0");
+	DispatchKeyValue(iFire, "spawnflags", "156");
+
+	DispatchSpawn(iFire);
+
+	TeleportEntity(iFire, fPos, NULL_VECTOR, NULL_VECTOR);
+
+	AcceptEntityInput(iFire, "StartFire");
+
+	KillAfter(iFire, fSeconds + 2.0);
+}
+
+// A puff of smoke or steam.
+void Fx_Puff(const float fPos[3], float fScale)
+{
+	TE_SetupSmoke(fPos, g_iFxSteam, fScale, 8);
+	TE_SendToAll();
+}
+
+// A point near the impact, pushed back off the wall a little so effects are not inside it.
+void Fx_OffSurface(const float fEnd[3], const float fDirection[3], float fBack, float fOut[3])
+{
+	for (int i = 0; i < 3; i++)
+	{
+		fOut[i] = fEnd[i] - fDirection[i] * fBack;
+	}
+}
+
 //Shot styles, one per emblem:
 // True when the style was one of these (the older, simpler styles are still drawn by DrawShotEffect).
+// Emblems made of something real (water, fire, ice, acid, earth) use the game's own effects and leave marks where
+// they hit; emblems made of light or energy (lasers, gems, plasma, lightning) use beams.
 bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], float fEnd[3], float fDirection[3], const int iColor[4])
 {
-	float fUp[3] = { 0.0, 0.0, 1.0 }, fPoint[3], fHigh[3], fForward[3], fSide[3], fAxisUp[3];
+	float fUp[3] = { 0.0, 0.0, 1.0 }, fPoint[3], fHigh[3], fForward[3], fSide[3], fAxisUp[3], fOut[3], fBack[3];
 	int iCore[4], iDeep[4], iTint[4];
 
 	Fx_Lighter(iColor, 0.6, iCore);
@@ -309,10 +521,240 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 	fNormal[1] = -fDirection[1];
 	fNormal[2] = -fDirection[2];
 
-	if (StrEqual(sFx, "snowstorm"))
+	// Just in front of the surface that was hit, for effects that must not start inside the wall.
+	Fx_OffSurface(fEnd, fDirection, 6.0, fBack);
+
+	// Out of the surface and a little up: where splashes and debris fly.
+	for (int k = 0; k < 3; k++)
 	{
-		// Blizzard: a gust of snow, a pale crystal streak, and a double ring of frost where it lands.
-		Fx_Missile(iItem, fStart, fEnd, iCore, 1200.0, 0.35, false, 6.0, 0.4);
+		fOut[k] = fNormal[k] + (k == 2 ? 0.6 : 0.0);
+	}
+
+	NormalizeVector(fOut, fOut);
+
+	// ---- Water ----
+	if (StrEqual(sFx, "waterbolt"))
+	{
+		// Water: a ball of water that arcs to its target and splashes, leaving it wet.
+		Fx_Missile(iItem, fStart, fEnd, iColor, 900.0, 0.4, true, 2.0, 0.25);
+
+		Fx_Splash(fBack, 6.0);
+		Fx_Liquid(fBack, fOut, iColor[0], iColor[1], iColor[2], 40);
+		Fx_Decal(fEnd, g_iDecalWet);
+
+		PlayShotSound(iClient, SOUND_WATER);
+	} else if (StrEqual(sFx, "wave"))
+	{
+		// Tsunami: a rushing wall of water, spray all along it, crashing down with a big splash.
+		for (int i = 1; i <= 3; i++)
+		{
+			Fx_Lerp(fStart, fEnd, i / 3.5, fPoint);
+			fPoint[2] -= 10.0;
+
+			Fx_Liquid(fPoint, fDirection, iColor[0], iColor[1], iColor[2], 60);
+		}
+
+		Fx_Splash(fBack, 14.0);
+		Fx_Liquid(fBack, fUp, iColor[0], iColor[1], iColor[2], 120);
+
+		fPoint = fEnd;
+		fPoint[2] += 2.0;
+
+		Fx_Ring(fPoint, 10.0, 140.0, g_iBmPhys, 6.0, 0.7, 0.0, iCore);
+
+		Fx_Decal(fEnd, g_iDecalWet);
+
+		PlayShotSound(iClient, g_sFxSplash);
+	} else if (StrEqual(sFx, "maelstrom"))
+	{
+		// Maelstrom: a torrent that turns into a whirlpool where it lands, dragging everything around.
+		for (int i = 1; i <= 2; i++)
+		{
+			Fx_Lerp(fStart, fEnd, i / 2.5, fPoint);
+
+			Fx_Liquid(fPoint, fDirection, iColor[0], iColor[1], iColor[2], 60);
+		}
+
+		float fTurn = GetGameTime() * 4.0;
+
+		for (int i = 0; i < 4; i++)
+		{
+			float fSwirl[3], fAng = fTurn + 1.5708 * i;
+
+			fPoint = fBack;
+			fPoint[0] += Cosine(fAng) * 40.0;
+			fPoint[1] += Sine(fAng) * 40.0;
+
+			fSwirl[0] = -Sine(fAng);
+			fSwirl[1] = Cosine(fAng);
+			fSwirl[2] = 0.3;
+
+			Fx_Liquid(fPoint, fSwirl, iColor[0], iColor[1], iColor[2], 50);
+		}
+
+		for (int i = 0; i < 3; i++)
+		{
+			fPoint = fEnd;
+			fPoint[2] += 4.0 + i * 16.0;
+
+			Fx_Ring(fPoint, 120.0 - i * 30.0, 10.0, g_iBmPhys, 5.0, 0.6 + i * 0.15, 0.0, i == 1 ? iCore : iColor);
+		}
+
+		Fx_Splash(fBack, 10.0);
+		Fx_Decal(fEnd, g_iDecalWet);
+
+		PlayShotSound(iClient, g_sFxSplash);
+	} else if (StrEqual(sFx, "geyser"))
+	{
+		// Geyser: the ground bursts open and a column of water shoots straight up.
+		Fx_Missile(iItem, fStart, fEnd, iColor, 1200.0, 0.3, false, 2.0, 0.2);
+
+		for (int i = 0; i < 3; i++)
+		{
+			float fJet[3];
+
+			fJet[0] = GetRandomFloat(-0.15, 0.15);
+			fJet[1] = GetRandomFloat(-0.15, 0.15);
+			fJet[2] = 1.0;
+
+			Fx_Liquid(fBack, fJet, iColor[0], iColor[1], iColor[2], 160);
+		}
+
+		Fx_Splash(fBack, 10.0);
+		Fx_Gibs(fBack, g_iGibRock, 4, 300.0, 2.0, 0);
+		Fx_Decal(fEnd, g_iDecalWet);
+
+		PlayShotSound(iClient, g_sFxSplash);
+
+	// ---- Acid and poison ----
+	} else if (StrEqual(sFx, "acidglob"))
+	{
+		// Acid: a lobbed glob that splatters, eats into the surface and hisses.
+		Fx_Missile(iItem, fStart, fEnd, iColor, 800.0, 0.4, true, 2.0, 0.3);
+
+		Fx_Liquid(fBack, fOut, iColor[0], iColor[1], iColor[2], 50);
+		Fx_Puff(fBack, 14.0);
+		Fx_Decal(fEnd, g_iDecalAcid);
+
+		PlayShotSound(iClient, SOUND_STEAM);
+	} else if (StrEqual(sFx, "venomspiral"))
+	{
+		// Venom: a spat stream of poison that drips from where it lands.
+		for (int i = 1; i <= 3; i++)
+		{
+			Fx_Lerp(fStart, fEnd, i / 3.5, fPoint);
+
+			Fx_Liquid(fPoint, fDirection, iColor[0], iColor[1], iColor[2], 25);
+		}
+
+		Fx_Liquid(fBack, fOut, iDeep[0], iDeep[1], iDeep[2], 60);
+		Fx_Glow(fBack, g_iFxGreenGlow, 0.4, 0.4);
+		Fx_Decal(fEnd, g_iDecalAcid);
+
+		PlayShotSound(iClient, SOUND_STEAM);
+
+	// ---- Fire ----
+	} else if (StrEqual(sFx, "lava"))
+	{
+		// Magma: a lobbed blob of molten rock that splatters, scorches the ground and leaves it burning.
+		Fx_Missile(iItem, fStart, fEnd, iColor, 850.0, 0.7, true, 4.0, 0.5);
+
+		Fx_Liquid(fBack, fOut, 255, 110, 20, 40);
+		Fx_FirePatch(fEnd, 32.0, 3.0);
+		Fx_Decal(fEnd, g_iDecalScorch);
+		Fx_Light(fBack, iColor, 200.0, 0.8, 6);
+
+		PlayShotSound(iClient, SOUND_FIREBALL);
+	} else if (StrEqual(sFx, "embers"))
+	{
+		// Ember: a scatter of small burning embers that leave little burn marks.
+		for (int i = 0; i < 3; i++)
+		{
+			float fTo[3];
+
+			fTo = fEnd;
+			fTo[0] += GetRandomFloat(-20.0, 20.0);
+			fTo[1] += GetRandomFloat(-20.0, 20.0);
+			fTo[2] += GetRandomFloat(-10.0, 10.0);
+
+			Fx_Missile(iItem, fStart, fTo, iColor, GetRandomFloat(1000.0, 1300.0), 0.25, false, 0.0, 0.3);
+		}
+
+		Fx_Sparks(fBack, fOut, 2, 3);
+		Fx_Decal(fEnd, g_iDecalSmallScorch);
+
+		PlayShotSound(iClient, SOUND_FIRE);
+	} else if (StrEqual(sFx, "comet"))
+	{
+		// Comet: a fireball with a long burning tail that blows a scorched hole where it lands.
+		Fx_Missile(iItem, fStart, fEnd, iColor, 1300.0, 0.9, false, 8.0, 0.8);
+
+		TE_SetupExplosion(fBack, g_iFxExplosion, 2.0, 15, 0, 0, 0);
+		TE_SendToAll();
+
+		Fx_FirePatch(fEnd, 40.0, 3.0);
+		Fx_Decal(fEnd, g_iDecalScorch);
+		Fx_Light(fBack, iColor, 280.0, 0.7, 6);
+
+		PlayShotSound(iClient, SOUND_FIREBALL);
+	} else if (StrEqual(sFx, "eruption"))
+	{
+		// Volcano: the ground erupts: an explosion, a crater, and lava bombs raining down all around it.
+		TE_SetupExplosion(fBack, g_iFxExplosion, 3.0, 15, 0, 0, 0);
+		TE_SendToAll();
+
+		Fx_Liquid(fBack, fUp, 255, 90, 10, 140);
+		Fx_Gibs(fBack, g_iGibRock, 6, 450.0, 3.0, 0);
+		Fx_Decal(fEnd, g_iDecalCrater);
+		Fx_FirePatch(fEnd, 48.0, 4.0);
+
+		for (int i = 0; i < 4; i++)
+		{
+			float fBomb[3], fAng = GetRandomFloat(0.0, 6.2832), fReach = GetRandomFloat(80.0, 200.0);
+
+			fBomb = fEnd;
+			fBomb[0] += Cosine(fAng) * fReach;
+			fBomb[1] += Sine(fAng) * fReach;
+
+			// Each bomb lands on whatever is below it.
+			float fDown[3];
+
+			fDown = fBomb;
+			fDown[2] -= 600.0;
+			fBomb[2] += 32.0;
+
+			Handle hTrace = TR_TraceRayFilterEx(fBomb, fDown, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+			if (TR_DidHit(hTrace))
+			{
+				TR_GetEndPosition(fBomb, hTrace);
+			}
+
+			CloseHandle(hTrace);
+
+			Fx_Missile(iItem, fBack, fBomb, iColor, 600.0, 0.5, true, 3.0, 0.4);
+
+			if (i < 2)
+			{
+				Fx_FirePatch(fBomb, 24.0, 3.0);
+			}
+
+			int iSaved = g_iFxShotTarget;
+
+			g_iFxShotTarget = 0;
+			Fx_Decal(fBomb, g_iDecalSmallScorch);
+			g_iFxShotTarget = iSaved;
+		}
+
+		Fx_Light(fBack, iColor, 400.0, 1.0, 7);
+
+		PlayShotSound(iClient, g_sFxBoom);
+
+	// ---- Ice ----
+	} else if (StrEqual(sFx, "snowstorm"))
+	{
+		// Blizzard: a gust of snow and hail that shatters into ice where it hits.
+		Fx_Missile(iItem, fStart, fEnd, iCore, 1200.0, 0.35, false, 2.0, 0.3);
 
 		for (int i = 0; i < 4; i++)
 		{
@@ -322,33 +764,26 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 			fPoint[1] += GetRandomFloat(-24.0, 24.0);
 			fPoint[2] += GetRandomFloat(-16.0, 16.0);
 
-			Fx_Glow(fPoint, g_iFxGlow, GetRandomFloat(0.15, 0.3), GetRandomFloat(0.4, 0.9), 200);
+			Fx_Glow(fPoint, g_iFxGlow, GetRandomFloat(0.1, 0.2), GetRandomFloat(0.4, 0.9), 200);
 		}
 
-		Fx_Beam(fStart, fEnd, g_iBmCrystal, 3.0, 1.0, 0.25, 2.0, iColor);
-		Fx_Ring(fEnd, 4.0, 70.0, g_iBmCrystal, 6.0, 0.5, 0.0, iCore);
-		Fx_Ring(fEnd, 70.0, 10.0, g_iBmLaser, 3.0, 0.6, 0.0, iColor);
-		Fx_Light(fEnd, iColor, 140.0, 0.4);
+		Fx_Gibs(fBack, g_iGibIce, 5, 200.0, 1.5, 1);
+		Fx_Puff(fBack, 10.0);
 
 		PlayShotSound(iClient, SOUND_ICE);
 	} else if (StrEqual(sFx, "frostline"))
 	{
-		// Frost: a thin line of ice crystals that glitter along the whole path.
-		Fx_Beam(fStart, fEnd, g_iBmCrystal, 2.0, 2.0, 0.35, 0.0, iCore);
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 6.0, 1.0, 0.2, 0.0, iColor);
+		// Frost: a thin freezing ray that frosts over what it touches.
+		Fx_Beam(fStart, fEnd, g_iBmCrystal, 2.0, 2.0, 0.3, 0.0, iCore);
 
-		for (int i = 1; i <= 5; i++)
-		{
-			Fx_Lerp(fStart, fEnd, i / 5.5, fPoint);
-			Fx_Glow(fPoint, g_iFxBlueGlow, 0.12, 0.6, 230);
-		}
-
-		Fx_Ring(fEnd, 2.0, 36.0, g_iBmCrystal, 3.0, 0.4, 0.0, iCore);
+		Fx_Gibs(fBack, g_iGibIce, 2, 120.0, 1.0, 1);
+		Fx_Glow(fBack, g_iFxBlueGlow, 0.25, 0.5, 220);
+		Fx_Decal(fEnd, g_iDecalGlass);
 
 		PlayShotSound(iClient, SOUND_ICE);
 	} else if (StrEqual(sFx, "shards"))
 	{
-		// Glacier: three ice shards that meet at the target, then spikes burst up out of it.
+		// Glacier: three spears of ice that meet at the target and burst into shards.
 		Fx_Axes(fStart, fEnd, fForward, fSide, fAxisUp);
 
 		for (int i = 0; i < 3; i++)
@@ -360,100 +795,93 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 				fPoint[k] = fStart[k] + fSide[k] * Cosine(fTurn) * 10.0 + fAxisUp[k] * Sine(fTurn) * 10.0;
 			}
 
-			Fx_Beam(fPoint, fEnd, g_iBmCrystal, 7.0, 0.5, 0.35, 0.0, i == 0 ? iCore : iColor);
+			Fx_Beam(fPoint, fEnd, g_iBmCrystal, 6.0, 0.5, 0.35, 0.0, i == 0 ? iCore : iColor);
 		}
 
-		for (int i = 0; i < 4; i++)
-		{
-			fHigh = fEnd;
-			fHigh[0] += GetRandomFloat(-30.0, 30.0);
-			fHigh[1] += GetRandomFloat(-30.0, 30.0);
-			fHigh[2] += GetRandomFloat(30.0, 70.0);
-
-			Fx_Beam(fEnd, fHigh, g_iBmCrystal, 8.0, 0.5, 0.7, 0.0, iCore);
-		}
-
-		Fx_Ring(fEnd, 8.0, 110.0, g_iBmLaser, 10.0, 0.6, 0.0, iColor);
-		Fx_Light(fEnd, iColor, 200.0, 0.6);
+		Fx_Gibs(fBack, g_iGibIce, 8, 280.0, 2.0, 1);
+		Fx_Puff(fBack, 16.0);
+		Fx_Decal(fEnd, g_iDecalGlass);
 
 		PlayShotSound(iClient, g_sFxGlass);
-	} else if (StrEqual(sFx, "waterbolt"))
+	} else if (StrEqual(sFx, "permafrost"))
 	{
-		// Water: an arcing bolt of water that splashes and sends ripples out.
-		Fx_Missile(iItem, fStart, fEnd, iColor, 900.0, 0.45, true, 5.0, 0.35);
+		// Permafrost: a bolt of deep cold that freezes whatever it hits solid, in a cloud of frozen mist.
+		Fx_Beam(fStart, fEnd, g_iBmCrystal, 5.0, 3.0, 0.35, 0.0, iCore);
+		Fx_Missile(iItem, fStart, fEnd, iCore, 1500.0, 0.5, false, 0.0, 0.0);
 
-		SpriteSpray(fEnd, fUp, g_Items[iItem].iSpriteIndex, 160, 0.9, 5);
+		Fx_Gibs(fBack, g_iGibIce, 12, 350.0, 2.5, 1);
+		Fx_Puff(fBack, 24.0);
+		Fx_Puff(fEnd, 18.0);
 
 		fPoint = fEnd;
 		fPoint[2] += 2.0;
 
-		Fx_Ring(fPoint, 6.0, 60.0, g_iBmPhys, 4.0, 0.6, 0.0, iCore);
-		Fx_Ring(fPoint, 2.0, 30.0, g_iBmPhys, 3.0, 0.8, 0.0, iColor);
+		Fx_Ring(fPoint, 90.0, 6.0, g_iBmCrystal, 8.0, 0.6, 0.0, iCore);
+		Fx_Decal(fEnd, g_iDecalGlass);
+		Fx_Light(fBack, iColor, 180.0, 0.6);
 
-		PlayShotSound(iClient, SOUND_WATER);
-	} else if (StrEqual(sFx, "wave"))
+		PlayShotSound(iClient, g_sFxGlass);
+
+	// ---- Earth and air ----
+	} else if (StrEqual(sFx, "sandstorm"))
 	{
-		// Tsunami: a broad rolling wave that crashes into its target.
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 18.0, 46.0, 0.35, 6.0, iColor, 0, 30);
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 6.0, 16.0, 0.3, 3.0, iCore, 0, 30);
-
-		SpriteSpray(fEnd, fUp, g_Items[iItem].iSpriteIndex, 260, 1.0, 8);
-
-		for (int i = 0; i < 3; i++)
+		// Sandstorm: a scouring blast of sand and grit.
+		for (int i = 1; i <= 3; i++)
 		{
-			fPoint = fEnd;
-			fPoint[2] += 2.0 + i * 6.0;
+			Fx_Lerp(fStart, fEnd, i / 3.0, fPoint);
 
-			Fx_Ring(fPoint, 10.0 + i * 20.0, 120.0 + i * 40.0, g_iBmPhys, 6.0, 0.5 + i * 0.2, 0.0, i == 1 ? iCore : iColor);
+			TE_SetupDust(fPoint, fNormal, 18.0 + i * 6.0, 0.8);
+			TE_SendToAll();
 		}
 
-		PlayShotSound(iClient, g_sFxSplash);
-	} else if (StrEqual(sFx, "acidglob"))
-	{
-		// Acid: a lobbed glob that hisses and bubbles where it lands.
-		Fx_Missile(iItem, fStart, fEnd, iColor, 800.0, 0.5, true, 4.0, 0.5);
+		Fx_Gibs(fBack, g_iGibRock, 3, 150.0, 1.5, 0);
 
+		PlayShotSound(iClient, SOUND_STEAM);
+	} else if (StrEqual(sFx, "tornado"))
+	{
+		// Tornado: a twister spinning up out of the target, throwing dust and debris.
 		for (int i = 0; i < 4; i++)
 		{
 			fPoint = fEnd;
-			fPoint[0] += GetRandomFloat(-20.0, 20.0);
-			fPoint[1] += GetRandomFloat(-20.0, 20.0);
-			fPoint[2] += 4.0 + i * 8.0;
+			fPoint[2] += i * 40.0;
 
-			Fx_Dot(fPoint, i % 2 ? iCore : iColor, GetRandomFloat(4.0, 9.0), GetRandomFloat(0.4, 1.0));
+			Fx_Ring(fPoint, 8.0 + i * 14.0, 30.0 + i * 30.0, g_iBmPhys, 6.0, 0.6, 2.0, iDeep);
 		}
 
-		Fx_Ring(fEnd, 4.0, 48.0, g_iBmLaser, 5.0, 0.7, 2.0, iColor);
-		Fx_Light(fEnd, iColor, 120.0, 0.7);
-
-		PlayShotSound(iClient, SOUND_STEAM);
-	} else if (StrEqual(sFx, "venomspiral"))
-	{
-		// Venom: a dark green serpent coiling around a pale fang of light.
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 2.0, 2.0, 0.2, 0.0, iCore);
-		Fx_Helix(fStart, fEnd, 9.0, 2.5, 8, GetGameTime() * 4.0, g_iBmSpine, 3.0, 0.35, iDeep);
-		Fx_Glow(fEnd, g_iFxGreenGlow, 0.5, 0.4);
-		Fx_Ring(fEnd, 30.0, 4.0, g_iBmLaser, 4.0, 0.4, 0.0, iColor);
-
-		PlayShotSound(iClient, SOUND_STEAM);
-	} else if (StrEqual(sFx, "arc"))
-	{
-		// Energy: a glowing ember with arcs of lightning crackling along its path.
-		Fx_Missile(iItem, fStart, fEnd, iColor, 1600.0, 0.5, false, 3.0, 0.2);
-		Fx_Beam(fStart, fEnd, g_iBmLightning, 5.0, 5.0, 0.2, 4.0, iColor, 0, 30);
-		Fx_Beam(fStart, fEnd, g_iBmLightning, 2.0, 2.0, 0.15, 7.0, iCore, 0, 30);
-
-		Fx_Sparks(fEnd, fNormal, 3, 2);
-
-		TE_SetupEnergySplash(fEnd, fNormal, false);
+		TE_SetupDust(fEnd, fUp, 40.0, 1.2);
 		TE_SendToAll();
 
-		Fx_Light(fEnd, iColor, 150.0, 0.25);
+		Fx_Gibs(fBack, g_iGibRock, 4, 350.0, 2.0, 0);
+
+		PlayShotSound(iClient, SOUND_STEAM);
+	} else if (StrEqual(sFx, "mist"))
+	{
+		// Grey: a cool drifting mist.
+		for (int i = 1; i <= 3; i++)
+		{
+			Fx_Lerp(fStart, fEnd, i / 3.5, fPoint);
+
+			Fx_Puff(fPoint, 10.0 + i * 4.0);
+		}
+
+		PlayShotSound(iClient, SOUND_STEAM);
+
+	// ---- Electricity ----
+	} else if (StrEqual(sFx, "arc"))
+	{
+		// Energy: a glowing ember with lightning crackling along its path.
+		Fx_Missile(iItem, fStart, fEnd, iColor, 1600.0, 0.5, false, 2.0, 0.2);
+		Fx_Beam(fStart, fEnd, g_iBmLightning, 4.0, 4.0, 0.2, 4.0, iColor, 0, 30);
+
+		TE_SetupEnergySplash(fBack, fNormal, false);
+		TE_SendToAll();
+
+		Fx_Decal(fEnd, g_iDecalSmallScorch);
 
 		PlayShotSound(iClient, g_sFxZap);
 	} else if (StrEqual(sFx, "pulse"))
 	{
-		// Pulse: dashes of light that get brighter as they reach the target, then shock rings.
+		// Pulse: dashes of light that get brighter as they reach the target.
 		for (int i = 0; i < 4; i++)
 		{
 			float fT = i / 4.0;
@@ -464,132 +892,84 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 			Fx_Beam(fPoint, fHigh, g_iBmBlue, 3.0 + i * 2.0, 3.0 + i * 2.0, 0.2, 0.0, i == 3 ? iCore : iColor);
 		}
 
-		Fx_Ring(fEnd, 2.0, 40.0, g_iBmLaser, 6.0, 0.25, 0.0, iCore);
-		Fx_Ring(fEnd, 20.0, 80.0, g_iBmBlue, 3.0, 0.4, 0.0, iColor);
-
-		TE_SetupEnergySplash(fEnd, fNormal, true);
+		TE_SetupEnergySplash(fBack, fNormal, true);
 		TE_SendToAll();
 
+		Fx_Decal(fEnd, g_iDecalSmallScorch);
+
 		PlayShotSound(iClient, g_sFxPulse);
-	} else if (StrEqual(sFx, "laser"))
-	{
-		// Laser: a razor-thin bright core in a soft glow, burning a hot dot where it hits.
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 1.5, 1.5, 0.12, 0.0, iCore, 0, 30);
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 7.0, 7.0, 0.12, 0.0, iDeep, 0, 30);
-
-		Fx_Glow(fEnd, g_iFxRedGlow, 0.25, 0.15, 255);
-		Fx_Sparks(fEnd, fNormal, 1, 1);
-
-		PlayShotSound(iClient, SOUND_SHOCK);
 	} else if (StrEqual(sFx, "static"))
 	{
-		// Static: a jagged, flickering bolt with sparks spitting off it.
+		// Static: a jagged, flickering bolt spitting sparks.
 		Fx_Bolt(fStart, fEnd, 6, 14.0, g_iBmLightning, 3.0, 0.15, iCore);
-		Fx_Beam(fStart, fEnd, g_iBmShock, 8.0, 8.0, 0.15, 3.0, iColor, 0, 30);
 
-		Fx_Lerp(fStart, fEnd, GetRandomFloat(0.3, 0.7), fPoint);
-
-		Fx_Sparks(fPoint, fUp, 2, 2);
-		Fx_Sparks(fEnd, fNormal, 3, 3);
+		Fx_Sparks(fBack, fOut, 3, 3);
+		Fx_Decal(fEnd, g_iDecalSmallScorch);
 
 		PlayShotSound(iClient, g_sFxZap);
-	} else if (StrEqual(sFx, "gemtwin"))
+	} else if (StrEqual(sFx, "chainspark"))
 	{
-		// Ruby: two red strands twisting round each other, glinting where they meet the target.
-		float fPhase = GetGameTime() * 6.0;
+		// Spark: a chain of sparks jumping from point to point.
+		float fLast[3];
 
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 1.5, 1.5, 0.2, 0.0, iCore);
-		Fx_Helix(fStart, fEnd, 6.0, 2.0, 5, fPhase, g_iBmLaser, 2.5, 0.25, iColor);
-		Fx_Helix(fStart, fEnd, 6.0, 2.0, 5, fPhase + 3.1416, g_iBmLaser, 2.5, 0.25, iDeep);
+		fLast = fStart;
 
-		Fx_Glow(fEnd, g_iFxRedGlow, 0.35, 0.3, 255);
-		Fx_Glow(fEnd, g_iFxGlow, 0.15, 0.5, 255);
-
-		PlayShotSound(iClient, SOUND_ICE);
-	} else if (StrEqual(sFx, "gemprism"))
-	{
-		// Emerald: a square-cut prism of four green beams around a white core.
-		Fx_Axes(fStart, fEnd, fForward, fSide, fAxisUp);
-
-		for (int i = 0; i < 4; i++)
+		for (int i = 1; i <= 4; i++)
 		{
-			float fTurn = 1.5708 * i + 0.7854;
-			float fOffset[3];
+			Fx_Lerp(fStart, fEnd, i / 4.0, fPoint);
 
-			for (int k = 0; k < 3; k++)
+			if (i < 4)
 			{
-				fOffset[k] = fSide[k] * Cosine(fTurn) * 4.0 + fAxisUp[k] * Sine(fTurn) * 4.0;
-				fPoint[k] = fStart[k] + fOffset[k];
-				fHigh[k] = fEnd[k] + fOffset[k];
+				fPoint[0] += GetRandomFloat(-16.0, 16.0);
+				fPoint[1] += GetRandomFloat(-16.0, 16.0);
+				fPoint[2] += GetRandomFloat(-10.0, 10.0);
 			}
 
-			Fx_Beam(fPoint, fHigh, g_iBmCrystal, 2.0, 2.0, 0.2, 0.0, iColor);
+			Fx_Beam(fLast, fPoint, g_iBmShock, 5.0, 3.0, 0.2, 2.0, iColor, 0, 30);
+
+			fLast = fPoint;
 		}
 
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 1.5, 1.5, 0.2, 0.0, iCore);
-		Fx_Ring(fEnd, 2.0, 30.0, g_iBmCrystal, 4.0, 0.3, 0.0, iCore);
+		TE_SetupMetalSparks(fBack, fNormal);
+		TE_SendToAll();
 
-		PlayShotSound(iClient, SOUND_ICE);
-	} else if (StrEqual(sFx, "gemstar"))
+		Fx_Decal(fEnd, g_iDecalSmallScorch);
+
+		PlayShotSound(iClient, g_sFxZap);
+	} else if (StrEqual(sFx, "thunder") || StrEqual(sFx, "tempest"))
 	{
-		// Sapphire: a deep blue beam that ends in a six pointed star of light.
-		Fx_Beam(fStart, fEnd, g_iBmBlue, 4.0, 2.0, 0.2, 0.0, iColor);
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 1.0, 1.0, 0.2, 0.0, iCore);
+		// Thunder: a bolt of lightning out of the sky onto the target, scorching the ground.
+		// Tempest: a bigger bolt, and the storm stays overhead (its lightning jumps to others; see the shock power).
+		bool bTempest = StrEqual(sFx, "tempest");
 
-		Fx_Axes(fStart, fEnd, fForward, fSide, fAxisUp);
+		fHigh = fEnd;
+		fHigh[2] += 700.0;
 
-		for (int i = 0; i < 6; i++)
+		Handle hTrace = TR_TraceRayFilterEx(fEnd, fHigh, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+		if (TR_DidHit(hTrace))
 		{
-			float fTurn = 6.2832 * i / 6.0 + GetGameTime();
-
-			for (int k = 0; k < 3; k++)
-			{
-				fPoint[k] = fEnd[k] - fForward[k] * 4.0 + fSide[k] * Cosine(fTurn) * 22.0 + fAxisUp[k] * Sine(fTurn) * 22.0;
-			}
-
-			Fx_Beam(fEnd, fPoint, g_iBmLaser, 3.0, 0.5, 0.3, 0.0, iCore);
+			TR_GetEndPosition(fHigh, hTrace);
 		}
 
-		Fx_Glow(fEnd, g_iFxBlueGlow, 0.4, 0.3, 255);
+		CloseHandle(hTrace);
 
-		PlayShotSound(iClient, SOUND_ICE);
-	} else if (StrEqual(sFx, "gemorbit"))
-	{
-		// Amethyst: a violet beam with crystals spiralling down its length.
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 3.0, 3.0, 0.2, 0.0, iColor);
+		Fx_Bolt(fHigh, fEnd, 6, 30.0, g_iBmLightning, bTempest ? 14.0 : 10.0, 0.25, iCore);
+		Fx_Bolt(fHigh, fEnd, 4, 40.0, g_iBmLightning, 4.0, 0.2, iColor);
 
-		Fx_Axes(fStart, fEnd, fForward, fSide, fAxisUp);
-
-		for (int i = 1; i <= 6; i++)
+		if (bTempest)
 		{
-			float fT = i / 6.5;
-			float fTurn = fT * 12.0 + GetGameTime() * 5.0;
+			fPoint = fHigh;
+			fPoint[2] -= 20.0;
 
-			Fx_Lerp(fStart, fEnd, fT, fHigh);
-
-			for (int k = 0; k < 3; k++)
-			{
-				fPoint[k] = fHigh[k] + fSide[k] * Cosine(fTurn) * 9.0 + fAxisUp[k] * Sine(fTurn) * 9.0;
-			}
-
-			Fx_Dot(fPoint, i % 2 ? iCore : iColor, 5.0, 0.35);
+			Fx_Puff(fPoint, 60.0);
 		}
 
-		Fx_Light(fEnd, iColor, 110.0, 0.3);
+		Fx_Sparks(fBack, fUp, 6, 4);
+		Fx_Decal(fEnd, g_iDecalScorch);
+		Fx_Light(fEnd, iCore, bTempest ? 500.0 : 400.0, 0.25, 8);
 
-		PlayShotSound(iClient, SOUND_ICE);
-	} else if (StrEqual(sFx, "plasmaflow"))
-	{
-		// Plasma: a thick, writhing stream with a white-hot core and a blob of plasma riding it.
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 12.0, 14.0, 0.2, 5.0, iColor, 0, 40);
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 3.0, 3.0, 0.2, 0.0, iCore);
-
-		Fx_Missile(iItem, fStart, fEnd, iCore, 1800.0, 0.6, false, 0.0, 0.0);
-
-		Fx_Glow(fEnd, g_iFxPurpleGlow, 0.6, 0.3);
-		Fx_Light(fEnd, iColor, 160.0, 0.3);
-
-		PlayShotSound(iClient, SOUND_SHOCK);
+		PlayShotSound(iClient, g_sFxThunder);
 	} else if (StrEqual(sFx, "ion"))
 	{
 		// Ion: a dead straight cyan beam with rungs of charge crackling across it.
@@ -613,231 +993,126 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 			Fx_Beam(fA, fB, g_iBmLightning, 2.0, 2.0, 0.2, 3.0, iCore, 0, 30);
 		}
 
-		Fx_Light(fEnd, iColor, 140.0, 0.3);
+		Fx_Decal(fEnd, g_iDecalSmallScorch);
 
 		PlayShotSound(iClient, g_sFxZap);
+
+	// ---- Light ----
+	} else if (StrEqual(sFx, "laser"))
+	{
+		// Laser: a razor-thin bright beam that leaves a glowing burn mark.
+		Fx_Beam(fStart, fEnd, g_iBmLaser, 1.5, 1.5, 0.12, 0.0, iCore, 0, 30);
+		Fx_Beam(fStart, fEnd, g_iBmLaser, 5.0, 5.0, 0.12, 0.0, iDeep, 0, 30);
+
+		Fx_Sparks(fBack, fOut, 1, 1);
+		Fx_Decal(fEnd, g_iDecalGlow);
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else if (StrEqual(sFx, "gemtwin") || StrEqual(sFx, "gemprism") || StrEqual(sFx, "gemstar") || StrEqual(sFx, "gemorbit"))
+	{
+		// The gem lasers: a beam cut through the gem, each with its own facets.
+		Fx_Axes(fStart, fEnd, fForward, fSide, fAxisUp);
+
+		Fx_Beam(fStart, fEnd, g_iBmLaser, 1.5, 1.5, 0.2, 0.0, iCore);
+
+		if (StrEqual(sFx, "gemtwin"))
+		{
+			// Ruby: two red strands twisting round each other.
+			float fPhase = GetGameTime() * 6.0;
+
+			Fx_Helix(fStart, fEnd, 6.0, 2.0, 5, fPhase, g_iBmLaser, 2.5, 0.25, iColor);
+			Fx_Helix(fStart, fEnd, 6.0, 2.0, 5, fPhase + 3.1416, g_iBmLaser, 2.5, 0.25, iDeep);
+		} else if (StrEqual(sFx, "gemprism"))
+		{
+			// Emerald: a square-cut prism of four beams.
+			for (int i = 0; i < 4; i++)
+			{
+				float fTurn = 1.5708 * i + 0.7854, fA[3], fB[3];
+
+				for (int k = 0; k < 3; k++)
+				{
+					float fOffset = fSide[k] * Cosine(fTurn) * 4.0 + fAxisUp[k] * Sine(fTurn) * 4.0;
+
+					fA[k] = fStart[k] + fOffset;
+					fB[k] = fEnd[k] + fOffset;
+				}
+
+				Fx_Beam(fA, fB, g_iBmCrystal, 2.0, 2.0, 0.2, 0.0, iColor);
+			}
+		} else if (StrEqual(sFx, "gemstar"))
+		{
+			// Sapphire: ends in a six pointed star.
+			Fx_Beam(fStart, fEnd, g_iBmBlue, 4.0, 2.0, 0.2, 0.0, iColor);
+
+			for (int i = 0; i < 6; i++)
+			{
+				float fTurn = 6.2832 * i / 6.0 + GetGameTime();
+
+				for (int k = 0; k < 3; k++)
+				{
+					fPoint[k] = fBack[k] + fSide[k] * Cosine(fTurn) * 20.0 + fAxisUp[k] * Sine(fTurn) * 20.0;
+				}
+
+				Fx_Beam(fBack, fPoint, g_iBmLaser, 3.0, 0.5, 0.3, 0.0, iCore);
+			}
+		} else {
+			// Amethyst: crystals spiralling down the beam.
+			for (int i = 1; i <= 5; i++)
+			{
+				float fT = i / 5.5, fTurn = fT * 12.0 + GetGameTime() * 5.0;
+
+				Fx_Lerp(fStart, fEnd, fT, fHigh);
+
+				for (int k = 0; k < 3; k++)
+				{
+					fPoint[k] = fHigh[k] + fSide[k] * Cosine(fTurn) * 9.0 + fAxisUp[k] * Sine(fTurn) * 9.0;
+				}
+
+				Fx_Dot(fPoint, i % 2 ? iCore : iColor, 4.0, 0.35);
+			}
+		}
+
+		// The gem's glint where it hits, and a small chip of crystal.
+		Fx_Glow(fBack, g_iFxGlow, 0.2, 0.3, 255);
+		Fx_Gibs(fBack, g_iGibIce, 1, 120.0, 0.8, 1);
+		Fx_Decal(fEnd, g_iDecalGlow);
+
+		PlayShotSound(iClient, SOUND_ICE);
+	} else if (StrEqual(sFx, "plasmaflow"))
+	{
+		// Plasma: a thick, writhing stream with a white-hot core that melts a mark into the wall.
+		Fx_Beam(fStart, fEnd, g_iBmPhys, 10.0, 12.0, 0.2, 5.0, iColor, 0, 40);
+		Fx_Beam(fStart, fEnd, g_iBmLaser, 3.0, 3.0, 0.2, 0.0, iCore);
+
+		Fx_Glow(fBack, g_iFxPurpleGlow, 0.5, 0.3);
+		Fx_Decal(fEnd, g_iDecalScorch);
+
+		PlayShotSound(iClient, SOUND_SHOCK);
 	} else if (StrEqual(sFx, "prism"))
 	{
 		// Prism: white light that fans out into a rainbow and meets again at the target.
 		Fx_Axes(fStart, fEnd, fForward, fSide, fAxisUp);
+		Fx_Lerp(fStart, fEnd, 0.5, fHigh);
 
 		for (int i = 0; i < 6; i++)
 		{
+			float fSpread = (i - 2.5) * 6.0, fA[3], fMid[3];
+
 			Fx_Hue(i * 60.0, iTint);
 
-			float fSpread = (i - 2.5) * 6.0;
-
 			for (int k = 0; k < 3; k++)
 			{
-				fPoint[k] = fStart[k] + fSide[k] * fSpread;
+				fA[k] = fStart[k] + fSide[k] * fSpread;
+				fMid[k] = fHigh[k] + fSide[k] * fSpread * 3.0;
 			}
 
-			Fx_Lerp(fStart, fEnd, 0.5, fHigh);
-
-			for (int k = 0; k < 3; k++)
-			{
-				fHigh[k] += fSide[k] * fSpread * 3.0;
-			}
-
-			Fx_Beam(fPoint, fHigh, g_iBmLaser, 2.5, 2.5, 0.25, 0.0, iTint);
-			Fx_Beam(fHigh, fEnd, g_iBmLaser, 2.5, 1.0, 0.25, 0.0, iTint);
+			Fx_Beam(fA, fMid, g_iBmLaser, 2.5, 2.5, 0.25, 0.0, iTint);
+			Fx_Beam(fMid, fEnd, g_iBmLaser, 2.5, 1.0, 0.25, 0.0, iTint);
 		}
 
-		Fx_Glow(fEnd, g_iFxGlow, 0.4, 0.3, 255);
+		Fx_Glow(fBack, g_iFxGlow, 0.3, 0.3, 255);
 
 		PlayShotSound(iClient, SOUND_ICE);
-	} else if (StrEqual(sFx, "lava"))
-	{
-		// Magma: a lobbed blob of molten rock that splatters fire and lights the ground up orange.
-		Fx_Missile(iItem, fStart, fEnd, iColor, 850.0, 0.7, true, 6.0, 0.6);
-
-		SpriteSpray(fEnd, fUp, g_iFxFlame, 220, 0.7, 6);
-
-		Fx_Ring(fEnd, 4.0, 64.0, g_iBmLaser, 8.0, 0.5, 3.0, iColor);
-
-		TE_SetupDust(fEnd, fUp, 20.0, 1.0);
-		TE_SendToAll();
-
-		Fx_Light(fEnd, iColor, 220.0, 0.8, 6);
-
-		PlayShotSound(iClient, SOUND_FIREBALL);
-	} else if (StrEqual(sFx, "embers"))
-	{
-		// Ember: a scatter of small burning embers.
-		for (int i = 0; i < 3; i++)
-		{
-			float fTo[3];
-
-			fTo = fEnd;
-			fTo[0] += GetRandomFloat(-20.0, 20.0);
-			fTo[1] += GetRandomFloat(-20.0, 20.0);
-			fTo[2] += GetRandomFloat(-10.0, 10.0);
-
-			Fx_Missile(iItem, fStart, fTo, iColor, GetRandomFloat(1000.0, 1300.0), 0.25, false, i == 0 ? 2.0 : 0.0, 0.3);
-		}
-
-		Fx_Sparks(fEnd, fUp, 2, 3);
-
-		PlayShotSound(iClient, SOUND_FIRE);
-	} else if (StrEqual(sFx, "comet"))
-	{
-		// Comet: a fireball with a long burning tail, ending in a fiery blast.
-		Fx_Missile(iItem, fStart, fEnd, iColor, 1300.0, 0.9, false, 14.0, 0.8);
-
-		TE_SetupExplosion(fEnd, g_iFxExplosion, 2.0, 15, 0, 0, 0);
-		TE_SendToAll();
-
-		Fx_Ring(fEnd, 10.0, 160.0, g_iBmLaser, 12.0, 0.5, 0.0, iColor);
-		Fx_Light(fEnd, iColor, 280.0, 0.7, 6);
-
-		PlayShotSound(iClient, SOUND_FIREBALL);
-	} else if (StrEqual(sFx, "glitch"))
-	{
-		// Errors: an error model with a broken, flickering trail of mismatched lines.
-		iTint = iColor;
-
-		LaunchModel(iItem, fStart, fEnd, iTint, 1500.0);
-
-		for (int i = 0; i < 4; i++)
-		{
-			float fA[3], fB[3];
-
-			Fx_Lerp(fStart, fEnd, GetRandomFloat(0.1, 0.9), fA);
-
-			fB = fA;
-			fB[0] += GetRandomFloat(-30.0, 30.0);
-			fB[1] += GetRandomFloat(-30.0, 30.0);
-			fB[2] += GetRandomFloat(-12.0, 12.0);
-
-			Fx_Beam(fA, fB, g_iBmXBeam, GetRandomFloat(2.0, 6.0), 2.0, GetRandomFloat(0.1, 0.3), 0.0, i % 2 ? iColor : iCore);
-		}
-
-		Fx_Sparks(fEnd, fUp, 4, 2);
-
-		PlayShotSound(iClient, SOUND_SHOCK);
-	} else if (StrEqual(sFx, "nova"))
-	{
-		// Nova: a burst of white light, rays in every direction and two shock rings.
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 4.0, 8.0, 0.2, 0.0, iCore);
-		Fx_Starburst(fEnd, 8, 90.0, g_iBmLaser, 4.0, 0.4, iCore);
-		Fx_Ring(fEnd, 10.0, 180.0, g_iBmLaser, 10.0, 0.4, 0.0, iCore);
-		Fx_Ring(fEnd, 10.0, 260.0, g_iBmPhys, 6.0, 0.7, 0.0, iColor);
-		Fx_Glow(fEnd, g_iFxSoftGlow, 1.5, 0.3, 255);
-		Fx_Light(fEnd, iColor, 320.0, 0.5, 7);
-
-		PlayShotSound(iClient, g_sFxBoom);
-	} else if (StrEqual(sFx, "supernova"))
-	{
-		// Supernova: a star going off. A column of light, a corona of long rays and three rolling shockwaves.
-		fHigh = fEnd;
-		fHigh[2] += 320.0;
-
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 6.0, 12.0, 0.2, 0.0, iCore);
-		Fx_Beam(fEnd, fHigh, g_iBmPhys, 40.0, 4.0, 0.6, 0.0, iCore);
-		Fx_Starburst(fEnd, 10, 160.0, g_iBmLaser, 6.0, 0.6, iColor);
-
-		for (int i = 0; i < 3; i++)
-		{
-			fPoint = fEnd;
-			fPoint[2] += i * 12.0;
-
-			Fx_Ring(fPoint, 10.0, 220.0 + i * 90.0, i == 1 ? g_iBmLaser : g_iBmPhys, 14.0 - i * 3.0, 0.5 + i * 0.25, 0.0, i == 0 ? iCore : iColor);
-		}
-
-		Fx_Glow(fEnd, g_iFxSoftGlow, 3.0, 0.5, 255);
-		Fx_Light(fEnd, iColor, 520.0, 0.9, 8);
-
-		PlayShotSound(iClient, g_sFxBoom);
-	} else if (StrEqual(sFx, "thunder"))
-	{
-		// Thunder: a thin guiding spark, then a bolt of lightning out of the sky onto the target.
-		fHigh = fEnd;
-		fHigh[2] += 700.0;
-
-		Handle hTrace = TR_TraceRayFilterEx(fEnd, fHigh, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
-
-		if (TR_DidHit(hTrace))
-		{
-			TR_GetEndPosition(fHigh, hTrace);
-		}
-
-		CloseHandle(hTrace);
-
-		Fx_Beam(fStart, fEnd, g_iBmLightning, 1.5, 1.5, 0.1, 2.0, iCore, 0, 30);
-		Fx_Bolt(fHigh, fEnd, 6, 30.0, g_iBmLightning, 10.0, 0.25, iCore);
-		Fx_Bolt(fHigh, fEnd, 4, 40.0, g_iBmLightning, 4.0, 0.2, iColor);
-		Fx_Ring(fEnd, 6.0, 120.0, g_iBmLightning, 8.0, 0.3, 4.0, iColor);
-		Fx_Light(fEnd, iCore, 400.0, 0.25, 8);
-
-		PlayShotSound(iClient, g_sFxThunder);
-	} else if (StrEqual(sFx, "chainspark"))
-	{
-		// Spark: a chain of yellow sparks jumping from point to point.
-		float fLast[3];
-
-		fLast = fStart;
-
-		for (int i = 1; i <= 4; i++)
-		{
-			Fx_Lerp(fStart, fEnd, i / 4.0, fPoint);
-
-			if (i < 4)
-			{
-				fPoint[0] += GetRandomFloat(-16.0, 16.0);
-				fPoint[1] += GetRandomFloat(-16.0, 16.0);
-				fPoint[2] += GetRandomFloat(-10.0, 10.0);
-			}
-
-			Fx_Beam(fLast, fPoint, g_iBmShock, 6.0, 3.0, 0.2, 2.0, iColor, 0, 30);
-
-			TE_SetupMetalSparks(fPoint, fUp);
-			TE_SendToAll();
-
-			fLast = fPoint;
-		}
-
-		Fx_Light(fEnd, iColor, 120.0, 0.2);
-
-		PlayShotSound(iClient, g_sFxZap);
-	} else if (StrEqual(sFx, "healbeam"))
-	{
-		// Medic: a soft white mending beam with a red cross of light on whoever it touches.
-		int iRed[4] = { 255, 40, 40, 255 };
-
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 10.0, 10.0, 0.25, 0.0, iColor, 0, 10);
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 2.0, 2.0, 0.25, 0.0, iRed);
-
-		float fA[3], fB[3];
-
-		fA = fEnd;
-		fB = fEnd;
-		fA[2] += 14.0;
-		fB[2] -= 14.0;
-
-		Fx_Beam(fA, fB, g_iBmLaser, 6.0, 6.0, 0.4, 0.0, iRed);
-
-		Fx_Axes(fStart, fEnd, fForward, fSide, fAxisUp);
-
-		for (int k = 0; k < 3; k++)
-		{
-			fA[k] = fEnd[k] + fSide[k] * 14.0;
-			fB[k] = fEnd[k] - fSide[k] * 14.0;
-		}
-
-		Fx_Beam(fA, fB, g_iBmLaser, 6.0, 6.0, 0.4, 0.0, iRed);
-
-		PlayShotSound(iClient, SOUND_HEAL);
-	} else if (StrEqual(sFx, "lovebeam"))
-	{
-		// Pink: two soft pink ribbons curling round each other, blooming at the end.
-		float fPhase = GetGameTime() * 3.0;
-
-		Fx_Helix(fStart, fEnd, 7.0, 1.5, 6, fPhase, g_iBmPhys, 4.0, 0.3, iColor);
-		Fx_Helix(fStart, fEnd, 7.0, 1.5, 6, fPhase + 3.1416, g_iBmPhys, 4.0, 0.3, iCore);
-		Fx_Glow(fEnd, g_iFxPurpleGlow, 0.5, 0.4);
-		Fx_Ring(fEnd, 2.0, 40.0, g_iBmPhys, 4.0, 0.5, 0.0, iCore);
-
-		PlayShotSound(iClient, SOUND_HEAL);
 	} else if (StrEqual(sFx, "rainbowspray"))
 	{
 		// Rainbow: a fountain of colour, every drop a different hue.
@@ -874,90 +1149,85 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 			Fx_Beam(fPoint, fHigh, g_iBmPhys, 10.0, 2.0, 0.5, 3.0, iTint, 0, 20);
 		}
 
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 4.0, 4.0, 0.3, 4.0, iColor);
-
 		PlayShotSound(iClient, SOUND_STEAM);
-	} else if (StrEqual(sFx, "mist"))
+	} else if (StrEqual(sFx, "nova") || StrEqual(sFx, "supernova"))
 	{
-		// Grey: a cool drifting mist.
-		SpriteSpray(fStart, fDirection, g_iFxSteam, 500, 0.3, 5);
+		// Nova: a burst of white light that scorches the ground. Supernova: a star going off, leaving a crater.
+		bool bSuper = StrEqual(sFx, "supernova");
 
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 6.0, 30.0, 0.4, 2.0, iDeep, 0, 10);
+		TE_SetupExplosion(fBack, g_iFxExplosion, bSuper ? 4.0 : 2.0, 15, 0, 0, 0);
+		TE_SendToAll();
 
-		PlayShotSound(iClient, SOUND_STEAM);
-	} else if (StrEqual(sFx, "sandstorm"))
-	{
-		// Sandstorm: a scouring blast of sand that kicks up dust where it lands.
-		SpriteSpray(fStart, fDirection, g_iFxSteam, 600, 0.45, 6);
+		Fx_Starburst(fBack, bSuper ? 8 : 6, bSuper ? 150.0 : 90.0, g_iBmLaser, 4.0, 0.4, iCore);
 
-		for (int i = 1; i <= 3; i++)
+		fPoint = fEnd;
+		fPoint[2] += 4.0;
+
+		Fx_Ring(fPoint, 10.0, bSuper ? 320.0 : 200.0, g_iBmPhys, 10.0, 0.6, 0.0, iColor);
+
+		if (bSuper)
 		{
-			Fx_Lerp(fStart, fEnd, i / 3.0, fPoint);
+			fHigh = fEnd;
+			fHigh[2] += 320.0;
 
-			TE_SetupDust(fPoint, fNormal, 18.0 + i * 6.0, 0.8);
+			Fx_Beam(fEnd, fHigh, g_iBmPhys, 40.0, 4.0, 0.6, 0.0, iCore);
+			Fx_Gibs(fBack, g_iGibRock, 8, 500.0, 3.0, 0);
+		}
+
+		Fx_Decal(fEnd, bSuper ? g_iDecalCrater : g_iDecalScorch);
+		Fx_Light(fBack, iColor, bSuper ? 520.0 : 320.0, bSuper ? 0.9 : 0.5, 7);
+
+		PlayShotSound(iClient, g_sFxBoom);
+
+	// ---- Everything else ----
+	} else if (StrEqual(sFx, "glitch"))
+	{
+		// Errors: an error model with a broken, flickering trail of mismatched lines.
+		iTint = iColor;
+
+		LaunchModel(iItem, fStart, fEnd, iTint, 1500.0);
+
+		for (int i = 0; i < 3; i++)
+		{
+			float fA[3], fB[3];
+
+			Fx_Lerp(fStart, fEnd, GetRandomFloat(0.1, 0.9), fA);
+
+			fB = fA;
+			fB[0] += GetRandomFloat(-30.0, 30.0);
+			fB[1] += GetRandomFloat(-30.0, 30.0);
+			fB[2] += GetRandomFloat(-12.0, 12.0);
+
+			Fx_Beam(fA, fB, g_iBmXBeam, GetRandomFloat(2.0, 6.0), 2.0, GetRandomFloat(0.1, 0.3), 0.0, i % 2 ? iColor : iCore);
+		}
+
+		Fx_Gibs(fBack, g_iGibMetal, 2, 150.0, 1.0, 2);
+
+		PlayShotSound(iClient, SOUND_SHOCK);
+	} else if (StrEqual(sFx, "healbeam") || StrEqual(sFx, "lovebeam"))
+	{
+		// Medic and Pink: a soft mending beam with a glow on whoever it touches.
+		Fx_Beam(fStart, fEnd, g_iBmPhys, 8.0, 8.0, 0.25, 0.0, iColor, 0, 10);
+		Fx_Beam(fStart, fEnd, g_iBmLaser, 2.0, 2.0, 0.25, 0.0, iCore);
+		Fx_Glow(fBack, StrEqual(sFx, "lovebeam") ? g_iFxPurpleGlow : g_iFxSoftGlow, 0.4, 0.4);
+
+		PlayShotSound(iClient, SOUND_HEAL);
+	} else if (StrEqual(sFx, "tractor") || StrEqual(sFx, "gravwell"))
+	{
+		// Magnitude and Gravitron: a spiralling field of force gripping the target.
+		Fx_Helix(fStart, fEnd, 10.0, 3.0, 8, GetGameTime() * 8.0, g_iBmPhys, 3.0, 0.25, iColor);
+
+		fPoint = fEnd;
+
+		Fx_Ring(fPoint, 70.0, 6.0, g_iBmPhys, 5.0, 0.4, 0.0, iCore);
+
+		if (StrEqual(sFx, "gravwell"))
+		{
+			TE_SetupDust(fEnd, fUp, 30.0, 0.8);
 			TE_SendToAll();
 		}
 
-		Fx_Helix(fStart, fEnd, 14.0, 3.0, 6, GetGameTime() * 5.0, g_iBmPhys, 6.0, 0.3, iColor);
-
-		PlayShotSound(iClient, SOUND_STEAM);
-	} else if (StrEqual(sFx, "tractor"))
-	{
-		// Magnitude: a spiralling tractor beam with rings of force closing in on what it holds.
-		Fx_Helix(fStart, fEnd, 10.0, 3.0, 8, GetGameTime() * 8.0, g_iBmPhys, 3.0, 0.25, iColor);
-		Fx_Beam(fStart, fEnd, g_iBmLaser, 1.5, 1.5, 0.2, 0.0, iCore);
-		Fx_Ring(fEnd, 70.0, 6.0, g_iBmPhys, 5.0, 0.4, 0.0, iColor);
-
 		PlayShotSound(iClient, SOUND_SHOCK);
-	} else if (StrEqual(sFx, "geyser"))
-	{
-		// Geyser: a column of water erupting out of the ground where it lands.
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 3.0, 3.0, 0.2, 2.0, iCore);
-
-		fHigh = fEnd;
-		fHigh[2] += 200.0;
-
-		Fx_Beam(fEnd, fHigh, g_iBmPhys, 30.0, 8.0, 0.6, 4.0, iColor, 0, 40);
-		Fx_Beam(fEnd, fHigh, g_iBmPhys, 10.0, 2.0, 0.5, 2.0, iCore, 0, 40);
-
-		SpriteSpray(fHigh, fUp, g_Items[iItem].iSpriteIndex, 220, 1.2, 6);
-
-		Fx_Ring(fEnd, 10.0, 90.0, g_iBmPhys, 6.0, 0.6, 0.0, iColor);
-
-		PlayShotSound(iClient, g_sFxSplash);
-	} else if (StrEqual(sFx, "gravwell"))
-	{
-		// Gravitron: a golden gravity well, rings collapsing onto the target from above and below.
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 5.0, 5.0, 0.25, 6.0, iColor, 0, 30);
-
-		for (int i = -1; i <= 1; i++)
-		{
-			fPoint = fEnd;
-			fPoint[2] += i * 30.0;
-
-			Fx_Ring(fPoint, 90.0 - FloatAbs(float(i)) * 30.0, 4.0, g_iBmLaser, 5.0, 0.5, 0.0, i == 0 ? iCore : iColor);
-		}
-
-		Fx_Glow(fEnd, g_iFxYellowGlow, 0.6, 0.4);
-
-		PlayShotSound(iClient, SOUND_SHOCK);
-	} else if (StrEqual(sFx, "tornado"))
-	{
-		// Tornado: a twister spinning up out of the target, wider the higher it goes.
-		Fx_Beam(fStart, fEnd, g_iBmPhys, 4.0, 4.0, 0.25, 3.0, iColor);
-
-		for (int i = 0; i < 5; i++)
-		{
-			fPoint = fEnd;
-			fPoint[2] += i * 34.0;
-
-			Fx_Ring(fPoint, 8.0 + i * 12.0, 30.0 + i * 26.0, g_iBmPhys, 6.0, 0.6, 2.0, i % 2 ? iCore : iColor);
-		}
-
-		TE_SetupDust(fEnd, fUp, 40.0, 1.2);
-		TE_SendToAll();
-
-		PlayShotSound(iClient, SOUND_STEAM);
 	} else {
 		return false;
 	}
@@ -965,7 +1235,7 @@ bool DrawStyledShot(int iClient, int iItem, const char[] sFx, float fStart[3], f
 	return true;
 }
 
-//Auras: a look for every emblem while it is held out, seen by everyone.
+//Auras: only a few emblems have one (the "aura" key), so they stand out.
 public void Fx_ThinkAuras()
 {
 	if (!g_cvAura.BoolValue)

@@ -112,6 +112,7 @@ enum struct Item
 	float fProjSpeed;
 	float fFuse;
 	float fFreeze;
+	int iChain;
 	char sBase[32];
 	float fDamage;
 }
@@ -2953,6 +2954,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fProjSpeed = kvItems.GetFloat("projectilespeed", 1500.0);
 	g_Items[iItem].fFuse = kvItems.GetFloat("fuse", 2.0);
 	g_Items[iItem].fFreeze = kvItems.GetFloat("freeze", 0.0);
+	g_Items[iItem].iChain = kvItems.GetNum("chain", 0);
 
 	if (g_Items[iItem].sProjectile[0] != '\0')
 	{
@@ -3636,6 +3638,9 @@ void FireEmblemShot(int iClient, int iItem)
 
 	fStart[2] -= 12.0;
 
+	// Marks (scorch, wet, acid...) only go on walls and floors, not on players.
+	g_iFxShotTarget = (iTarget == 0) ? 0 : (iTarget > 0 ? iTarget : -1);
+
 	DrawShotEffect(iClient, iItem, fStart, fEnd, fDirection, iColor);
 
 	if (StrEqual(sPower, "blast"))
@@ -3733,6 +3738,12 @@ void FireEmblemShot(int iClient, int iItem)
 			SDKHooks_TakeDamage(iTarget, iClient, iClient, g_Items[iItem].fValue, g_Items[iItem].iDamageType);
 		}
 
+		// Permafrost and the like freeze their target solid.
+		if (g_Items[iItem].fFreeze > 0.0)
+		{
+			FreezePlayer(iTarget, g_Items[iItem].fFreeze);
+		}
+
 		if (g_Items[iItem].fIgnite > 0.0)
 		{
 			IgniteEntity(iTarget, g_Items[iItem].fIgnite);
@@ -3770,6 +3781,12 @@ void FireEmblemShot(int iClient, int iItem)
 	} else if (StrEqual(sPower, "shock"))
 	{
 		SDKHooks_TakeDamage(iTarget, iClient, iClient, g_Items[iItem].fValue, DMG_SHOCK);
+
+		// Tempest: the lightning jumps on to the next nearest players ("chain" of them).
+		if (g_Items[iItem].iChain > 0)
+		{
+			ChainLightning(iClient, iItem, iTarget, iColor);
+		}
 	} else if (StrEqual(sPower, "push"))
 	{
 		float fPush[3];
@@ -4070,6 +4087,58 @@ void CreateExplosion(int iClient, float fOrigin[3], float fMagnitude)
 }
 
 // Fire: a short stream of flames from the emblem that burns everyone caught in it.
+void ChainLightning(int iClient, int iItem, int iFirst, int iColor[4])
+{
+	float fFrom[3], fTo[3];
+	bool bHit[MAXPLAYERS + 1];
+	int iCurrent = iFirst;
+
+	bHit[iFirst] = true;
+
+	for (int iJump = 0; iJump < g_Items[iItem].iChain; iJump++)
+	{
+		GetClientAbsOrigin(iCurrent, fFrom);
+		fFrom[2] += 40.0;
+
+		int iNext = -1;
+		float fBest = 450.0;
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (bHit[i] || !CanBeHurt(iClient, i))
+			{
+				continue;
+			}
+
+			GetClientAbsOrigin(i, fTo);
+			fTo[2] += 40.0;
+
+			float fDistance = GetVectorDistance(fFrom, fTo);
+
+			if (fDistance < fBest)
+			{
+				fBest = fDistance;
+				iNext = i;
+			}
+		}
+
+		if (iNext == -1)
+		{
+			return;
+		}
+
+		GetClientAbsOrigin(iNext, fTo);
+		fTo[2] += 40.0;
+
+		Fx_Bolt(fFrom, fTo, 4, 12.0, g_iBmLightning, 5.0, 0.3, iColor);
+
+		SDKHooks_TakeDamage(iNext, iClient, iClient, g_Items[iItem].fValue * 0.6, DMG_SHOCK);
+
+		bHit[iNext] = true;
+		iCurrent = iNext;
+	}
+}
+
 void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
 {
 	float fMuzzle[3], fToVictim[3], fVictim[3];
@@ -4109,6 +4178,24 @@ void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
 	iHeat[3] = 160;
 
 	Fx_Beam(fMuzzle, fFar, g_iBmPhys, 6.0, 40.0, 0.15, 4.0, iHeat, 0, 30);
+
+	// Where the flames reach a wall or floor they scorch it, now and then.
+	if (GetRandomInt(0, 3) == 0)
+	{
+		float fScorch[3];
+
+		Handle hScorch = TR_TraceRayFilterEx(fMuzzle, fFar, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+		if (TR_DidHit(hScorch))
+		{
+			TR_GetEndPosition(fScorch, hScorch);
+
+			g_iFxShotTarget = 0;
+			Fx_Decal(fScorch, g_iDecalSmallScorch);
+		}
+
+		CloseHandle(hScorch);
+	}
 
 	if (GetRandomInt(0, 2) == 0)
 	{
@@ -4380,6 +4467,11 @@ void DemonTower(int iClient, int iItem, float fEnd[3], int iColor[4])
 	TE_SendToAll();
 
 	SpriteSpray(fBase, g_fSkyward, g_Items[iItem].iSpriteIndex, 500, 0.15, 16);
+
+	// The ground splits open: rubble thrown up and a burnt scar left behind.
+	g_iFxShotTarget = 0;
+	Fx_Decal(fBase, g_iDecalScorch);
+	Fx_Gibs(fBase, g_iGibRock, 6, 400.0, 2.5, 0);
 
 	EmitSoundToAll(SOUND_FIRE, iClient);
 
@@ -4816,6 +4908,18 @@ public Action Timer_NukeImpact(Handle hTimer, DataPack dpNuke)
 	// The blast. Damage counts as the caller's, so kills are theirs.
 	CreateExplosion(iClient > 0 ? iClient : 0, fImpact, (iItem >= 0 && iItem < g_iItemCount) ? g_Items[iItem].fValue : 150.0);
 
+	// A crater, rubble and fires left burning around it.
+	g_iFxShotTarget = 0;
+	Fx_Decal(fImpact, g_iDecalCrater);
+
+	float fRubble[3];
+
+	fRubble = fImpact;
+	fRubble[2] += 16.0;
+
+	Fx_Gibs(fRubble, g_iGibRock, 12, 600.0, 4.0, 0);
+	Fx_FirePatch(fImpact, 64.0, 6.0);
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (!IsClientInGame(i) || !IsPlayerAlive(i))
@@ -5102,6 +5206,24 @@ void FireballExploded(int iBall)
 	{
 		SpriteSpray(fOrigin, g_fSkyward, g_Items[iItem].iSpriteIndex, 300, 0.8, 12);
 	}
+
+	// A scorch mark on whatever is just below it.
+	float fBelow[3], fFloor[3];
+
+	fBelow = fOrigin;
+	fBelow[2] -= 64.0;
+
+	Handle hFloor = TR_TraceRayFilterEx(fOrigin, fBelow, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+	if (TR_DidHit(hFloor))
+	{
+		TR_GetEndPosition(fFloor, hFloor);
+
+		g_iFxShotTarget = 0;
+		Fx_Decal(fFloor, g_iDecalScorch);
+	}
+
+	CloseHandle(hFloor);
 
 	if (iClient < 1)
 	{
@@ -7565,6 +7687,8 @@ void CelWepShoot(int iClient, int iItem)
 
 	fStart[2] -= 6.0;
 
+	g_iFxShotTarget = (iHit == 0) ? 0 : (iHit > 0 ? iHit : -1);
+
 	DrawShotEffect(iClient, iItem, fStart, fEnd, fDirection, iColor);
 
 	if (CanBeHurt(iClient, iHit))
@@ -7865,7 +7989,16 @@ void ThinkCelWepProjectiles()
 					AcceptEntityInput(iExplosion, "kill");
 				}
 
-				// Bits of melon everywhere.
+				// Bits of melon everywhere, and a scorch mark.
+				Fx_Gibs(fShot, g_iGibMelon, 6, 300.0, 3.0, 0);
+
+				float fBelow[3];
+
+				fBelow = fShot;
+				fBelow[2] -= 4.0;
+				g_iFxShotTarget = 0;
+				Fx_Decal(fBelow, g_iDecalScorch);
+
 				AcceptEntityInput(iShot, "Break");
 				AcceptEntityInput(iShot, "kill");
 			}

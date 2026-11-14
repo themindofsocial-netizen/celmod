@@ -134,3 +134,11 @@
 		 - The Fire Sword sets players on fire (5 seconds), the Ice Blade freezes them solid (2 seconds), and the Power Blade hits hard (85 damage). Each hit has its own effect.
 		 - Celweps and emblem attacks now go by whether the game can actually hurt a player (so they work in deathmatch lands), and tell you when the player you hit has god mode on.
 		 - Fixed celwep projectiles (melons, saw blades, swords) not launching on HL2DM.
+	 - 12/17/26: Emblem looks overhauled. Emblems made of something real now look like it and leave marks where they hit:
+		 - Water, Tsunami and Geyser splash for real, spray water and leave wet marks. Acid and Venom splatter, hiss and stain.
+		 - Magma, Ember and Comet scorch walls and floors and leave flames burning on the ground. The flamethrower scorches what it reaches.
+		 - Frost, Glacier and Blizzard shatter into ice shards. Sandstorm and Tornado throw dust and rubble. Lasers and lightning leave burn marks.
+		 - Nova, Supernova, the Nuke, Demon towers and fireballs leave scorch marks or craters and rubble.
+		 - Auras are now only on a few special emblems: Demon, Phantom, Nuke and Solar.
+		 - Upgrade paths at the Power Booth (3 of an emblem): Ember > Magma > Volcano, Frost > Glacier > Permafrost, Water > Tsunami > Maelstrom, Spark > Thunder > Tempest, Acid > Venom > Plague, Bronze > Gold > Platinum > Diamond, Nova > Supernova, Pulse > Ion.
+		 - New top tier emblems: Volcano (eruptions that rain lava bombs), Permafrost (freezes targets solid), Maelstrom (a whirlpool that drags players in), Tempest (lightning that jumps to 3 more players) and Plague (a lingering poison cloud).

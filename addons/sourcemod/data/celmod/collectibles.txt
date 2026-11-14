@@ -60,8 +60,12 @@
 //               snowstorm frostline shards waterbolt wave acidglob venomspiral arc pulse laser static
 //               gemtwin gemprism gemstar gemorbit plasmaflow ion prism lava embers comet glitch nova
 //               supernova thunder chainspark healbeam lovebeam rainbowspray aurora mist sandstorm
-//               tractor geyser gravwell tornado
-//   aura        What the holder looks like while the emblem is held out (cm_emblem_aura 0 turns them off):
+//               tractor geyser gravwell tornado eruption permafrost maelstrom tempest
+//               Water, fire, ice, acid and earth styles use the game's own effects (splashes, liquid, flames, shards,
+//               rubble) and leave marks (wet, scorch, acid, crater) on the wall or floor they hit.
+//   freeze      "shot": seconds the target is frozen solid.   chain: "shock": how many more players it jumps to.
+//   aura        Only for a few special emblems: what the holder looks like while it is held out (cm_emblem_aura 0
+//               turns them off):
 //               flames frost drip sparks thunder glint prism smoke glitch speed bolt dust float bounce
 //               wisp halo shield gold drain demon radiation vortex blink sun eclipse embers confetti
 //               stars rising pulse dusk code crackle haze void radiant phase heart, or none.
@@ -130,7 +134,6 @@
 			"secondarycooldown"	"3.0"
 			"beamcolor"		"255 140 40 255"
 			"dropweight"	"15"
-			"aura"			"flames"
 		}
 		"blizzard"
 		{
@@ -154,7 +157,6 @@
 			"secondaryvalue"	"15"
 			"secondarycooldown"	"5.0"
 			"dropweight"	"12"
-			"aura"			"frost"
 		}
 		"water"
 		{
@@ -174,8 +176,9 @@
 			"sprite"		"sprites/glow04_noz.vmt"
 			"knockback"		"250"
 			"beamcolor"		"40 110 255 255"
+			"upgradesto"	"tsunami"
+			"upgradecost"	"3"
 			"dropweight"	"12"
-			"aura"			"drip"
 		}
 		"energy"
 		{
@@ -197,7 +200,6 @@
 			"secondaryvalue"	"40"
 			"secondarycooldown"	"4.0"
 			"dropweight"	"8"
-			"aura"			"sparks"
 		}
 		"laser"
 		{
@@ -216,7 +218,6 @@
 			"ignite"		"1.0"
 			"fx"			"laser"
 			"dropweight"	"6"
-			"aura"			"glint"
 		}
 		"plasma"
 		{
@@ -234,7 +235,6 @@
 			"dmgtype"		"energy"
 			"fx"			"plasmaflow"
 			"dropweight"	"6"
-			"aura"			"sparks"
 		}
 		"prism"
 		{
@@ -253,7 +253,6 @@
 			"beamcolor"		"255 0 255 255"
 			"fx"			"prism"
 			"dropweight"	"5"
-			"aura"			"prism"
 		}
 		"rainbow"
 		{
@@ -270,7 +269,6 @@
 			"beamcolor"		"255 255 0 255"
 			"fx"			"rainbowspray"
 			"dropweight"	"6"
-			"aura"			"prism"
 		}
 		"smog"
 		{
@@ -287,7 +285,6 @@
 			"cooldown"		"8.0"
 			"range"			"500"
 			"dropweight"	"10"
-			"aura"			"smoke"
 		}
 		"grey"
 		{
@@ -305,7 +302,6 @@
 			"fx"			"mist"
 			"sprite"		"sprites/glow04_noz.vmt"
 			"dropweight"	"10"
-			"aura"			"smoke"
 		}
 		"error"
 		{
@@ -326,7 +322,6 @@
 			"upgradesto"	"error_blue"
 			"upgradecost"	"2"
 			"dropweight"	"4"
-			"aura"			"glitch"
 		}
 		"error_blue"
 		{
@@ -347,7 +342,6 @@
 			"upgradesto"	"error_green"
 			"upgradecost"	"2"
 			"dropweight"	"3"
-			"aura"			"glitch"
 		}
 		"error_green"
 		{
@@ -366,7 +360,6 @@
 			"sprite"		"models/error.mdl"
 			"beamcolor"		"60 255 60 255"
 			"dropweight"	"2"
-			"aura"			"glitch"
 		}
 		"speed"
 		{
@@ -380,7 +373,6 @@
 			"power"			"speed"
 			"value"			"1.4"
 			"dropweight"	"15"
-			"aura"			"speed"
 		}
 		"orange"
 		{
@@ -394,7 +386,6 @@
 			"power"			"speed"
 			"value"			"2.0"
 			"dropweight"	"10"
-			"aura"			"speed"
 		}
 		"peach"
 		{
@@ -407,7 +398,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"sprint"
 			"dropweight"	"12"
-			"aura"			"speed"
 		}
 		"cloud"
 		{
@@ -422,7 +412,6 @@
 			"value"			"0.8"
 			"jumpboost"		"330"
 			"dropweight"	"12"
-			"aura"			"float"
 		}
 		"magnitude"
 		{
@@ -440,7 +429,6 @@
 			"speed"			"1.5"
 			"fx"			"tractor"
 			"dropweight"	"6"
-			"aura"			"vortex"
 		}
 		"demon"
 		{
@@ -477,7 +465,6 @@
 			"value"			"100"
 			"speed"			"1.5"
 			"dropweight"	"6"
-			"aura"			"wisp"
 		}
 		"pink"
 		{
@@ -494,7 +481,6 @@
 			"range"			"1500"
 			"fx"			"lovebeam"
 			"dropweight"	"10"
-			"aura"			"heart"
 		}
 		"abyss"
 		{
@@ -510,7 +496,6 @@
 			"range"			"10000"
 			"beamcolor"		"0 100 0 255"
 			"dropweight"	"4"
-			"aura"			"vortex"
 		}
 		"chaos"
 		{
@@ -528,7 +513,6 @@
 			"range"			"600"
 			"sprite"		"sprites/flamelet1.vmt"
 			"dropweight"	"3"
-			"aura"			"embers"
 		}
 		"solar"
 		{
@@ -575,8 +559,9 @@
 			"handangles"	"0 -90 0"
 			"power"			"gold"
 			"value"			"250"
+			"upgradesto"	"platinum"
+			"upgradecost"	"3"
 			"dropweight"	"0"
-			"aura"			"gold"
 		}
 		"corruption"
 		{
@@ -590,7 +575,6 @@
 			"power"			"drain"
 			"value"			"1"
 			"dropweight"	"2"
-			"aura"			"drain"
 		}
 		"phazon"
 		{
@@ -603,7 +587,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"0"
-			"aura"			"crackle"
 		}
 		"420"
 		{
@@ -616,7 +599,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"3"
-			"aura"			"haze"
 		}
 		"black"
 		{
@@ -628,7 +610,6 @@
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
 			"dropweight"	"0"
-			"aura"			"void"
 		}
 		"white"
 		{
@@ -640,7 +621,6 @@
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
 			"dropweight"	"0"
-			"aura"			"radiant"
 		}
 		"magma"
 		{
@@ -662,8 +642,9 @@
 			"secondary"		"fireball"
 			"secondaryvalue"	"90"
 			"secondarycooldown"	"6.0"
+			"upgradesto"	"volcano"
+			"upgradecost"	"3"
 			"dropweight"	"4"
-			"aura"			"flames"
 		}
 		"ember"
 		{
@@ -682,8 +663,9 @@
 			"ignite"		"1.0"
 			"fx"			"embers"
 			"sprite"		"sprites/flamelet1.vmt"
+			"upgradesto"	"magma"
+			"upgradecost"	"3"
 			"dropweight"	"14"
-			"aura"			"embers"
 		}
 		"inferno"
 		{
@@ -705,7 +687,6 @@
 			"secondarycooldown"	"5.0"
 			"beamcolor"		"255 90 0 255"
 			"dropweight"	"2"
-			"aura"			"flames"
 		}
 		"frost"
 		{
@@ -725,8 +706,9 @@
 			"fx"			"frostline"
 			"sprite"		"sprites/glow04_noz.vmt"
 			"beamcolor"		"170 220 255 255"
+			"upgradesto"	"glacier"
+			"upgradecost"	"3"
 			"dropweight"	"14"
-			"aura"			"frost"
 		}
 		"glacier"
 		{
@@ -748,8 +730,9 @@
 			"secondary"		"icestorm"
 			"secondaryvalue"	"25"
 			"secondarycooldown"	"6.0"
+			"upgradesto"	"permafrost"
+			"upgradecost"	"3"
 			"dropweight"	"4"
-			"aura"			"frost"
 		}
 		"tsunami"
 		{
@@ -769,8 +752,9 @@
 			"fx"			"wave"
 			"sprite"		"sprites/glow04_noz.vmt"
 			"beamcolor"		"30 100 255 255"
+			"upgradesto"	"maelstrom"
+			"upgradecost"	"3"
 			"dropweight"	"5"
-			"aura"			"drip"
 		}
 		"geyser"
 		{
@@ -789,7 +773,6 @@
 			"sprite"		"sprites/glow04_noz.vmt"
 			"beamcolor"		"80 160 255 255"
 			"dropweight"	"8"
-			"aura"			"drip"
 		}
 		"thunder"
 		{
@@ -809,8 +792,9 @@
 			"secondary"		"bigshot"
 			"secondaryvalue"	"45"
 			"secondarycooldown"	"6.0"
+			"upgradesto"	"tempest"
+			"upgradecost"	"3"
 			"dropweight"	"5"
-			"aura"			"thunder"
 		}
 		"spark"
 		{
@@ -828,8 +812,9 @@
 			"fx"			"chainspark"
 			"sprite"		"sprites/plasmaember.vmt"
 			"beamcolor"		"255 255 120 255"
+			"upgradesto"	"thunder"
+			"upgradecost"	"3"
 			"dropweight"	"14"
-			"aura"			"sparks"
 		}
 		"static"
 		{
@@ -848,7 +833,6 @@
 			"fx"			"static"
 			"beamcolor"		"220 220 255 255"
 			"dropweight"	"10"
-			"aura"			"sparks"
 		}
 		"toxic"
 		{
@@ -865,7 +849,6 @@
 			"cooldown"		"8.0"
 			"range"			"600"
 			"dropweight"	"6"
-			"aura"			"smoke"
 		}
 		"acid"
 		{
@@ -884,8 +867,9 @@
 			"fx"			"acidglob"
 			"sprite"		"sprites/glow04_noz.vmt"
 			"beamcolor"		"170 255 0 255"
+			"upgradesto"	"venom"
+			"upgradecost"	"3"
 			"dropweight"	"10"
-			"aura"			"drip"
 		}
 		"venom"
 		{
@@ -905,8 +889,9 @@
 			"fx"			"venomspiral"
 			"sprite"		"sprites/glow04_noz.vmt"
 			"beamcolor"		"60 255 60 255"
+			"upgradesto"	"plague"
+			"upgradecost"	"3"
 			"dropweight"	"5"
-			"aura"			"drip"
 		}
 		"sandstorm"
 		{
@@ -924,7 +909,6 @@
 			"sprite"		"sprites/steam1.vmt"
 			"speed"			"1.2"
 			"dropweight"	"8"
-			"aura"			"dust"
 		}
 		"ash"
 		{
@@ -941,7 +925,6 @@
 			"cooldown"		"8.0"
 			"range"			"600"
 			"dropweight"	"8"
-			"aura"			"smoke"
 		}
 		"ruby"
 		{
@@ -960,7 +943,6 @@
 			"fx"			"gemtwin"
 			"beamcolor"		"255 0 60 255"
 			"dropweight"	"8"
-			"aura"			"glint"
 		}
 		"emerald"
 		{
@@ -979,7 +961,6 @@
 			"fx"			"gemprism"
 			"beamcolor"		"0 255 100 255"
 			"dropweight"	"8"
-			"aura"			"glint"
 		}
 		"sapphire"
 		{
@@ -998,7 +979,6 @@
 			"fx"			"gemstar"
 			"beamcolor"		"0 90 255 255"
 			"dropweight"	"8"
-			"aura"			"glint"
 		}
 		"amethyst"
 		{
@@ -1017,7 +997,6 @@
 			"fx"			"gemorbit"
 			"beamcolor"		"170 0 255 255"
 			"dropweight"	"8"
-			"aura"			"glint"
 		}
 		"pulse"
 		{
@@ -1036,8 +1015,9 @@
 			"fx"			"pulse"
 			"sprite"		"sprites/plasmaember.vmt"
 			"beamcolor"		"0 200 255 255"
+			"upgradesto"	"ion"
+			"upgradecost"	"3"
 			"dropweight"	"6"
-			"aura"			"sparks"
 		}
 		"ion"
 		{
@@ -1056,7 +1036,6 @@
 			"fx"			"ion"
 			"beamcolor"		"120 255 255 255"
 			"dropweight"	"3"
-			"aura"			"sparks"
 		}
 		"nova"
 		{
@@ -1074,8 +1053,9 @@
 			"fx"			"nova"
 			"sprite"		"sprites/light_glow03.vmt"
 			"glow"			"1"
+			"upgradesto"	"supernova"
+			"upgradecost"	"3"
 			"dropweight"	"3"
-			"aura"			"sun"
 		}
 		"supernova"
 		{
@@ -1094,7 +1074,6 @@
 			"sprite"		"sprites/light_glow03.vmt"
 			"glow"			"1"
 			"dropweight"	"1"
-			"aura"			"sun"
 		}
 		"eclipse"
 		{
@@ -1111,7 +1090,6 @@
 			"range"			"800"
 			"sprite"		"sprites/purpleglow1.vmt"
 			"dropweight"	"2"
-			"aura"			"eclipse"
 		}
 		"aurora"
 		{
@@ -1127,7 +1105,6 @@
 			"range"			"2000"
 			"fx"			"aurora"
 			"dropweight"	"5"
-			"aura"			"prism"
 		}
 		"comet"
 		{
@@ -1145,7 +1122,6 @@
 			"fx"			"comet"
 			"sprite"		"sprites/flamelet1.vmt"
 			"dropweight"	"5"
-			"aura"			"flames"
 		}
 		"rocket"
 		{
@@ -1160,7 +1136,6 @@
 			"value"			"650"
 			"falldamage"	"0.5"
 			"dropweight"	"6"
-			"aura"			"bounce"
 		}
 		"bunny"
 		{
@@ -1175,7 +1150,6 @@
 			"value"			"420"
 			"speed"			"1.2"
 			"dropweight"	"12"
-			"aura"			"bounce"
 		}
 		"kangaroo"
 		{
@@ -1190,7 +1164,6 @@
 			"value"			"520"
 			"falldamage"	"0.6"
 			"dropweight"	"8"
-			"aura"			"bounce"
 		}
 		"feather"
 		{
@@ -1205,7 +1178,6 @@
 			"value"			"90"
 			"jumpboost"		"260"
 			"dropweight"	"12"
-			"aura"			"float"
 		}
 		"parachute"
 		{
@@ -1219,7 +1191,6 @@
 			"power"			"feather"
 			"value"			"150"
 			"dropweight"	"12"
-			"aura"			"float"
 		}
 		"moon"
 		{
@@ -1233,7 +1204,6 @@
 			"power"			"gravity"
 			"value"			"0.4"
 			"dropweight"	"8"
-			"aura"			"float"
 		}
 		"jupiter"
 		{
@@ -1249,7 +1219,6 @@
 			"speed"			"0.9"
 			"falldamage"	"0.5"
 			"dropweight"	"4"
-			"aura"			"float"
 		}
 		"lightning"
 		{
@@ -1264,7 +1233,6 @@
 			"value"			"1.8"
 			"jumpboost"		"260"
 			"dropweight"	"6"
-			"aura"			"bolt"
 		}
 		"cheetah"
 		{
@@ -1278,7 +1246,6 @@
 			"power"			"speed"
 			"value"			"1.6"
 			"dropweight"	"10"
-			"aura"			"dust"
 		}
 		"marathon"
 		{
@@ -1292,7 +1259,6 @@
 			"power"			"sprint"
 			"speed"			"1.15"
 			"dropweight"	"12"
-			"aura"			"speed"
 		}
 		"ghost"
 		{
@@ -1307,7 +1273,6 @@
 			"value"			"40"
 			"speed"			"1.2"
 			"dropweight"	"4"
-			"aura"			"wisp"
 		}
 		"shadow"
 		{
@@ -1322,7 +1287,6 @@
 			"value"			"70"
 			"falldamage"	"0.5"
 			"dropweight"	"5"
-			"aura"			"wisp"
 		}
 		"warp"
 		{
@@ -1338,7 +1302,6 @@
 			"range"			"1200"
 			"beamcolor"		"0 255 200 255"
 			"dropweight"	"4"
-			"aura"			"blink"
 		}
 		"rift"
 		{
@@ -1354,7 +1317,6 @@
 			"range"			"8000"
 			"beamcolor"		"150 0 255 255"
 			"dropweight"	"3"
-			"aura"			"vortex"
 		}
 		"titan"
 		{
@@ -1369,7 +1331,6 @@
 			"value"			"0.4"
 			"speed"			"0.85"
 			"dropweight"	"3"
-			"aura"			"shield"
 		}
 		"guardian"
 		{
@@ -1383,7 +1344,6 @@
 			"power"			"armor"
 			"value"			"4"
 			"dropweight"	"6"
-			"aura"			"shield"
 		}
 		"medic"
 		{
@@ -1401,7 +1361,6 @@
 			"fx"			"healbeam"
 			"beamcolor"		"255 80 80 255"
 			"dropweight"	"6"
-			"aura"			"halo"
 		}
 		"lifeline"
 		{
@@ -1415,7 +1374,6 @@
 			"power"			"heal"
 			"value"			"4"
 			"dropweight"	"5"
-			"aura"			"heart"
 		}
 		"vampire"
 		{
@@ -1432,7 +1390,6 @@
 			"jumpboost"		"300"
 			"playercolor"	"160 120 120 255"
 			"dropweight"	"3"
-			"aura"			"drain"
 		}
 		"tank"
 		{
@@ -1447,7 +1404,6 @@
 			"value"			"0.6"
 			"falldamage"	"0.2"
 			"dropweight"	"6"
-			"aura"			"shield"
 		}
 		"gravitron"
 		{
@@ -1465,7 +1421,6 @@
 			"fx"			"gravwell"
 			"beamcolor"		"255 200 0 255"
 			"dropweight"	"3"
-			"aura"			"float"
 		}
 		"tornado"
 		{
@@ -1484,7 +1439,6 @@
 			"sprite"		"sprites/steam1.vmt"
 			"speed"			"1.2"
 			"dropweight"	"5"
-			"aura"			"smoke"
 		}
 		"diamond"
 		{
@@ -1499,7 +1453,6 @@
 			"value"			"500"
 			"glow"			"1"
 			"dropweight"	"0"
-			"aura"			"gold"
 		}
 		"platinum"
 		{
@@ -1512,8 +1465,9 @@
 			"handangles"	"0 -90 0"
 			"power"			"gold"
 			"value"			"350"
+			"upgradesto"	"diamond"
+			"upgradecost"	"3"
 			"dropweight"	"1"
-			"aura"			"gold"
 		}
 		"bronze"
 		{
@@ -1526,8 +1480,9 @@
 			"handangles"	"0 -90 0"
 			"power"			"gold"
 			"value"			"100"
+			"upgradesto"	"gold"
+			"upgradecost"	"3"
 			"dropweight"	"6"
-			"aura"			"gold"
 		}
 		"party"
 		{
@@ -1541,7 +1496,6 @@
 			"power"			"none"
 			"glow"			"1"
 			"dropweight"	"8"
-			"aura"			"confetti"
 		}
 		"midnight"
 		{
@@ -1554,7 +1508,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"10"
-			"aura"			"stars"
 		}
 		"crimson"
 		{
@@ -1567,7 +1520,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"10"
-			"aura"			"rising"
 		}
 		"lime"
 		{
@@ -1580,7 +1532,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"10"
-			"aura"			"rising"
 		}
 		"cyan"
 		{
@@ -1593,7 +1544,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"10"
-			"aura"			"pulse"
 		}
 		"sunset"
 		{
@@ -1606,7 +1556,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"8"
-			"aura"			"dusk"
 		}
 		"matrix"
 		{
@@ -1620,7 +1569,6 @@
 			"power"			"none"
 			"glow"			"1"
 			"dropweight"	"4"
-			"aura"			"code"
 		}
 		"phantom"
 		{
@@ -1635,6 +1583,109 @@
 			"playercolor"	"60 255 120 120"
 			"dropweight"	"3"
 			"aura"			"phase"
+		}
+		// Top tier: made at the Power Booth from 3 of the emblem below them (dropweight 0: never dropped).
+		"volcano"
+		{
+			"name"			"Volcano"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"3"
+			"color"			"200 40 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"blast"
+			"value"			"80"
+			"cooldown"		"2.5"
+			"range"			"1500"
+			"fx"			"eruption"
+			"sprite"		"sprites/flamelet1.vmt"
+			"beamcolor"		"255 90 20 255"
+			"secondary"		"fireball"
+			"secondaryvalue"	"140"
+			"secondarycooldown"	"5.0"
+			"dropweight"	"0"
+		}
+		"permafrost"
+		{
+			"name"			"Permafrost"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"150 230 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"shot"
+			"value"			"15"
+			"cooldown"		"0.9"
+			"range"			"1200"
+			"dmgtype"		"drown"
+			"freeze"		"2.0"
+			"fx"			"permafrost"
+			"sprite"		"sprites/blueglow2.vmt"
+			"beamcolor"		"190 240 255 255"
+			"secondary"		"icestorm"
+			"secondaryvalue"	"40"
+			"secondarycooldown"	"5.0"
+			"dropweight"	"0"
+		}
+		"maelstrom"
+		{
+			"name"			"Maelstrom"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"10"
+			"color"			"0 40 200 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"shot"
+			"value"			"8"
+			"cooldown"		"0.4"
+			"range"			"900"
+			"dmgtype"		"drown"
+			"knockback"		"-450"
+			"fx"			"maelstrom"
+			"sprite"		"sprites/glow04_noz.vmt"
+			"beamcolor"		"20 90 255 255"
+			"dropweight"	"0"
+		}
+		"tempest"
+		{
+			"name"			"Tempest"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"10"
+			"color"			"120 140 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"shock"
+			"value"			"25"
+			"cooldown"		"1.5"
+			"range"			"1800"
+			"chain"			"3"
+			"fx"			"tempest"
+			"beamcolor"		"160 180 255 255"
+			"secondary"		"bigshot"
+			"secondaryvalue"	"60"
+			"secondarycooldown"	"5.0"
+			"dropweight"	"0"
+		}
+		"plague"
+		{
+			"name"			"Plague"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"5"
+			"color"			"120 200 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"smog"
+			"value"			"5"
+			"duration"		"8.0"
+			"cooldown"		"8.0"
+			"range"			"700"
+			"beamcolor"		"140 220 0 255"
+			"dropweight"	"0"
 		}
 	}
 
