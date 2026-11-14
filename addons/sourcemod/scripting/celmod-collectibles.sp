@@ -233,6 +233,7 @@ ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
 ConVar g_cvGiftChance;
+ConVar g_cvGiftList;
 ConVar g_cvXPEvent;
 ConVar g_cvXPReward;
 ConVar g_cvXPBox;
@@ -386,6 +387,7 @@ public void OnPluginStart()
 	g_cvXPBox = CreateConVar("cm_tactics_xp_box", "10", "Tactics experience for winning an emblem box from an emblem drop.", _, true, 0.0);
 	g_cvXPUpgrade = CreateConVar("cm_tactics_xp_upgrade", "15", "Tactics experience for upgrading emblems at the Power Booth.", _, true, 0.0);
 	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
+	g_cvGiftList = CreateConVar("cm_emblem_gift_list", "fire,water,speed,orange,grey,peach,pink,crimson,lime,cyan", "The emblems the one time free emblem is picked from (ids, comma separated): the basic solid colour ones.");
 	g_cvGiftDays = CreateConVar("cm_emblem_gift_days", "3", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
 
 	g_cvShowSelf = CreateConVar("cm_emblem_show_self", "0", "Testing only: 1 also shows a player their own held emblem (it will float in their first person view).", _, true, 0.0, true, 1.0);
@@ -734,7 +736,8 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 		return;
 	}
 
-	int iItem = PickRandomItem(KIND_EMBLEM);
+	// Only ever one of the basic solid colour emblems (cm_emblem_gift_list), never a rare or fancy one.
+	int iItem = PickGiftEmblem();
 
 	if (iItem == -1)
 	{
@@ -769,6 +772,31 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 	Inv_SetInt(iClient, "emblem_gift", 1);
 
 	Cel_PrintToChat(iClient, "Something new has appeared in your build... a {green}%s{default} emblem! Press {green}E{default} on it to enable it.", g_Items[iItem].sName);
+}
+
+// A random emblem from cm_emblem_gift_list, or -1 if none of its ids exist.
+int PickGiftEmblem()
+{
+	char sList[512], sIds[32][32];
+	int iChoices[32], iCount = 0;
+
+	g_cvGiftList.GetString(sList, sizeof(sList));
+
+	int iIds = ExplodeString(sList, ",", sIds, sizeof(sIds), sizeof(sIds[]));
+
+	for (int i = 0; i < iIds; i++)
+	{
+		TrimString(sIds[i]);
+
+		int iItem = FindItem(KIND_EMBLEM, sIds[i]);
+
+		if (iItem != -1)
+		{
+			iChoices[iCount++] = iItem;
+		}
+	}
+
+	return iCount > 0 ? iChoices[GetRandomInt(0, iCount - 1)] : -1;
 }
 
 //Commands:

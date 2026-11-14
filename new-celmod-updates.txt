@@ -220,3 +220,5 @@
 		 - Emblem boxes can be picked up with the gravity gun again. Hold one when the map changes (or get it into your land)
 		   and its emblem is yours; picking one up tells you which emblem is inside.
 		 - Looking at a player shows "<name> Money: <amount>" and "Tactics Lvl: <level>" on the HUD, like the original server.
+		 - The one time free emblem that appears in your build is now always one of the basic solid colour emblems (Fire,
+		   Water, Speed, Orange, Grey, Peach, Pink, Crimson, Lime, Cyan; cm_emblem_gift_list), never a rare one. Still one per player.
