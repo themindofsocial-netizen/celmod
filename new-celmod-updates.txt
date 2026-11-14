@@ -192,3 +192,4 @@
 		 - Admins follow event and restricted area rules like everyone now. !zonebypass turns the rules off for you (and back on).
 		 - Fixed: land skins were wiped right after being drawn, because clearing old decals reached players after the new ones.
 		   Admins can check what land skins see with !landskin debug.
+		 - Land skins write their own decal materials when the server is missing them, so they work without uploading the folder.

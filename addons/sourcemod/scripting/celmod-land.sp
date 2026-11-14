@@ -1570,11 +1570,96 @@ int g_iSkinDecal[LANDSKIN_COUNT + 1];
 
 #define LANDSKIN_DECAL_SCALE 0.5
 
+//The texture each land skin uses (stock HL2 textures every player has). The decal materials are made from these.
+char g_sSkinTexture[LANDSKIN_COUNT][] =
+{
+	"nature/grassfloor002a",
+	"nature/grassfloor001a",
+	"nature/grassfloor003a",
+	"nature/dirtfloor001a",
+	"nature/dirtfloor002a",
+	"nature/dirtfloor003a",
+	"nature/dirtfloor004a",
+	"nature/dirtfloor013a",
+	"dev/water",
+	"nature/toxicslime002a",
+	"tile/tilefloor001a",
+	"tile/tilefloor003a",
+	"tile/tilefloor005a",
+	"tile/tilefloor007a",
+	"tile/tilefloor009b",
+	"tile/tilefloor010a",
+	"tile/tilefloor011a",
+	"metal/citadel_metalwall078a",
+	"dev/dev_corrugatedmetal",
+	"concrete/concretefloor005a",
+	"concrete/concretefloor008b",
+	"concrete/concretefloor012a",
+	"concrete/concretefloor023a",
+	"concrete/concretefloor033a",
+	"skybox/sky_day01_05up",
+	"vgui/progressbar"
+};
+
+//Writes any land skin decal material the server is missing (materials/celmod/landskins/decal/sN.vmt), so land skins
+//work even when that folder wasn't uploaded. Players download them from the server like any other custom file.
+void WriteMissingSkinMaterials()
+{
+	char sFile[PLATFORM_MAX_PATH];
+	int iWritten = 0;
+
+	static const char sDirs[][] = { "materials/celmod", "materials/celmod/landskins", "materials/celmod/landskins/decal" };
+
+	for (int i = 0; i < sizeof(sDirs); i++)
+	{
+		if (!DirExists(sDirs[i], false))
+		{
+			CreateDirectory(sDirs[i], 511, false);
+		}
+	}
+
+	for (int i = 1; i <= LANDSKIN_COUNT; i++)
+	{
+		Format(sFile, sizeof(sFile), "materials/celmod/landskins/decal/s%d.vmt", i);
+
+		if (FileExists(sFile, false))
+		{
+			continue;
+		}
+
+		File fMaterial = OpenFile(sFile, "w", false);
+
+		if (fMaterial == null)
+		{
+			LogError("|CelMod| Could not write the land skin material '%s'. Upload materials/celmod/landskins/decal from the release.", sFile);
+			continue;
+		}
+
+		fMaterial.WriteLine("// |CelMod| land skin s%d as a floor decal (used by !landskin). Written by celmod-land.", i);
+		fMaterial.WriteLine("\"LightmappedGeneric\"");
+		fMaterial.WriteLine("{");
+		fMaterial.WriteLine("\t\"$basetexture\"\t\"%s\"", g_sSkinTexture[i - 1]);
+		fMaterial.WriteLine("\t\"$decal\"\t\t\"1\"");
+		fMaterial.WriteLine("\t\"$decalscale\"\t\"%.1f\"", LANDSKIN_DECAL_SCALE);
+		fMaterial.WriteLine("}");
+
+		delete fMaterial;
+		iWritten++;
+	}
+
+	if (iWritten > 0)
+	{
+		LogMessage("|CelMod| Wrote %d missing land skin decal materials to materials/celmod/landskins/decal. If players download files from a FastDL website (sv_downloadurl), copy that folder there too.", iWritten);
+	}
+}
+
 //Sends the decal materials to players, and works out each texture's width, which sets a tile's size (its width in
 //pixels times the decal scale), so the tiles are laid edge to edge.
 void PrecacheLandSkins()
 {
 	char sFile[PLATFORM_MAX_PATH], sLine[256], sTexture[PLATFORM_MAX_PATH];
+
+	WriteMissingSkinMaterials();
 
 	for (int i = 1; i <= LANDSKIN_COUNT; i++)
 	{
