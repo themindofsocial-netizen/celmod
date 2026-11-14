@@ -7721,6 +7721,11 @@ void LaunchCelWepProjectile(int iClient, int iItem, float fStart[3], float fAngl
 	if (HasEntProp(iShot, Prop_Data, "m_hPhysicsAttacker"))
 	{
 		SetEntPropEnt(iShot, Prop_Data, "m_hPhysicsAttacker", iClient);
+	}
+
+	// Not every game has this one (HL2DM props don't), so it is only set where it exists.
+	if (HasEntProp(iShot, Prop_Data, "m_flLastPhysicsAttackerTime"))
+	{
 		SetEntPropFloat(iShot, Prop_Data, "m_flLastPhysicsAttackerTime", GetGameTime() + 30.0);
 	}
 
