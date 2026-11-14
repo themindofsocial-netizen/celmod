@@ -994,13 +994,15 @@
 			"power"			"none"
 			"dropweight"	"4"
 		}
-		// Decorative: almost invisible, only its flashlight shadow and a faint shimmer up close give it away, no power.
+		// Decorative: never drawn (phys8_inv.mdl, $no_draw materials) but still casts shadows; a faint copy shows up close, no power.
 		"invisible"
 		{
 			"name"			"Invisible"
-			"model"			"models/celmod/phys8.mdl"
+			"model"			"models/celmod/phys8_inv.mdl"
 			"skin"			"0"
-			"color"			"255 255 255 1"
+			"color"			"255 255 255 255"
+			"nearmodel"		"models/celmod/phys8.mdl"
+			"materials"		"materials/models/celmod/emblemi"
 			"nearalpha"		"45"
 			"neardistance"	"96"
 			"handscale"		"1.0"

@@ -3444,6 +3444,13 @@ int SpawnItemEntity(int iClient, int iItem, float fOrigin[3], float fAngles[3])
 
 	AttachShimmer(iEntity, iItem, 0);
 
+	// A cel is drawn see-through (additive) by Cel_SetColor, and see-through models cast no flashlight shadow, so the
+	// never-drawn Invisible emblem is set back to a normal, opaque render to keep its shadow.
+	if (g_Items[iItem].sNearModel[0] != '\0')
+	{
+		SetEntityRenderMode(iEntity, RENDER_NORMAL);
+	}
+
 	if (g_Items[iItem].bGlow)
 	{
 		SetEntityRenderFx(iEntity, RENDERFX_GLOWSHELL);

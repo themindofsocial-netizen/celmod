@@ -24,6 +24,10 @@ if count == 0:
     sys.exit("phys8.mdl does not use models/celmod/emblem3/ materials")
 
 data = data.replace(OLD, NEW).replace(OLD.replace(b"\\", b"/"), NEW.replace(b"\\", b"/"))
+# The model's own name (64 bytes at offset 12) becomes phys8_inv.mdl too.
+name = b"celmod/phys8_inv.mdl"
+data = data[:12] + name + b"\0" * (64 - len(name)) + data[76:]
+
 os.makedirs(DST, exist_ok=True)
 open(os.path.join(DST, "phys8_inv.mdl"), "wb").write(data)
 
