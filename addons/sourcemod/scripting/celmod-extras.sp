@@ -57,6 +57,7 @@ ConVar g_cvHoopieBounce;
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("Cel_GetZoneType");
+	MarkNativeAsOptional("Cel_IsZoneExempt");
 	MarkNativeAsOptional("Cel_AddPlayerStat");
 	MarkNativeAsOptional("Cel_SetPlayerStat");
 	
@@ -1816,7 +1817,7 @@ public void Hook_TeleportTouch(int iEntity, int iOther)
 	fCheck = fOrigin;
 	fCheck[2] += 32.0;
 	
-	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && Cel_GetZoneType(fCheck) != CEL_ZONE_NONE && !CheckCommandAccess(iOther, "celmod_zone_exempt", ADMFLAG_SLAY, true))
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && Cel_GetZoneType(fCheck) != CEL_ZONE_NONE && !Cel_ZoneExempt(iOther))
 	{
 		Cel_PrintToChat(iOther, "This teleport pad leads into an event area, so it does not work.");
 		return;

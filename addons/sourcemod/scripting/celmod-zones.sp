@@ -15,7 +15,8 @@
  *				   (speed, sprint, gravity, jump, feather), and nobody can phase, blink, open portals or take a
  *				   teleport pad into either kind of area. Put event emblems (!eventemblem) at the end of the course.
  *
- * Admins (slay flag) are never affected.
+ * Admins are held to the same rules, so they see events the way players do. !zonebypass (slay flag) turns the
+ * rules off for that admin until they use it again or leave.
  */
 
 #define MAX_ZONES 64
@@ -24,6 +25,7 @@
 #define ZONE_EVENT 1
 
 bool g_bCornerSet[MAXPLAYERS + 1];
+bool g_bBypass[MAXPLAYERS + 1];
 
 char g_sMap[64];
 char g_sZoneDB[PLATFORM_MAX_PATH];
@@ -50,10 +52,19 @@ char g_sEventAllowed[][] =
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_GetZoneType", Native_GetZoneType);
+	CreateNative("Cel_IsZoneExempt", Native_IsZoneExempt);
 	
 	RegPluginLibrary("celmod_zones");
 	
 	return APLRes_Success;
+}
+
+//Whether a player has the area rules turned off (an admin's !zonebypass).
+public int Native_IsZoneExempt(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1);
+	
+	return iClient > 0 && iClient <= MaxClients && g_bBypass[iClient];
 }
 
 //Which kind of area a point is in: CEL_ZONE_NONE, CEL_ZONE_RESTRICTED or CEL_ZONE_EVENT.
@@ -83,6 +94,7 @@ public void OnPluginStart()
 	
 	RegAdminCmd("v_zone", Command_Zone, ADMFLAG_SLAY, "|CelMod| Creates an event or restricted area. Use it at one corner, then at the opposite corner.");
 	RegAdminCmd("v_delzone", Command_DelZone, ADMFLAG_SLAY, "|CelMod| Deletes the area you are standing in.");
+	RegAdminCmd("v_zonebypass", Command_ZoneBypass, ADMFLAG_SLAY, "|CelMod| Turns the event and restricted area rules off for you (use again to turn them back on).");
 	RegConsoleCmd("v_zones", Command_Zones, "|CelMod| Lists the event and restricted areas on this map.");
 	
 	//Every command passes through here, so building commands can be refused inside an area.
@@ -115,7 +127,27 @@ public void OnMapStart()
 public void OnClientPutInServer(int iClient)
 {
 	g_bCornerSet[iClient] = false;
+	g_bBypass[iClient] = false;
 	g_fNextNotice[iClient] = 0.0;
+}
+
+public Action Command_ZoneBypass(int iClient, int iArgs)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	g_bBypass[iClient] = !g_bBypass[iClient];
+	
+	if (g_bBypass[iClient])
+	{
+		Cel_ReplyToCommand(iClient, "Area bypass {green}on{default}: event and restricted areas don't apply to you. Type {green}[tag]zonebypass{default} again to play by the rules.");
+	} else {
+		Cel_ReplyToCommand(iClient, "Area bypass {green}off{default}: event and restricted areas apply to you like everyone else.");
+	}
+	
+	return Plugin_Handled;
 }
 
 void LoadZones()
@@ -208,7 +240,7 @@ int ZoneOfClient(int iClient)
 
 bool IsExempt(int iClient)
 {
-	return CheckCommandAccess(iClient, "celmod_zone_exempt", ADMFLAG_SLAY, true);
+	return g_bBypass[iClient];
 }
 
 void Notice(int iClient, const char[] sMessage)
@@ -248,6 +280,13 @@ public Action Listener_AnyCommand(int iClient, const char[] sCommand, int iArgs)
 	int iZone = ZoneOfClient(iClient);
 	
 	if (iZone == -1 || IsExempt(iClient))
+	{
+		return Plugin_Continue;
+	}
+	
+	//Admins can always manage areas and turn the bypass on, even standing inside one.
+	if ((StrEqual(sLower, "v_zonebypass") || StrEqual(sLower, "v_zone") || StrEqual(sLower, "v_delzone") || StrEqual(sLower, "v_zones"))
+		&& CheckCommandAccess(iClient, "celmod_zone_admin", ADMFLAG_SLAY, true))
 	{
 		return Plugin_Continue;
 	}

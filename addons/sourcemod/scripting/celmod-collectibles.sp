@@ -293,6 +293,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	MarkNativeAsOptional("Cel_AddPlayerStat");
 	MarkNativeAsOptional("Cel_SetPlayerStat");
 	MarkNativeAsOptional("Cel_GetZoneType");
+	MarkNativeAsOptional("Cel_IsZoneExempt");
 	CreateNative("Cel_GetRewardLabel", Native_GetRewardLabel);
 	MarkNativeAsOptional("CG_ClearInventory");
 	MarkNativeAsOptional("CG_PlayActivity");
@@ -1650,9 +1651,10 @@ int ZoneTypeAt(float fPos[3])
 	return Cel_GetZoneType(fPos);
 }
 
+// Only an admin with !zonebypass on; otherwise admins follow the area rules like everyone.
 bool IsZoneExempt(int iClient)
 {
-	return CheckCommandAccess(iClient, "celmod_zone_exempt", ADMFLAG_SLAY, true);
+	return Cel_ZoneExempt(iClient);
 }
 
 // True when a point is inside an event or restricted area that the player is not allowed to get into by power.

@@ -38,6 +38,20 @@ int g_iTypeCount;
 int g_iTypeMax[MAX_PADTYPES];
 int g_iTypeSkin[MAX_PADTYPES];
 
+#define MAX_DUNGEON 64
+
+int g_iDungeonCount;
+int g_iDungeonType[MAX_DUNGEON];
+int g_iDungeonMax[MAX_DUNGEON];
+float g_fDungeonInterval[MAX_DUNGEON];
+float g_fDungeonOrigin[MAX_DUNGEON][3];
+float g_fDungeonYaw[MAX_DUNGEON];
+float g_fDungeonNext[MAX_DUNGEON];
+int g_iDungeonOf[MAXENTITIES + 1] = { -1, ... };
+int g_iBeamSprite;
+ConVar g_cvDungeonInterval;
+ConVar g_cvDungeonRange;
+
 ArrayList g_alPads;
 StringMap g_smHookedClasses;
 
@@ -79,7 +93,13 @@ public void OnPluginStart()
 
 	LoadPadTypes();
 
-	CreateTimer(1.0, Timer_SpawnPads, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+	g_cvDungeonInterval = CreateConVar("cm_dungeon_interval", "15.0", "Default seconds between a dungeon spawner's spawns.", _, true, 2.0);
+	g_cvDungeonRange = CreateConVar("cm_dungeon_range", "2000.0", "Dungeon spawners only spawn while a player is this close (0 = always).", _, true, 0.0);
+
+	RegAdminCmd("v_dungeonspawner", Command_DungeonSpawner, ADMFLAG_SLAY, "|CelMod| Places a dungeon enemy spawner where you aim: <enemy> [max alive] [seconds between spawns]. Saved for this map.");
+	RegAdminCmd("v_dungeonspawners", Command_DungeonSpawners, ADMFLAG_SLAY, "|CelMod| Lists this map's dungeon spawners and shows where they are.");
+	RegAdminCmd("v_deldungeonspawner", Command_DelDungeonSpawner, ADMFLAG_SLAY, "|CelMod| Removes the dungeon spawner nearest to where you aim, or one by number (all = every one on this map).");
+	RegAdminCmd("v_dungeonclear", Command_DungeonClear, ADMFLAG_SLAY, "|CelMod| Removes every enemy the dungeon spawners have spawned (the spawners stay).");
 
 	if (g_bLate)
 	{
@@ -101,6 +121,9 @@ public void OnMapStart()
 	PrecacheSound(SPAWNPAD_SOUND, true);
 
 	g_alPads.Clear();
+
+	g_iBeamSprite = PrecacheModel("sprites/laserbeam.vmt", true);
+	LoadDungeon();
 
 	CreateTimer(1.0, Timer_SpawnPads, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 }
@@ -456,6 +479,7 @@ public void OnEntityCreated(int iEntity, const char[] sClassname)
 	{
 		g_iPadType[iEntity] = -1;
 		g_iSpawnedBy[iEntity] = INVALID_ENT_REFERENCE;
+		g_iDungeonOf[iEntity] = -1;
 
 		RequestFrame(Frame_CheckPad, EntIndexToEntRef(iEntity));
 	}
@@ -516,12 +540,15 @@ public void OnEntityDestroyed(int iEntity)
 
 	g_iPadType[iEntity] = -1;
 	g_iSpawnedBy[iEntity] = INVALID_ENT_REFERENCE;
+	g_iDungeonOf[iEntity] = -1;
 }
 
 public Action Timer_SpawnPads(Handle hTimer)
 {
 	float fNow = GetGameTime();
 	static float fNextSpawn[MAXENTITIES + 1];
+
+	ThinkDungeon(fNow);
 
 	for (int i = 0; i < g_alPads.Length; i++)
 	{
@@ -598,11 +625,40 @@ void SpawnEnemy(int iPad, int iType)
 {
 	float fOrigin[3], fAngles[3];
 
-	int iEnemy = CreateEntityByName(g_sTypeClass[iType]);
+	GetEntPropVector(iPad, Prop_Data, "m_vecAbsOrigin", fOrigin);
+	GetEntPropVector(iPad, Prop_Data, "m_angAbsRotation", fAngles);
+
+	fOrigin[2] += 16.0;
+
+	int iEnemy = SpawnEnemyAt(iType, fOrigin, fAngles[1]);
 
 	if (iEnemy == -1)
 	{
 		return;
+	}
+
+	//Enemies from a player's pad never count toward kills.
+	g_iSpawnedBy[iEnemy] = EntIndexToEntRef(iPad);
+
+	EmitAmbientSound(SPAWNPAD_SOUND, fOrigin, iPad, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+}
+
+//Creates one enemy of a kind (spawnpads.txt) standing at a spot.
+int SpawnEnemyAt(int iType, float fOrigin[3], float fYaw)
+{
+	float fAngles[3];
+
+	int iEnemy = CreateEntityByName(g_sTypeClass[iType]);
+
+	if (iEnemy == -1)
+	{
+		return -1;
+	}
+
+	if (iEnemy > MAXENTITIES)
+	{
+		AcceptEntityInput(iEnemy, "Kill");
+		return -1;
 	}
 
 	//"key value;key value" from spawnpads.txt.
@@ -622,14 +678,7 @@ void SpawnEnemy(int iPad, int iType)
 		}
 	}
 
-	GetEntPropVector(iPad, Prop_Data, "m_vecAbsOrigin", fOrigin);
-	GetEntPropVector(iPad, Prop_Data, "m_angAbsRotation", fAngles);
-
-	fOrigin[2] += 16.0;
-	fAngles[0] = 0.0;
-	fAngles[2] = 0.0;
-
-	g_iSpawnedBy[iEnemy] = EntIndexToEntRef(iPad);
+	fAngles[1] = fYaw;
 
 	TeleportEntity(iEnemy, fOrigin, fAngles, NULL_VECTOR);
 	DispatchSpawn(iEnemy);
@@ -640,5 +689,419 @@ void SpawnEnemy(int iPad, int iType)
 		AcceptEntityInput(iEnemy, "Ignite");
 	}
 
-	EmitAmbientSound(SPAWNPAD_SOUND, fOrigin, iPad, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+	return iEnemy;
+}
+
+/*
+ * Dungeon spawners: admins place them in a map's dungeon (!dungeonspawner), and they keep enemies coming for
+ * players to fight. Unlike a player's spawn pad, kills of these enemies count toward spawn pads. They are
+ * invisible, saved per map in data/celmod/dungeons/<map>.txt, and only spawn while a player is nearby.
+ */
+
+void DungeonPath(char[] sPath, int iMaxLength)
+{
+	char sMap[PLATFORM_MAX_PATH];
+
+	GetCurrentMap(sMap, sizeof(sMap));
+	GetMapDisplayName(sMap, sMap, sizeof(sMap));
+
+	BuildPath(Path_SM, sPath, iMaxLength, "data/celmod/dungeons");
+
+	if (!DirExists(sPath))
+	{
+		CreateDirectory(sPath, 511);
+	}
+
+	BuildPath(Path_SM, sPath, iMaxLength, "data/celmod/dungeons/%s.txt", sMap);
+}
+
+void LoadDungeon()
+{
+	char sPath[PLATFORM_MAX_PATH], sEnemy[64];
+
+	g_iDungeonCount = 0;
+
+	for (int i = 0; i <= MAXENTITIES; i++)
+	{
+		g_iDungeonOf[i] = -1;
+	}
+
+	DungeonPath(sPath, sizeof(sPath));
+
+	KeyValues kvDungeon = new KeyValues("Dungeon");
+
+	if (!kvDungeon.ImportFromFile(sPath) || !kvDungeon.GotoFirstSubKey())
+	{
+		delete kvDungeon;
+		return;
+	}
+
+	do
+	{
+		kvDungeon.GetString("enemy", sEnemy, sizeof(sEnemy), "");
+
+		int iType = FindPadType(sEnemy);
+
+		if (iType == -1 || g_sTypeClass[iType][0] == '\0' || g_iDungeonCount >= MAX_DUNGEON)
+		{
+			continue;
+		}
+
+		int i = g_iDungeonCount++;
+
+		g_iDungeonType[i] = iType;
+		kvDungeon.GetVector("origin", g_fDungeonOrigin[i]);
+		g_fDungeonYaw[i] = kvDungeon.GetFloat("yaw", 0.0);
+		g_iDungeonMax[i] = kvDungeon.GetNum("max", g_iTypeMax[iType]);
+		g_fDungeonInterval[i] = kvDungeon.GetFloat("interval", 0.0);
+		g_fDungeonNext[i] = 0.0;
+	}
+	while (kvDungeon.GotoNextKey());
+
+	delete kvDungeon;
+}
+
+void SaveDungeon()
+{
+	char sPath[PLATFORM_MAX_PATH], sKey[8];
+
+	DungeonPath(sPath, sizeof(sPath));
+
+	KeyValues kvDungeon = new KeyValues("Dungeon");
+
+	for (int i = 0; i < g_iDungeonCount; i++)
+	{
+		IntToString(i + 1, sKey, sizeof(sKey));
+
+		kvDungeon.JumpToKey(sKey, true);
+		kvDungeon.SetString("enemy", g_sTypeAlias[g_iDungeonType[i]]);
+		kvDungeon.SetVector("origin", g_fDungeonOrigin[i]);
+		kvDungeon.SetFloat("yaw", g_fDungeonYaw[i]);
+		kvDungeon.SetNum("max", g_iDungeonMax[i]);
+		kvDungeon.SetFloat("interval", g_fDungeonInterval[i]);
+		kvDungeon.GoBack();
+	}
+
+	if (!kvDungeon.ExportToFile(sPath))
+	{
+		LogError("|CelMod| Could not write '%s'.", sPath);
+	}
+
+	delete kvDungeon;
+}
+
+public Action Command_DungeonSpawner(int iClient, int iArgs)
+{
+	char sArg[64];
+
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]dungeonspawner{default} <enemy> [max alive] [seconds between spawns]");
+		ListEnemyKinds(iClient);
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sArg, sizeof(sArg));
+
+	int iType = FindPadType(sArg);
+
+	if (iType == -1 || g_sTypeClass[iType][0] == '\0')
+	{
+		Cel_ReplyToCommand(iClient, "There is no enemy called {green}%s{default}.", sArg);
+		ListEnemyKinds(iClient);
+		return Plugin_Handled;
+	}
+
+	if (g_iDungeonCount >= MAX_DUNGEON)
+	{
+		Cel_ReplyToCommand(iClient, "This map already has {green}%d{default} dungeon spawners, the most it can have.", MAX_DUNGEON);
+		return Plugin_Handled;
+	}
+
+	int i = g_iDungeonCount++;
+
+	g_iDungeonType[i] = iType;
+	g_iDungeonMax[i] = g_iTypeMax[iType];
+	g_fDungeonInterval[i] = 0.0;
+	g_fDungeonNext[i] = 0.0;
+
+	if (iArgs >= 2)
+	{
+		GetCmdArg(2, sArg, sizeof(sArg));
+		g_iDungeonMax[i] = ClampInt(StringToInt(sArg), 1, 16);
+	}
+
+	if (iArgs >= 3)
+	{
+		GetCmdArg(3, sArg, sizeof(sArg));
+		g_fDungeonInterval[i] = StringToFloat(sArg) < 2.0 ? 2.0 : StringToFloat(sArg);
+	}
+
+	float fAngles[3];
+
+	Cel_GetCrosshairHitOrigin(iClient, g_fDungeonOrigin[i]);
+	g_fDungeonOrigin[i][2] += 8.0;
+
+	//The enemies face the player who placed it.
+	GetClientEyeAngles(iClient, fAngles);
+	g_fDungeonYaw[i] = fAngles[1] + 180.0;
+
+	SaveDungeon();
+	ShowDungeonSpawner(iClient, i);
+
+	Cel_ReplyToCommand(iClient, "Dungeon spawner {green}#%d{default} placed: up to {green}%d %s{default}%s, every {green}%.0f{default} seconds.", i + 1, g_iDungeonMax[i], g_sTypeName[iType], g_iDungeonMax[i] == 1 ? "" : "s", DungeonInterval(i));
+
+	return Plugin_Handled;
+}
+
+public Action Command_DungeonSpawners(int iClient, int iArgs)
+{
+	float fEyes[3];
+
+	if (g_iDungeonCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "This map has no dungeon spawners. Place one with {green}[tag]dungeonspawner{default} <enemy>.");
+		return Plugin_Handled;
+	}
+
+	if (iClient > 0)
+	{
+		GetClientEyePosition(iClient, fEyes);
+	}
+
+	Cel_ReplyToCommand(iClient, "Dungeon spawners on this map (shown for 10 seconds):");
+
+	for (int i = 0; i < g_iDungeonCount; i++)
+	{
+		Cel_ReplyToCommand(iClient, "{green}#%d{default} %s: %d/%d alive, every %.0fs", i + 1, g_sTypeName[g_iDungeonType[i]], CountDungeonEnemies(i), g_iDungeonMax[i], DungeonInterval(i));
+
+		if (iClient > 0)
+		{
+			ShowDungeonSpawner(iClient, i);
+		}
+	}
+
+	return Plugin_Handled;
+}
+
+public Action Command_DelDungeonSpawner(int iClient, int iArgs)
+{
+	char sArg[16];
+	int iRemove = -1;
+
+	if (iArgs >= 1)
+	{
+		GetCmdArg(1, sArg, sizeof(sArg));
+
+		if (StrEqual(sArg, "all", false))
+		{
+			for (int i = g_iDungeonCount - 1; i >= 0; i--)
+			{
+				RemoveDungeonSpawner(i);
+			}
+
+			SaveDungeon();
+			Cel_ReplyToCommand(iClient, "Every dungeon spawner on this map has been removed.");
+			return Plugin_Handled;
+		}
+
+		iRemove = StringToInt(sArg) - 1;
+	}
+	else if (iClient > 0)
+	{
+		//The one nearest to where the admin is aiming, within a short distance.
+		float fAim[3], fBest = 256.0;
+
+		Cel_GetCrosshairHitOrigin(iClient, fAim);
+
+		for (int i = 0; i < g_iDungeonCount; i++)
+		{
+			float fDist = GetVectorDistance(fAim, g_fDungeonOrigin[i]);
+
+			if (fDist < fBest)
+			{
+				fBest = fDist;
+				iRemove = i;
+			}
+		}
+	}
+
+	if (iRemove < 0 || iRemove >= g_iDungeonCount)
+	{
+		Cel_ReplyToCommand(iClient, "Aim at a dungeon spawner (see them with {green}[tag]dungeonspawners{default}), or give its number.");
+		return Plugin_Handled;
+	}
+
+	Cel_ReplyToCommand(iClient, "Dungeon spawner {green}#%d{default} (%s) removed.", iRemove + 1, g_sTypeName[g_iDungeonType[iRemove]]);
+
+	RemoveDungeonSpawner(iRemove);
+	SaveDungeon();
+
+	return Plugin_Handled;
+}
+
+public Action Command_DungeonClear(int iClient, int iArgs)
+{
+	int iCount = 0;
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (g_iDungeonOf[i] != -1 && IsValidEntity(i))
+		{
+			AcceptEntityInput(i, "Kill");
+			iCount++;
+		}
+	}
+
+	Cel_ReplyToCommand(iClient, "Removed {green}%d{default} dungeon enemies.", iCount);
+
+	return Plugin_Handled;
+}
+
+//Removes a spawner and its enemies; the ones after it move down a number.
+void RemoveDungeonSpawner(int iIndex)
+{
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (g_iDungeonOf[i] == iIndex && IsValidEntity(i))
+		{
+			AcceptEntityInput(i, "Kill");
+		}
+		else if (g_iDungeonOf[i] > iIndex)
+		{
+			g_iDungeonOf[i]--;
+		}
+	}
+
+	for (int i = iIndex; i < g_iDungeonCount - 1; i++)
+	{
+		g_iDungeonType[i] = g_iDungeonType[i + 1];
+		g_iDungeonMax[i] = g_iDungeonMax[i + 1];
+		g_fDungeonInterval[i] = g_fDungeonInterval[i + 1];
+		g_fDungeonOrigin[i] = g_fDungeonOrigin[i + 1];
+		g_fDungeonYaw[i] = g_fDungeonYaw[i + 1];
+		g_fDungeonNext[i] = g_fDungeonNext[i + 1];
+	}
+
+	g_iDungeonCount--;
+}
+
+void ListEnemyKinds(int iClient)
+{
+	char sList[512];
+
+	for (int i = 0; i < g_iTypeCount; i++)
+	{
+		if (g_sTypeClass[i][0] != '\0')
+		{
+			Format(sList, sizeof(sList), "%s%s%s", sList, sList[0] == '\0' ? "" : ", ", g_sTypeAlias[i]);
+		}
+	}
+
+	Cel_ReplyToCommand(iClient, "Enemies: {green}%s{default}", sList);
+}
+
+int ClampInt(int iValue, int iMin, int iMax)
+{
+	return iValue < iMin ? iMin : (iValue > iMax ? iMax : iValue);
+}
+
+float DungeonInterval(int i)
+{
+	return g_fDungeonInterval[i] > 0.0 ? g_fDungeonInterval[i] : g_cvDungeonInterval.FloatValue;
+}
+
+int CountDungeonEnemies(int iIndex)
+{
+	int iCount = 0;
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (g_iDungeonOf[i] == iIndex && IsValidEntity(i))
+		{
+			iCount++;
+		}
+	}
+
+	return iCount;
+}
+
+//A ring and a pillar of light at a spawner, for the admin only, for 10 seconds.
+void ShowDungeonSpawner(int iClient, int iIndex)
+{
+	int iColor[4] = { 255, 60, 60, 255 };
+	float fTop[3];
+
+	fTop = g_fDungeonOrigin[iIndex];
+	fTop[2] += 96.0;
+
+	TE_SetupBeamRingPoint(g_fDungeonOrigin[iIndex], 47.0, 48.0, g_iBeamSprite, 0, 0, 10, 10.0, 3.0, 0.0, iColor, 0, 0);
+	TE_SendToClient(iClient);
+
+	TE_SetupBeamPoints(g_fDungeonOrigin[iIndex], fTop, g_iBeamSprite, 0, 0, 10, 10.0, 3.0, 3.0, 0, 0.0, iColor, 0);
+	TE_SendToClient(iClient);
+}
+
+//Called every second from Timer_SpawnPads.
+void ThinkDungeon(float fNow)
+{
+	float fRange = g_cvDungeonRange.FloatValue;
+
+	for (int i = 0; i < g_iDungeonCount; i++)
+	{
+		if (fNow < g_fDungeonNext[i])
+		{
+			continue;
+		}
+
+		g_fDungeonNext[i] = fNow + DungeonInterval(i);
+
+		if (CountDungeonEnemies(i) >= g_iDungeonMax[i])
+		{
+			continue;
+		}
+
+		//Only while someone is near, and never right on top of a player.
+		bool bNear = fRange <= 0.0, bBlocked = false;
+		float fPos[3];
+
+		for (int c = 1; c <= MaxClients; c++)
+		{
+			if (!IsClientInGame(c) || !IsPlayerAlive(c))
+			{
+				continue;
+			}
+
+			GetClientAbsOrigin(c, fPos);
+
+			float fDist = GetVectorDistance(fPos, g_fDungeonOrigin[i]);
+
+			if (fDist < 48.0)
+			{
+				bBlocked = true;
+			}
+
+			if (fDist <= fRange)
+			{
+				bNear = true;
+			}
+		}
+
+		if (!bNear || bBlocked)
+		{
+			continue;
+		}
+
+		int iEnemy = SpawnEnemyAt(g_iDungeonType[i], g_fDungeonOrigin[i], g_fDungeonYaw[i]);
+
+		if (iEnemy != -1)
+		{
+			g_iDungeonOf[iEnemy] = i;
+		}
+	}
 }

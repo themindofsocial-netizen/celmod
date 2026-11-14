@@ -186,3 +186,7 @@
 		 - The website's leaderboards get new stats from the server: times land-banned (Most Hated), player kills and deaths,
 		   enemies killed, presents given and emblems owned.
 		 - Phantom no longer has an aura.
+		 - Admins: dungeon enemy spawners. !dungeonspawner <enemy> [max alive] [seconds] places one where you aim (saved per map),
+		   !dungeonspawners lists and shows them, !deldungeonspawner [number/all] removes one, !dungeonclear removes their enemies.
+		   They only spawn while a player is nearby (cm_dungeon_range), and their kills count toward spawn pads.
+		 - Admins follow event and restricted area rules like everyone now. !zonebypass turns the rules off for you (and back on).

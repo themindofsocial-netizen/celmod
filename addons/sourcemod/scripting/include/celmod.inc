@@ -567,6 +567,18 @@ native bool Cel_GetRewardLabel(int iEntity, char[] sLabel, int iMaxLength);
 native int Cel_GetZoneType(const float fPos[3]);
 
 /**
+ * Whether a player has the event and restricted area rules turned off (an admin's !zonebypass).
+ * From the zones plugin, which may not be loaded: mark it optional.
+ */
+native bool Cel_IsZoneExempt(int iClient);
+
+/** Cel_IsZoneExempt, or false when the zones plugin isn't loaded. */
+stock bool Cel_ZoneExempt(int iClient)
+{
+	return GetFeatureStatus(FeatureType_Native, "Cel_IsZoneExempt") == FeatureStatus_Available && Cel_IsZoneExempt(iClient);
+}
+
+/**
  * How many of an emblem, hat or weapon a client owns.
  *
  * @return  The count, or -1 if there is no such item.
