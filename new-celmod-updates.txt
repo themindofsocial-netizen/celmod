@@ -198,3 +198,4 @@
 		   still work), and nothing can be built into one by aiming at it from outside or loading a build over it.
 		 - Dungeon and spawn pad enemies have Half-Life 2's normal health and damage (HL2DM left them at 0), spawn spread out
 		   instead of stacked inside each other, and go after the nearest player they can see (cm_dungeon_hunt_range).
+		 - Fixed: dungeon and spawn pad enemies never attacked (HL2DM leaves them neutral to players); they hate players now.

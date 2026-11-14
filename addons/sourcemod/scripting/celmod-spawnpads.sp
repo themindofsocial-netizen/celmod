@@ -753,6 +753,11 @@ int SpawnEnemyAt(int iType, float fOrigin[3], float fYaw)
 		SetEntProp(iEnemy, Prop_Data, "m_iMaxHealth", g_iTypeHealth[iType]);
 	}
 
+	//HL2DM's game rules don't give enemies Half-Life 2's relationships, so they treat players as neutral and never
+	//attack. Each one is told to hate players.
+	SetVariantString("player D_HT 99");
+	AcceptEntityInput(iEnemy, "SetRelationship");
+
 	AcceptEntityInput(iEnemy, "Wake");
 
 	if (g_bTypeOnFire[iType])
