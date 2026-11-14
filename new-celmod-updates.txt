@@ -155,3 +155,4 @@
 		 - The Fire emblem's primary fire is a Pyro-style flamethrower again: a dense cone of flames that widens and rises, stops at walls and scorches them (no more beam through the flames).
 		 - Teleport pads use the teleporter platform from Dr. Kleiner's lab again.
 		 - New decorative emblem: Core, with the shimmering core skin.
+		 - New decorative emblems: Vector (a red wireframe) and Spectral (a shifting rainbow).

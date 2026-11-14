@@ -894,6 +894,32 @@
 			"power"			"none"
 			"dropweight"	"4"
 		}
+		// Decorative: a red wireframe, no power.
+		"vector"
+		{
+			"name"			"Vector"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"9"
+			"color"			"255 0 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
+		// Decorative: the shifting rainbow skin, no power.
+		"spectral"
+		{
+			"name"			"Spectral"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"13"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
 		"phantom"
 		{
 			"name"			"Phantom"
