@@ -183,3 +183,6 @@
 		 - Celweps: !tune or !nudge on a held celwep now places it from the hand with your values (instead of bone-merging it),
 		   so every celwep can be lined up in game and stays that way.
 		 - Seasonal player models are listed in their season's shop (the Skeleton in the Halloween Shop).
+		 - The website's leaderboards get new stats from the server: times land-banned (Most Hated), player kills and deaths,
+		   enemies killed, presents given and emblems owned.
+		 - Phantom no longer has an aura.

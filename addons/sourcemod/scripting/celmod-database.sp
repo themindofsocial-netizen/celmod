@@ -22,7 +22,7 @@
  */
 
 #define SCHEMA_QUERIES 13
-#define MIGRATION_QUERIES 6
+#define MIGRATION_QUERIES 12
 
 Database g_dbCelMod;
 
@@ -96,8 +96,22 @@ char g_sMigrations[MIGRATION_QUERIES][] = {
 	"ALTER TABLE cm_shop_items ADD COLUMN description VARCHAR(255) NOT NULL DEFAULT '' AFTER target",
 	"ALTER TABLE cm_shop_items ADD COLUMN stock_left INT NULL AFTER description",
 	"ALTER TABLE cm_shop_items ADD COLUMN repeatable TINYINT(1) NOT NULL DEFAULT 0 AFTER stock_left",
-	"ALTER TABLE cm_shop_items ADD COLUMN sort_order INT NOT NULL DEFAULT 0 AFTER repeatable"
+	"ALTER TABLE cm_shop_items ADD COLUMN sort_order INT NOT NULL DEFAULT 0 AFTER repeatable",
+	"ALTER TABLE cm_players ADD COLUMN land_bans INT UNSIGNED NOT NULL DEFAULT 0",
+	"ALTER TABLE cm_players ADD COLUMN kills INT UNSIGNED NOT NULL DEFAULT 0",
+	"ALTER TABLE cm_players ADD COLUMN deaths INT UNSIGNED NOT NULL DEFAULT 0",
+	"ALTER TABLE cm_players ADD COLUMN enemy_kills INT UNSIGNED NOT NULL DEFAULT 0",
+	"ALTER TABLE cm_players ADD COLUMN presents_given INT UNSIGNED NOT NULL DEFAULT 0",
+	"ALTER TABLE cm_players ADD COLUMN emblems_owned INT UNSIGNED NOT NULL DEFAULT 0"
 };
+
+//Leaderboard stats other plugins report with Cel_AddPlayerStat / Cel_SetPlayerStat (columns in cm_players).
+//The first five are counted up; emblems_owned is a total that is replaced.
+#define PLAYER_STATS 6
+char g_sStatColumn[PLAYER_STATS][] = { "land_bans", "kills", "deaths", "enemy_kills", "presents_given", "emblems_owned" };
+bool g_bStatAbsolute[PLAYER_STATS] = { false, false, false, false, false, true };
+int g_iPendingStat[MAXPLAYERS + 1][PLAYER_STATS];
+bool g_bStatChanged[MAXPLAYERS + 1][PLAYER_STATS];
 
 public Plugin myinfo =
 {
@@ -126,6 +140,7 @@ public void OnPluginStart()
 	AutoExecConfig(true, "celmod.database");
 
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
+	HookEvent("player_death", Event_StatsPlayerDeath);
 
 	RegAdminCmd("cm_db_status", Command_DBStatus, ADMFLAG_ROOT, "|CelMod| Shows the shared database connection status.");
 }
@@ -498,6 +513,12 @@ void TrackClient(int iClient, bool bLate)
 	g_iPendingEffects[iClient] = 0;
 	g_iPendingRemoved[iClient] = 0;
 
+	for (int i = 0; i < PLAYER_STATS; i++)
+	{
+		g_iPendingStat[iClient][i] = 0;
+		g_bStatChanged[iClient][i] = false;
+	}
+
 	GetClientName(iClient, sName, sizeof(sName));
 	g_dbCelMod.Escape(sName, sEscName, sizeof(sEscName));
 
@@ -558,6 +579,8 @@ public void OnClientDisconnect(int iClient)
 
 	FormatEx(sQuery, sizeof(sQuery), "UPDATE cm_players SET balance = %d, last_seen = NOW(), playtime_seconds = playtime_seconds + %d, props_spawned = props_spawned + %d, cels_spawned = cels_spawned + %d, effects_spawned = effects_spawned + %d, entities_removed = entities_removed + %d WHERE steamid64 = '%s'", Cel_GetClientBalance(iClient), GetTime() - g_iPlayMark[iClient], g_iPendingProps[iClient], g_iPendingCels[iClient], g_iPendingEffects[iClient], g_iPendingRemoved[iClient], g_sSteamID[iClient]);
 	g_dbCelMod.Query(SQL_Generic, sQuery);
+
+	FlushPlayerStats(iClient, null);
 
 	if (g_iSessionID[iClient] > 0)
 	{
@@ -688,6 +711,8 @@ public Action Timer_Heartbeat(Handle hTimer)
 		g_iPendingCels[i] = 0;
 		g_iPendingEffects[i] = 0;
 		g_iPendingRemoved[i] = 0;
+
+		FlushPlayerStats(i, txBeat);
 	}
 
 	FindConVar("hostname").GetString(sHostname, sizeof(sHostname));
@@ -1019,4 +1044,134 @@ public void SQL_OnTxnOk(Database dbDatabase, any aData, int iNumQueries, DBResul
 public void SQL_OnTxnError(Database dbDatabase, any aData, int iNumQueries, const char[] sError, int iFailIndex, any[] aQueryData)
 {
 	LogError("|CelMod| Database transaction failed at query %d: %s", iFailIndex, sError);
+}
+
+//Leaderboard stats:
+public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
+{
+	CreateNative("Cel_AddPlayerStat", Native_AddPlayerStat);
+	CreateNative("Cel_SetPlayerStat", Native_SetPlayerStat);
+
+	RegPluginLibrary("celmod-database");
+
+	return APLRes_Success;
+}
+
+int FindStat(const char[] sStat)
+{
+	for (int i = 0; i < PLAYER_STATS; i++)
+	{
+		if (StrEqual(g_sStatColumn[i], sStat, false))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+public int Native_AddPlayerStat(Handle hPlugin, int iNumParams)
+{
+	char sStat[32];
+	int iClient = GetNativeCell(1);
+
+	GetNativeString(2, sStat, sizeof(sStat));
+
+	int iStat = FindStat(sStat);
+
+	if (iClient < 1 || iClient > MaxClients || iStat == -1 || g_bStatAbsolute[iStat])
+	{
+		return 0;
+	}
+
+	g_iPendingStat[iClient][iStat] += GetNativeCell(3);
+	g_bStatChanged[iClient][iStat] = true;
+
+	return 0;
+}
+
+public int Native_SetPlayerStat(Handle hPlugin, int iNumParams)
+{
+	char sStat[32];
+	int iClient = GetNativeCell(1);
+
+	GetNativeString(2, sStat, sizeof(sStat));
+
+	int iStat = FindStat(sStat);
+
+	if (iClient < 1 || iClient > MaxClients || iStat == -1 || !g_bStatAbsolute[iStat])
+	{
+		return 0;
+	}
+
+	g_iPendingStat[iClient][iStat] = GetNativeCell(3);
+	g_bStatChanged[iClient][iStat] = true;
+
+	return 0;
+}
+
+//Player kills and deaths, for the leaderboards.
+public void Event_StatsPlayerDeath(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	int iVictim = GetClientOfUserId(eEvent.GetInt("userid"));
+	int iAttacker = GetClientOfUserId(eEvent.GetInt("attacker"));
+
+	if (iVictim > 0 && !IsFakeClient(iVictim))
+	{
+		g_iPendingStat[iVictim][2]++;
+		g_bStatChanged[iVictim][2] = true;
+	}
+
+	if (iAttacker > 0 && iAttacker != iVictim && !IsFakeClient(iAttacker))
+	{
+		g_iPendingStat[iAttacker][1]++;
+		g_bStatChanged[iAttacker][1] = true;
+	}
+}
+
+//Writes a player's changed stats, in the heartbeat's transaction or on its own.
+void FlushPlayerStats(int iClient, Transaction txAdd)
+{
+	char sQuery[512], sPart[64];
+
+	if (!g_bTracked[iClient] && txAdd != null)
+	{
+		return;
+	}
+
+	sQuery[0] = '\0';
+
+	for (int i = 0; i < PLAYER_STATS; i++)
+	{
+		if (!g_bStatChanged[iClient][i])
+		{
+			continue;
+		}
+
+		if (g_bStatAbsolute[i])
+		{
+			FormatEx(sPart, sizeof(sPart), "%s = %d", g_sStatColumn[i], g_iPendingStat[iClient][i]);
+		} else {
+			FormatEx(sPart, sizeof(sPart), "%s = %s + %d", g_sStatColumn[i], g_sStatColumn[i], g_iPendingStat[iClient][i]);
+			g_iPendingStat[iClient][i] = 0;
+		}
+
+		g_bStatChanged[iClient][i] = false;
+
+		Format(sQuery, sizeof(sQuery), "%s%s%s", sQuery, sQuery[0] == '\0' ? "" : ", ", sPart);
+	}
+
+	if (sQuery[0] == '\0' || g_dbCelMod == null)
+	{
+		return;
+	}
+
+	Format(sQuery, sizeof(sQuery), "UPDATE cm_players SET %s WHERE steamid64 = '%s'", sQuery, g_sSteamID[iClient]);
+
+	if (txAdd != null)
+	{
+		txAdd.AddQuery(sQuery);
+	} else {
+		g_dbCelMod.Query(SQL_Generic, sQuery);
+	}
 }

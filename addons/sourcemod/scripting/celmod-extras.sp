@@ -57,6 +57,8 @@ ConVar g_cvHoopieBounce;
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("Cel_GetZoneType");
+	MarkNativeAsOptional("Cel_AddPlayerStat");
+	MarkNativeAsOptional("Cel_SetPlayerStat");
 	
 	return APLRes_Success;
 }
@@ -1141,6 +1143,12 @@ Action SetLandBan(int iClient, int iArgs, bool bBan)
 	if (iTarget == -1 || iTarget == iClient)
 	{
 		return Plugin_Handled;
+	}
+	
+	//Being banned from someone's land counts toward the website's "Most Hated" leaderboard.
+	if (bBan && !g_bLandBan[iClient][iTarget])
+	{
+		Cel_AddStat(iTarget, "land_bans");
 	}
 	
 	g_bLandBan[iClient][iTarget] = bBan;

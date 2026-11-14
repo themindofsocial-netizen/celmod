@@ -45,6 +45,9 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 {
 	g_bLate = bLate;
 
+	MarkNativeAsOptional("Cel_AddPlayerStat");
+	MarkNativeAsOptional("Cel_SetPlayerStat");
+
 	return APLRes_Success;
 }
 
@@ -266,6 +269,8 @@ void AddKill(int iClient, int iType)
 	LoadKills(iClient);
 
 	g_iKills[iClient][iType]++;
+
+	Cel_AddStat(iClient, "enemy_kills");
 
 	FormatEx(sSetting, sizeof(sSetting), "padkills_%s", g_sTypeAlias[iType]);
 	Cel_SetClientSettingInt(iClient, sSetting, g_iKills[iClient][iType]);

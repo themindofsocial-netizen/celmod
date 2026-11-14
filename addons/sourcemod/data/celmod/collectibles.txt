@@ -1023,7 +1023,6 @@
 			"power"			"phase"
 			"playercolor"	"60 255 120 120"
 			"dropweight"	"3"
-			"aura"			"phase"
 		}
 	}
 

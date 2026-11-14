@@ -652,6 +652,35 @@ native int Cel_ShopDeliver(int iClient, const char[] sKey, int iMaxPrice, char[]
 native bool Cel_IsSeasonOpen(const char[] sSeason);
 
 /**
+ * Adds to a player's leaderboard stat on the website (celmod-database): land_bans, kills, deaths, enemy_kills or
+ * presents_given.
+ */
+native void Cel_AddPlayerStat(int iClient, const char[] sStat, int iAmount);
+
+/**
+ * Sets a player's leaderboard total on the website (celmod-database): emblems_owned.
+ */
+native void Cel_SetPlayerStat(int iClient, const char[] sStat, int iValue);
+
+/** Cel_AddPlayerStat when the database plugin is loaded (it is optional). */
+stock void Cel_AddStat(int iClient, const char[] sStat, int iAmount = 1)
+{
+	if (GetFeatureStatus(FeatureType_Native, "Cel_AddPlayerStat") == FeatureStatus_Available)
+	{
+		Cel_AddPlayerStat(iClient, sStat, iAmount);
+	}
+}
+
+/** Cel_SetPlayerStat when the database plugin is loaded (it is optional). */
+stock void Cel_SetStat(int iClient, const char[] sStat, int iValue)
+{
+	if (GetFeatureStatus(FeatureType_Native, "Cel_SetPlayerStat") == FeatureStatus_Available)
+	{
+		Cel_SetPlayerStat(iClient, sStat, iValue);
+	}
+}
+
+/**
  * Looks up how an emblem, hat or weapon looks, to put one on display.
  *
  * @param sKind  "emblem", "hat" or "weapon".

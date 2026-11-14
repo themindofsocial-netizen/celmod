@@ -290,6 +290,8 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 {
 	MarkNativeAsOptional("CG_GiveGun");
 	MarkNativeAsOptional("Cel_IsSeasonOpen");
+	MarkNativeAsOptional("Cel_AddPlayerStat");
+	MarkNativeAsOptional("Cel_SetPlayerStat");
 	MarkNativeAsOptional("Cel_GetZoneType");
 	CreateNative("Cel_GetRewardLabel", Native_GetRewardLabel);
 	MarkNativeAsOptional("CG_ClearInventory");
@@ -3327,6 +3329,32 @@ void SetOwned(int iClient, int iItem, int iOwned)
 	GetLedgerKey(iItem, sKey, sizeof(sKey));
 
 	Inv_SetInt(iClient, sKey, iOwned < 0 ? 0 : iOwned);
+
+	if (g_Items[iItem].iKind == KIND_EMBLEM)
+	{
+		ReportEmblemsOwned(iClient);
+	}
+}
+
+// How many emblems a player owns in all, for the website's collector leaderboard.
+void ReportEmblemsOwned(int iClient)
+{
+	if (!IsRealClient(iClient))
+	{
+		return;
+	}
+
+	int iTotal = 0;
+
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (g_Items[i].iKind == KIND_EMBLEM)
+		{
+			iTotal += GetOwned(iClient, i);
+		}
+	}
+
+	Cel_SetStat(iClient, "emblems_owned", iTotal);
 }
 
 int CountSpawned(int iClient, int iItem)
@@ -8617,6 +8645,8 @@ public Action Command_Wrap(int iClient, int iArgs)
 	Format(sList, sizeof(sList), "%s%s%s", sList, sList[0] == '\0' ? "" : ";", sEntry);
 	Inv_SetString(iTarget, "presents", sList);
 
+	Cel_AddStat(iClient, "presents_given");
+
 	float fOrigin[3];
 
 	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
@@ -8700,6 +8730,9 @@ public Action Timer_PresentNotice(Handle hTimer, any iUserId)
 	{
 		return Plugin_Stop;
 	}
+
+	// The website's collector leaderboard learns the player's emblem total once they are tracked.
+	ReportEmblemsOwned(iClient);
 
 	GetPresentList(iClient, sList, sizeof(sList));
 
