@@ -205,3 +205,5 @@
 		 - The server browser's Game column shows |CM| again, like the original server (cm_game_description, SteamWorks).
 		 - The |CM| game name no longer needs the SteamWorks extension (SourceMod's SDKHooks sets it); SteamWorks now loads by
 		   itself when the server can run it (extensions/SteamWorks.autoload).
+		 - The |CM| game name moved to its own plugin, celmod-gamename.smx, which loads the SteamWorks extension itself.
+		   cm_gamename_status shows whether it is working.
