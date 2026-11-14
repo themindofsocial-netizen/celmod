@@ -207,3 +207,5 @@
 		   itself when the server can run it (extensions/SteamWorks.autoload).
 		 - The |CM| game name moved to its own plugin, celmod-gamename.smx, which loads the SteamWorks extension itself.
 		   cm_gamename_status shows whether it is working.
+		 - !switch moves the command history list to the same side as the HUD, and the balance/land HUD shown while aiming
+		   at nothing now follows !switch too.

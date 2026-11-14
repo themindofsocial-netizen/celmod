@@ -250,7 +250,8 @@ public Action Timer_CommandHUD(Handle hTimer)
 				
 				Format(sMessage, sizeof(sMessage), "%s\n%s\n%s\n%s\n%s", sCommands[0], sCommands[1], sCommands[2], sCommands[3], sCommands[4]);
 				
-				Cel_SendHudMessage(i, 3, 3.010, 0.0, 255, 128, 0, 255, 0, 0.6, 0.01, 0.2, 0.01, sMessage);
+				//The command history sits at the top, on the same side as the HUD (!switch moves both).
+				Cel_SendHudMessage(i, 3, g_bHudLeft[i] ? -3.010 : 3.010, 0.0, 255, 128, 0, 255, 0, 0.6, 0.01, 0.2, 0.01, sMessage);
 			}
 		}
 	}
@@ -431,7 +432,7 @@ public Action Timer_CommandHUD(Handle hTimer)
 					}
 				}
 
-				Cel_SendHudMessage(i, 1, 2.010, -0.110, iColor[0], iColor[1], iColor[2], iColor[3], 0, 0.6, 0.01, 0.2, 0.01, sMessage);
+				Cel_SendHudMessage(i, 1, g_bHudLeft[i] ? -2.010 : 2.010, -0.110, iColor[0], iColor[1], iColor[2], iColor[3], 0, 0.6, 0.01, 0.2, 0.01, sMessage);
 			}
 		}
 	}
