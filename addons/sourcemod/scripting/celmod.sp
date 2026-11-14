@@ -6,10 +6,13 @@
 #include <geoip>
 #undef REQUIRE_PLUGIN
 #include <updater>
+#undef REQUIRE_EXTENSIONS
+#include <SteamWorks>
 
 #pragma newdecls required
 
 bool g_bBetaBranchUpdates;
+ConVar g_cvGameDescription;
 bool g_bLate;
 bool g_bIsFlying[MAXPLAYERS + 1];
 bool g_bNoKill[MAXPLAYERS + 1];
@@ -182,6 +185,10 @@ public void OnPluginStart()
 	g_cvPropLimit = CreateConVar("cm_max_player_props", "160", "Maxiumum number of props a player is allowed to spawn.");
 	g_cvOverlayPath = CreateConVar("cm_overlay_material_path", "celmod/cm_overlay2.vmt", "Default CelMod overlay path.");
 	CreateConVar("cm_version", CEL_VERSION, "The version of the plugin the server is running.");
+	
+	//What the server browser shows in its Game column ("Half-Life 2 Deathmatch" otherwise), like the original server.
+	g_cvGameDescription = CreateConVar("cm_game_description", "|CM|", "Game name shown in the server browser (needs the SteamWorks extension). Empty leaves the game's own.");
+	g_cvGameDescription.AddChangeHook(OnGameDescriptionChanged);
 	
 	g_cvCelLimit.AddChangeHook(CM_OnConVarChanged);
 	g_cvDownloadPath.AddChangeHook(CM_OnConVarChanged);
@@ -1401,4 +1408,35 @@ public int Native_SubFromPropCount(Handle hPlugin, int iNumParams)
 	Cel_SetPropCount(iClient, iFinalCount);
 	
 	return true;
+}
+
+//Server browser game name:
+public void OnConfigsExecuted()
+{
+	ApplyGameDescription();
+}
+
+public void OnGameDescriptionChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
+{
+	ApplyGameDescription();
+}
+
+void ApplyGameDescription()
+{
+	char sDescription[64];
+	
+	g_cvGameDescription.GetString(sDescription, sizeof(sDescription));
+	
+	if (sDescription[0] == '\0')
+	{
+		return;
+	}
+	
+	if (GetFeatureStatus(FeatureType_Native, "SteamWorks_SetGameDescription") != FeatureStatus_Available)
+	{
+		LogMessage("|CelMod| The SteamWorks extension isn't loaded, so the server browser keeps showing the game's own name instead of \"%s\".", sDescription);
+		return;
+	}
+	
+	SteamWorks_SetGameDescription(sDescription);
 }
