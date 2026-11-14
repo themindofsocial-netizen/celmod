@@ -3364,13 +3364,15 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	DispatchKeyValue(iHand, "model", g_Items[iItem].sHandModel[0] != '\0' ? g_Items[iItem].sHandModel : g_Items[iItem].sModel);
 	DispatchKeyValue(iHand, "solid", "0");
 	DispatchKeyValue(iHand, "skin", sSkin);
-	DispatchKeyValue(iHand, "classname", "cel_emblem_held");
 	if (g_Items[iItem].fHandScale != 1.0)
 	{
 		DispatchKeyValueFloat(iHand, "modelscale", g_Items[iItem].fHandScale);
 	}
 
 	DispatchSpawn(iHand);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iHand, "classname", "cel_emblem_held");
 
 	SetEntityRenderColor(iHand, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
@@ -4104,9 +4106,11 @@ void LaunchModel(int iItem, float fStart[3], float fEnd[3], int iColor[4], float
 
 	DispatchKeyValue(iModel, "model", g_Items[iItem].sSprite);
 	DispatchKeyValue(iModel, "solid", "0");
-	DispatchKeyValue(iModel, "classname", "cel_emblem_shot");
 
 	DispatchSpawn(iModel);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iModel, "classname", "cel_emblem_shot");
 
 	SetEntityRenderColor(iModel, iColor[0], iColor[1], iColor[2], 255);
 
@@ -4524,9 +4528,11 @@ void ChaosHill(int iClient, int iItem, float fEnd[3])
 
 	DispatchKeyValue(iHill, "model", "models/props_wasteland/antlionhill.mdl");
 	DispatchKeyValue(iHill, "solid", "0");
-	DispatchKeyValue(iHill, "classname", "cel_chaoshill");
 
 	DispatchSpawn(iHill);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iHill, "classname", "cel_chaoshill");
 
 	float fStart[3];
 
@@ -4657,9 +4663,11 @@ void NukeStrike(int iClient, int iItem, float fEnd[3])
 
 	DispatchKeyValue(iCanister, "model", g_sCanisterModel);
 	DispatchKeyValue(iCanister, "solid", "0");
-	DispatchKeyValue(iCanister, "classname", "cel_nuke");
 
 	DispatchSpawn(iCanister);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iCanister, "classname", "cel_nuke");
 
 	float fFacing[3];
 
@@ -4756,9 +4764,11 @@ public Action Timer_NukeImpact(Handle hTimer, DataPack dpNuke)
 
 		DispatchKeyValue(iWreck, "model", g_sCanisterModel);
 		DispatchKeyValue(iWreck, "solid", "0");
-		DispatchKeyValue(iWreck, "classname", "cel_nuke_wreck");
 
 		DispatchSpawn(iWreck);
+		// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+		// when its model is a physics-only prop (hats, the traffic cone...).
+		DispatchKeyValue(iWreck, "classname", "cel_nuke_wreck");
 
 		TeleportEntity(iWreck, fImpact, fWreckAngles, NULL_VECTOR);
 
@@ -5452,7 +5462,6 @@ void CreateHatEntity(int iClient)
 	IntToString(g_Items[iItem].iSkin, sSkin, sizeof(sSkin));
 
 	DispatchKeyValue(iHat, "skin", sSkin);
-	DispatchKeyValue(iHat, "classname", "cel_hat_worn");
 	// Scaled models do not show in this game, so a scale is only applied when one is set.
 	if (g_Items[iItem].fScale != 1.0)
 	{
@@ -5460,6 +5469,9 @@ void CreateHatEntity(int iClient)
 	}
 
 	DispatchSpawn(iHat);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iHat, "classname", "cel_hat_worn");
 
 	SetEntityRenderColor(iHat, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
@@ -5853,10 +5865,12 @@ int SpawnRewardEntity(int iId, int iKind, const char[] sId, float fOrigin[3])
 	PrecacheModel(sModel);
 
 	DispatchKeyValue(iEntity, "model", sModel);
-	DispatchKeyValue(iEntity, "classname", "cel_reward");
 	DispatchKeyValue(iEntity, "solid", "2");
 
 	DispatchSpawn(iEntity);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iEntity, "classname", "cel_reward");
 
 	TeleportEntity(iEntity, fOrigin, NULL_VECTOR, NULL_VECTOR);
 
@@ -6568,10 +6582,12 @@ void SpawnPowerBooth(float fOrigin[3])
 	}
 
 	DispatchKeyValue(iBooth, "model", g_sBoothModel);
-	DispatchKeyValue(iBooth, "classname", "cel_powerbooth");
 	DispatchKeyValue(iBooth, "solid", "2");
 
 	DispatchSpawn(iBooth);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iBooth, "classname", "cel_powerbooth");
 
 	// Its base rests on the spot, facing a random way.
 	float fMins[3], fPlace[3], fAngles[3];

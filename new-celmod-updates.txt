@@ -127,3 +127,4 @@
 		 - Shop models (and the materials they use) are sent to players automatically, read from the model itself. A model without a .phy file spawns as a solid prop that does not move instead of failing.
 		 - The button cel uses the models/dav0r/buttons/switch.mdl switch when the server has it.
 		 - Announcements made in the website's admin panel show in chat as |CelMod| <message> (once, repeated every few minutes, and/or when players join).
+	 - 12/15/26: Fixed hats, Dr. Kleiner's traffic cone and other plugin-made props disappearing: they were renamed before spawning, so the game deleted any whose model is a physics-only prop.

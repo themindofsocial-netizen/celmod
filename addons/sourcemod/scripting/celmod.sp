@@ -1315,7 +1315,13 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	PrecacheModel(sModel);
 	
 	DispatchKeyValue(iProp, "model", sModel);
-	DispatchKeyValue(iProp, "classname", bNoPhysics ? "cel_dynamic" : "cel_physics");
+	
+	//A prop_dynamic_override keeps its own classname until it has spawned (renamed earlier it would be deleted for
+	//a physics-only model); it is renamed just after spawning below.
+	if (!bNoPhysics)
+	{
+		DispatchKeyValue(iProp, "classname", "cel_physics");
+	}
 	
 	if (bNoPhysics)
 	{
@@ -1334,6 +1340,11 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	TeleportEntity(iProp, fOrigin, fAngles, NULL_VECTOR);
 	
 	DispatchSpawn(iProp);
+	
+	if (bNoPhysics)
+	{
+		DispatchKeyValue(iProp, "classname", "cel_dynamic");
+	}
 	
 	Cel_AddToPropCount(iClient);
 	

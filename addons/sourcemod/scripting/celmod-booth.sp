@@ -516,9 +516,11 @@ void PlaceKleiner(float fCenter[3])
 	DispatchKeyValue(iKleiner, "model", KLEINER_MODEL);
 	DispatchKeyValue(iKleiner, "solid", "2");
 	DispatchKeyValue(iKleiner, "DefaultAnim", "ragdoll");
-	DispatchKeyValue(iKleiner, "classname", "cel_booth_kleiner");
 	
 	DispatchSpawn(iKleiner);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+	// when its model is a physics-only prop (hats, the traffic cone...).
+	DispatchKeyValue(iKleiner, "classname", "cel_booth_kleiner");
 	
 	TeleportEntity(iKleiner, fPos, fAngles, NULL_VECTOR);
 	
@@ -537,9 +539,11 @@ void PlaceKleiner(float fCenter[3])
 	{
 		DispatchKeyValue(iCone, "model", CONE_MODEL);
 		DispatchKeyValue(iCone, "solid", "2");
-		DispatchKeyValue(iCone, "classname", "cel_booth_cone");
 		
 		DispatchSpawn(iCone);
+		// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+		// when its model is a physics-only prop (hats, the traffic cone...).
+		DispatchKeyValue(iCone, "classname", "cel_booth_cone");
 		
 		//A bounding box (so its size is known) that players walk straight through.
 		SetEntProp(iCone, Prop_Send, "m_CollisionGroup", 1);
