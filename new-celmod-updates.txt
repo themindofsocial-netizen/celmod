@@ -209,3 +209,5 @@
 		   cm_gamename_status shows whether it is working.
 		 - !switch moves the command history list to the same side as the HUD, and the balance/land HUD shown while aiming
 		   at nothing now follows !switch too.
+		 - The Fire emblem's flamethrower burns and sets alight enemies (dungeon and spawn pad zombies and the rest), not
+		   just players.

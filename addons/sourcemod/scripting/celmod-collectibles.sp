@@ -4302,6 +4302,51 @@ int TraceEmblemAim(int iClient, float fRange, float fStart[3], float fDirection[
 	return iTarget;
 }
 
+// Enemies (npc_*: dungeon and spawn pad enemies, or a map's own), so emblem attacks can hit them too.
+ArrayList g_alEnemies;
+
+public void OnEntityCreated(int iEntity, const char[] sClassname)
+{
+	if (strncmp(sClassname, "npc_", 4) == 0 && iEntity > MaxClients)
+	{
+		if (g_alEnemies == null)
+		{
+			g_alEnemies = new ArrayList();
+		}
+
+		g_alEnemies.Push(EntIndexToEntRef(iEntity));
+	}
+}
+
+// Fills a list with the living enemies, dropping ones that are gone. Returns how many.
+int GetEnemies(int[] iList, int iMax)
+{
+	int iCount = 0;
+
+	if (g_alEnemies == null)
+	{
+		return 0;
+	}
+
+	for (int i = g_alEnemies.Length - 1; i >= 0; i--)
+	{
+		int iEnemy = EntRefToEntIndex(g_alEnemies.Get(i));
+
+		if (iEnemy == INVALID_ENT_REFERENCE)
+		{
+			g_alEnemies.Erase(i);
+			continue;
+		}
+
+		if (iCount < iMax && HasEntProp(iEnemy, Prop_Data, "m_iHealth") && GetEntProp(iEnemy, Prop_Data, "m_iHealth") > 0 && GetEntProp(iEnemy, Prop_Data, "m_takedamage") == 2)
+		{
+			iList[iCount++] = iEnemy;
+		}
+	}
+
+	return iCount;
+}
+
 bool CanBeHurt(int iAttacker, int iVictim)
 {
 	return (iVictim > 0 && iVictim <= MaxClients && iVictim != iAttacker && IsClientInGame(iVictim) && IsPlayerAlive(iVictim) && !IsProtected(iVictim));
@@ -4521,6 +4566,47 @@ void Flamethrower(int iClient, int iItem, float fStart[3], float fDirection[3])
 		if (g_Items[iItem].fIgnite > 0.0)
 		{
 			IgniteEntity(i, g_Items[iItem].fIgnite);
+		}
+	}
+
+	// Enemies (zombies, antlions and the rest) burn the same way.
+	int iEnemies[128];
+	int iEnemyCount = GetEnemies(iEnemies, sizeof(iEnemies));
+
+	for (int e = 0; e < iEnemyCount; e++)
+	{
+		int iEnemy = iEnemies[e];
+
+		GetEntPropVector(iEnemy, Prop_Data, "m_vecAbsOrigin", fVictim);
+
+		fVictim[2] += 32.0;
+
+		MakeVectorFromPoints(fStart, fVictim, fToVictim);
+
+		float fDistance = NormalizeVector(fToVictim, fToVictim);
+
+		if (fDistance > g_Items[iItem].fRange || GetVectorDotProduct(fToVictim, fDirection) < 0.9)
+		{
+			continue;
+		}
+
+		Handle hTrace = TR_TraceRayFilterEx(fStart, fVictim, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+		bool bBlocked = TR_DidHit(hTrace);
+
+		CloseHandle(hTrace);
+
+		if (bBlocked)
+		{
+			continue;
+		}
+
+		SDKHooks_TakeDamage(iEnemy, iClient, iClient, g_Items[iItem].fValue, DMG_BURN);
+
+		// Burning enemies keep burning; an enemy already alight isn't lit again every tick.
+		if (g_Items[iItem].fIgnite > 0.0 && IsValidEntity(iEnemy) && !(GetEntityFlags(iEnemy) & FL_ONFIRE))
+		{
+			IgniteEntity(iEnemy, g_Items[iItem].fIgnite * 2.0);
 		}
 	}
 }
