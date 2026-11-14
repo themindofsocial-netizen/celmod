@@ -5,7 +5,7 @@ WeaponData
 {
 	"viewmodel"			"models/celweps/a6_v.mdl"
 	"playermodel"		"models/celweps/a6.mdl"
-	"anim_prefix"		"crossbow"
+	"anim_prefix"		"bow"
 
 	"clip_size"			"-1"
 	"primary_ammo"		"None"

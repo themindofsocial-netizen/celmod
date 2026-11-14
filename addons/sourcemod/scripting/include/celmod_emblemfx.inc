@@ -442,7 +442,7 @@ void Fx_Gibs(const float fPos[3], int iModel, int iCount, float fSpeed, float fL
 
 	fVelocity[2] = fSpeed;
 
-	TE_Start("Break Model");
+	TE_Start("breakmodel");
 	Fx_WriteVector("m_vecOrigin", fPos);
 	Fx_WriteFloat("m_angRotation[0]", 0.0);
 	Fx_WriteFloat("m_angRotation[1]", GetRandomFloat(0.0, 360.0));

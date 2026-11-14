@@ -5,7 +5,7 @@ WeaponData
 {
 	"viewmodel"			"models/weapons/v_rpg.mdl"
 	"playermodel"		"models/celweps/a9.mdl"
-	"anim_prefix"		"rpg"
+	"anim_prefix"		"missile launcher"
 
 	"clip_size"			"-1"
 	"primary_ammo"		"None"

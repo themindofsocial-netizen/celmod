@@ -30,6 +30,8 @@
 #define BOOTH_MODEL "models/props_lab/hev_case.mdl"
 #define BOOTH_MODEL_FALLBACK "models/props_combine/suit_charger001.mdl"
 #define CANISTER_MODEL "models/props_combine/headcrabcannister01a.mdl"
+// EF_BONEMERGE (1) and EF_BONEMERGE_FASTCULL (128).
+#define EF_BONEMERGE_FLAGS 129
 #define BIG_EMBLEM_MODEL "models/celmod/bhys8.mdl"
 
 #define GRAVGUN_CLASS "weapon_physcannon"
@@ -113,6 +115,7 @@ enum struct Item
 	float fFuse;
 	float fFreeze;
 	int iChain;
+	bool bBoneMerge;
 	char sBase[32];
 	float fDamage;
 }
@@ -2956,6 +2959,13 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fFreeze = kvItems.GetFloat("freeze", 0.0);
 	g_Items[iItem].iChain = kvItems.GetNum("chain", 0);
 
+	// Models rigged to the player's right hand bone (the celweps) snap onto the hand exactly as they were built.
+	char sHeld[PLATFORM_MAX_PATH];
+
+	strcopy(sHeld, sizeof(sHeld), g_Items[iItem].sHandModel[0] != '\0' ? g_Items[iItem].sHandModel : g_Items[iItem].sModel);
+
+	g_Items[iItem].bBoneMerge = (kvItems.GetNum("bonemerge", ModelHasHandBone(sHeld) ? 1 : 0) == 1);
+
 	if (g_Items[iItem].sProjectile[0] != '\0')
 	{
 		PrecacheModel(g_Items[iItem].sProjectile, true);
@@ -3441,11 +3451,21 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	SetVariantString("!activator");
 	AcceptEntityInput(iHand, "SetParent", iClient, iHand);
 
-	SetVariantString("anim_attachment_RH");
-	AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
+	if (g_Items[iItem].bBoneMerge)
+	{
+		// Rigged to the hand bone: merged onto the player's skeleton, so it sits in the hand exactly as built and
+		// moves with every animation.
+		float fZero[3];
 
-	// Once parented to the attachment these are relative to the player's right hand.
-	SetLocalOffset(iHand, g_Items[iItem].fHandOffset, g_Items[iItem].fHandAngles);
+		SetLocalOffset(iHand, fZero, fZero);
+		SetEntProp(iHand, Prop_Send, "m_fEffects", GetEntProp(iHand, Prop_Send, "m_fEffects") | EF_BONEMERGE_FLAGS);
+	} else {
+		SetVariantString("anim_attachment_RH");
+		AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
+
+		// Once parented to the attachment these are relative to the player's right hand.
+		SetLocalOffset(iHand, g_Items[iItem].fHandOffset, g_Items[iItem].fHandAngles);
+	}
 
 	g_iHandEntRef[iClient] = EntIndexToEntRef(iHand);
 
@@ -5619,6 +5639,35 @@ void RemoveHatEntity(int iClient)
 	}
 
 	g_iHatEntRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+// Whether a model has the player's right hand bone, i.e. it was made to be bone merged into a player's hand.
+bool ModelHasHandBone(const char[] sModel)
+{
+	char sBone[64];
+	bool bFound = false;
+
+	File fModel = OpenFile(sModel, "rb", true);
+
+	if (fModel == null)
+	{
+		return false;
+	}
+
+	int iBones = Cel_ReadIntAt(fModel, 156), iBoneIndex = Cel_ReadIntAt(fModel, 160);
+
+	for (int i = 0; i < iBones && i < 128 && !bFound; i++)
+	{
+		int iBone = iBoneIndex + i * 216;
+
+		Cel_ReadStringAt(fModel, iBone + Cel_ReadIntAt(fModel, iBone), sBone, sizeof(sBone));
+
+		bFound = StrEqual(sBone, "ValveBiped.Bip01_R_Hand", false);
+	}
+
+	delete fModel;
+
+	return bFound;
 }
 
 // Places a parented entity relative to its parent (or the attachment it is on).

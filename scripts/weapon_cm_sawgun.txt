@@ -5,7 +5,7 @@ WeaponData
 {
 	"viewmodel"			"models/celweps/a10_v.mdl"
 	"playermodel"		"models/celweps/a10.mdl"
-	"anim_prefix"		"physgun"
+	"anim_prefix"		"smg2"
 
 	"clip_size"			"-1"
 	"primary_ammo"		"None"

@@ -151,8 +151,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_deathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_dm", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_gravity", Command_LandGravity, "|CelMod| Changes the gravity within the land.");
-	g_cvSkinTile = CreateConVar("cm_landskin_tile", "512", "Size in units of each land skin tile laid over a land's floor.", _, true, 64.0, true, 2048.0);
-	g_cvSkinTexture = CreateConVar("cm_landskin_texture", "512", "Size in pixels of the land skin textures; sets how big each tile is drawn.", _, true, 16.0);
+	g_cvSkinTile = CreateConVar("cm_landskin_tile", "256", "Size in units of each land skin tile laid over a land's floor (one repeat of the texture).", _, true, 64.0, true, 2048.0);
+	g_cvSkinTexture = CreateConVar("cm_landskin_brightness", "170", "How bright land skins are drawn, 0 to 255 (they are not lit by the map, so a little darker looks more natural).", _, true, 0.0, true, 255.0);
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
@@ -454,6 +454,8 @@ public void OnMapStart()
 	g_iLand = PrecacheModel("materials/sprites/spotlight.vmt");
 	g_iLaser = PrecacheModel("materials/sprites/laser.vmt");
 	g_iPhys = PrecacheModel("materials/sprites/physbeam.vmt");
+	
+	PrecacheLandSkins();
 	
 	g_iSkullPixels[1] = PrecacheSkull(SKULL_COOP);
 	g_iSkullPixels[2] = PrecacheSkull(SKULL_DM);
@@ -1550,7 +1552,79 @@ public Action Hook_CoopDamage(int iVictim, int &iAttacker, int &iInflictor, floa
 	return Plugin_Continue;
 }
 
-//Land skins: materials/celmod/landskins/s1 to s26, drawn as flat tiles lying just above the land's floor.
+//Land skins: drawn as flat tiles lying just above the land's floor, using materials/celmod/landskins/floor/s1 to s26
+//(Sprite materials set to lie flat; the plain s1 to s26 floor materials would stand up and face the camera).
+int g_iSkinPixels[LANDSKIN_COUNT + 1];
+
+//Sends the floor materials to players, and works out each texture's width so the tiles are drawn the right size.
+void PrecacheLandSkins()
+{
+	char sFile[PLATFORM_MAX_PATH], sLine[256], sTexture[PLATFORM_MAX_PATH];
+
+	for (int i = 1; i <= LANDSKIN_COUNT; i++)
+	{
+		g_iSkinPixels[i] = 512;
+
+		Format(sFile, sizeof(sFile), "materials/celmod/landskins/floor/s%d.vmt", i);
+
+		if (FileExists(sFile, false))
+		{
+			AddFileToDownloadsTable(sFile);
+		}
+
+		Format(sTexture, sizeof(sTexture), "celmod/landskins/floor/s%d.vmt", i);
+		PrecacheModel(sTexture, true);
+
+		//The material's $basetexture, then that texture's width from its VTF header.
+		File fMaterial = OpenFile(sFile, "r", true);
+
+		if (fMaterial == null)
+		{
+			continue;
+		}
+
+		sTexture[0] = '\0';
+
+		while (fMaterial.ReadLine(sLine, sizeof(sLine)))
+		{
+			if (StrContains(sLine, "$basetexture", false) != -1)
+			{
+				char sParts[4][PLATFORM_MAX_PATH];
+
+				if (ExplodeString(sLine, "\"", sParts, sizeof(sParts), sizeof(sParts[])) >= 4)
+				{
+					strcopy(sTexture, sizeof(sTexture), sParts[3]);
+				}
+
+				break;
+			}
+		}
+
+		delete fMaterial;
+
+		if (sTexture[0] == '\0')
+		{
+			continue;
+		}
+
+		Format(sFile, sizeof(sFile), "materials/%s.vtf", sTexture);
+
+		File fTexture = OpenFile(sFile, "rb", true);
+
+		if (fTexture != null)
+		{
+			int iWidth;
+
+			if (fTexture.Seek(16, SEEK_SET) && fTexture.ReadInt16(iWidth) && (iWidth & 0xFFFF) > 0)
+			{
+				g_iSkinPixels[i] = iWidth & 0xFFFF;
+			}
+
+			delete fTexture;
+		}
+	}
+}
+
 void RemoveLandSkin(int iClient)
 {
 	for (int i = 0; i < g_alSkinTiles[iClient].Length; i++)
@@ -1584,7 +1658,7 @@ void ApplyLandSkin(int iClient)
 		fMax[k] = (g_liLand[iClient].fLandPosBottom[k] < g_liLand[iClient].fLandPosTop[k]) ? g_liLand[iClient].fLandPosTop[k] : g_liLand[iClient].fLandPosBottom[k];
 	}
 
-	Format(sMaterial, sizeof(sMaterial), "celmod/landskins/s%d.vmt", g_iLandSkin[iClient]);
+	Format(sMaterial, sizeof(sMaterial), "celmod/landskins/floor/s%d.vmt", g_iLandSkin[iClient]);
 
 	float fTile = g_cvSkinTile.FloatValue;
 	float fWidth = fMax[0] - fMin[0], fLength = fMax[1] - fMin[1];
@@ -1617,13 +1691,20 @@ void ApplyLandSkin(int iClient)
 			fPos[2] = fMin[2] + 1.0 + ((x + y) % 4) * 0.1;
 
 			DispatchKeyValue(iTile, "model", sMaterial);
+			char sColor[16];
+
+			IntToString(g_cvSkinTexture.IntValue, sColor, sizeof(sColor));
+			Format(sColor, sizeof(sColor), "%s %s %s", sColor, sColor, sColor);
+
 			DispatchKeyValue(iTile, "rendermode", "0");
 			DispatchKeyValue(iTile, "renderamt", "255");
+			DispatchKeyValue(iTile, "rendercolor", sColor);
 			DispatchKeyValue(iTile, "spawnflags", "1");
-			DispatchKeyValue(iTile, "classname", "cel_landskin");
-			DispatchKeyValueFloat(iTile, "scale", fSize / g_cvSkinTexture.FloatValue);
+			DispatchKeyValueFloat(iTile, "scale", fSize / float(g_iSkinPixels[g_iLandSkin[iClient]]));
 
 			DispatchSpawn(iTile);
+
+			DispatchKeyValue(iTile, "classname", "cel_landskin");
 
 			TeleportEntity(iTile, fPos, fAngles, NULL_VECTOR);
 
