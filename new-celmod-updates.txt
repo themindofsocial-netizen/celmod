@@ -153,3 +153,4 @@
 	 - 12/20/26: The Blizzard emblem is a blast of snow again, as on the original server: a thick white stream from the emblem while you hold fire, glittering flakes and a winter wind.
 		 - The Fire emblem's right-click fireball is a glowing orange ball again, and bursts into a wide carpet of fire across the ground, as on the original server.
 		 - The Fire emblem's primary fire is a Pyro-style flamethrower again: a dense cone of flames that widens and rises, stops at walls and scorches them (no more beam through the flames).
+		 - Teleport pads use the teleporter platform from Dr. Kleiner's lab again.

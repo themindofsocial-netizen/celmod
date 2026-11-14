@@ -2,6 +2,8 @@
 
 #include <celmod>
 
+#define TELEPORT_MODEL "models/props_lab/teleplatform.mdl"
+
 #pragma newdecls required
 
 /*
@@ -141,6 +143,7 @@ public void OnClientPutInServer(int iClient)
 public void OnMapStart()
 {
 	PrecacheSound("ambient/machines/teleport1.wav", true);
+	PrecacheModel(TELEPORT_MODEL, true);
 	
 	for (int i = 0; i <= MAXENTITIES; i++)
 	{
@@ -1504,7 +1507,13 @@ public Action Command_Teleport(int iClient, int iArgs)
 	
 	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
 	
-	int iPad = Cel_SpawnProp(iClient, "teleport", "prop_physics_override", "models/props_junk/sawblade001a.mdl", fAngles, fOrigin, 0, 200, 255, 255);
+	//The teleporter platform from Dr. Kleiner's lab (the old saw blade if a server is missing it).
+	bool bLabPad = FileExists(TELEPORT_MODEL, true);
+	
+	GetClientAbsAngles(iClient, fAngles);
+	fAngles[0] = 0.0;
+	
+	int iPad = Cel_SpawnProp(iClient, "teleport", "prop_physics_override", bLabPad ? TELEPORT_MODEL : "models/props_junk/sawblade001a.mdl", fAngles, fOrigin, bLabPad ? 255 : 0, bLabPad ? 255 : 200, 255, 255);
 	
 	if (iPad == -1)
 	{
