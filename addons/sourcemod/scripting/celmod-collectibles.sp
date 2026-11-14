@@ -5181,19 +5181,19 @@ void LaunchFireball(int iClient, int iItem, int iColor[4])
 
 	TeleportEntity(iBall, fStart, fAngles, fVelocity);
 
-	// The flame itself, riding on the grenade.
+	// The fireball itself, riding on the grenade: a soft, glowing orange ball (as on the original server).
 	int iFlame = CreateEntityByName("env_sprite");
 
 	if (iFlame != -1)
 	{
-		Format(sColor, sizeof(sColor), "%d %d %d", iColor[0], iColor[1], iColor[2]);
+		Format(sColor, sizeof(sColor), "%d %d %d", 255, 110 + iColor[1] / 8, 40);
 
-		DispatchKeyValue(iFlame, "model", g_Items[iItem].sSprite);
+		DispatchKeyValue(iFlame, "model", "sprites/light_glow03.vmt");
 		DispatchKeyValue(iFlame, "rendermode", "5");
 		DispatchKeyValue(iFlame, "renderamt", "255");
 		DispatchKeyValue(iFlame, "rendercolor", sColor);
 		DispatchKeyValue(iFlame, "framerate", "15");
-		DispatchKeyValue(iFlame, "scale", "1.6");
+		DispatchKeyValue(iFlame, "scale", "0.6");
 		DispatchKeyValue(iFlame, "spawnflags", "1");
 
 		DispatchSpawn(iFlame);
@@ -5224,16 +5224,13 @@ void FireballExploded(int iBall)
 
 	GetEntPropVector(iBall, Prop_Data, "m_vecAbsOrigin", fOrigin);
 
-	if (iItem >= 0 && iItem < g_iItemCount)
-	{
-		SpriteSpray(fOrigin, g_fSkyward, g_Items[iItem].iSpriteIndex, 300, 0.8, 12);
-	}
-
-	// A scorch mark on whatever is just below it.
+	// The ground below, where the fire spreads out.
 	float fBelow[3], fFloor[3];
+	bool bFloor = false;
 
 	fBelow = fOrigin;
-	fBelow[2] -= 64.0;
+	fBelow[2] -= 96.0;
+	fFloor = fOrigin;
 
 	Handle hFloor = TR_TraceRayFilterEx(fOrigin, fBelow, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
 
@@ -5241,11 +5238,39 @@ void FireballExploded(int iBall)
 	{
 		TR_GetEndPosition(fFloor, hFloor);
 
-		g_iFxShotTarget = 0;
-		Fx_Decal(fFloor, g_iDecalScorch);
+		bFloor = true;
 	}
 
 	CloseHandle(hFloor);
+
+	// A wide carpet of fire rolling out across the ground (as on the original server): big flames over a broad,
+	// low disc, brightest in the middle, with an orange glow lighting up everything around it.
+	int iFire[4] = { 255, 120, 30, 255 };
+
+	for (int i = 0; i < 16; i++)
+	{
+		float fFlame[3], fAng = GetRandomFloat(0.0, 6.2832), fDist = (i < 4) ? GetRandomFloat(0.0, 40.0) : GetRandomFloat(40.0, 170.0);
+
+		fFlame = fFloor;
+		fFlame[0] += Cosine(fAng) * fDist;
+		fFlame[1] += Sine(fAng) * fDist;
+		fFlame[2] += GetRandomFloat(18.0, 40.0);
+
+		TE_SetupGlowSprite(fFlame, g_iFxFlame, GetRandomFloat(0.7, 1.2), (i < 4) ? GetRandomFloat(2.4, 3.2) : GetRandomFloat(1.4, 2.4), 230);
+		TE_SendToAll();
+	}
+
+	fFloor[2] += 24.0;
+
+	Fx_Light(fFloor, iFire, 320.0, 1.0, 6);
+
+	fFloor[2] -= 24.0;
+
+	if (bFloor)
+	{
+		g_iFxShotTarget = 0;
+		Fx_Decal(fFloor, g_iDecalScorch);
+	}
 
 	if (iClient < 1)
 	{
