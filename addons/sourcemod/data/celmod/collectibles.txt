@@ -881,6 +881,19 @@
 			"power"			"none"
 			"dropweight"	"8"
 		}
+		// Decorative: the shimmering core skin, no power.
+		"core"
+		{
+			"name"			"Core"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"10"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
 		"phantom"
 		{
 			"name"			"Phantom"
