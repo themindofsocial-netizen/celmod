@@ -172,3 +172,4 @@
 		 - The Core emblem now shoots small coreballs.
 		 - Fixed: Invisible (and Phantom) showed fully solid, because an emblem's color alpha was always reset to 255.
 		 - The Gordon Freeman player model now uses its own file, models/humans/freeman/freeman.mdl.
+		 - Fixed: after !playermodel, a held emblem or celwep stayed where it sat on the old model until you switched weapons.

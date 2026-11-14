@@ -6373,6 +6373,13 @@ void ApplyPlayerModel(int iClient)
 		{
 			CreateHatEntity(iClient);
 		}
+
+		// So is a held emblem or celwep: it is taken down here, and the regular check puts it back in the new
+		// model's hand (with that model's !tune/!nudge position) straight away.
+		if (g_bHeldShown[iClient])
+		{
+			RestoreWeapon(iClient);
+		}
 	}
 }
 
