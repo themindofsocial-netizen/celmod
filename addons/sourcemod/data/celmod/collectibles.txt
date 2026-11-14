@@ -69,6 +69,8 @@
 //               flames frost drip sparks thunder glint prism smoke glitch speed bolt dust float bounce
 //               wisp halo shield gold drain demon radiation vortex blink sun eclipse embers confetti
 //               stars rising pulse dusk code crackle haze void radiant phase heart, or none.
+//   nearalpha   For see-through emblems (a low alpha in "color"): how solid a faint copy of it looks to players within
+//               "neardistance" units (default 96), so it only shows when you are right up close.
 //   sprite      Sprite material used by fx, e.g. "sprites/flamelet1.vmt".
 //   slow        "shot" only: seconds the target is slowed and tinted blue.
 //   knockback   "shot" only: how hard the target is shoved back.
@@ -998,7 +1000,9 @@
 			"name"			"Invisible"
 			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
-			"color"			"255 255 255 6"
+			"color"			"255 255 255 1"
+			"nearalpha"		"45"
+			"neardistance"	"96"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"

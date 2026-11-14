@@ -173,3 +173,5 @@
 		 - Fixed: Invisible (and Phantom) showed fully solid, because an emblem's color alpha was always reset to 255.
 		 - The Gordon Freeman player model now uses its own file, models/humans/freeman/freeman.mdl.
 		 - Fixed: after !playermodel, a held emblem or celwep stayed where it sat on the old model until you switched weapons.
+		 - Invisible is now truly invisible from a distance and only shimmers into view when you are right up close to it.
+		   Its emblem box stays visible so it can still be found.

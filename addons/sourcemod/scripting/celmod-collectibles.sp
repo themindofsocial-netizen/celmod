@@ -68,6 +68,8 @@ enum struct Item
 	int iColor[4];
 	char sPower[24];
 	float fValue;
+	int iNearAlpha;
+	float fNearDistance;
 	float fCooldown;
 	float fDuration;
 	float fRange;
@@ -254,6 +256,9 @@ int g_iMinutesSinceDrop;
 int g_iModdedWeaponRef[MAXPLAYERS + 1];
 int g_iRewardId[MAXENTITIES + 1];
 int g_iPresentUid[MAXENTITIES + 1];
+int g_iShimmerRef[MAXENTITIES + 1];
+int g_iShimmerOwner[MAXENTITIES + 1];
+float g_fShimmerDistance[MAXENTITIES + 1];
 int g_iPresentFor[MAXENTITIES + 1];
 bool g_bRewardEvent[MAXENTITIES + 1];
 bool g_bRewardLinked[MAXENTITIES + 1];
@@ -625,6 +630,15 @@ public void OnEntityDestroyed(int iEntity)
 		g_bRewardLinked[iEntity] = false;
 		g_iPresentUid[iEntity] = 0;
 		g_iPresentFor[iEntity] = 0;
+
+		int iShimmer = EntRefToEntIndex(g_iShimmerRef[iEntity]);
+
+		if (g_iShimmerRef[iEntity] != 0 && iShimmer != INVALID_ENT_REFERENCE && iShimmer > MaxClients)
+		{
+			AcceptEntityInput(iShimmer, "Kill");
+		}
+
+		g_iShimmerRef[iEntity] = 0;
 	}
 }
 
@@ -3007,6 +3021,8 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fJump = kvItems.GetFloat("jumpboost", 0.0);
 	g_Items[iItem].fFallDamage = kvItems.GetFloat("falldamage", 1.0);
 	g_Items[iItem].bGlow = view_as<bool>(kvItems.GetNum("glow", 0));
+	g_Items[iItem].iNearAlpha = kvItems.GetNum("nearalpha", 0);
+	g_Items[iItem].fNearDistance = kvItems.GetFloat("neardistance", 96.0);
 	g_Items[iItem].fHitDamage = kvItems.GetFloat("hitdamage", 25.0);
 	g_Items[iItem].fHitRange = kvItems.GetFloat("hitrange", 80.0);
 	g_Items[iItem].fRefire = kvItems.GetFloat("refire", 0.5);
@@ -3406,6 +3422,8 @@ int SpawnItemEntity(int iClient, int iItem, float fOrigin[3], float fAngles[3])
 
 	SDKHook(iEntity, SDKHook_UsePost, Hook_ItemUse);
 
+	AttachShimmer(iEntity, iItem, 0);
+
 	if (g_Items[iItem].bGlow)
 	{
 		SetEntityRenderFx(iEntity, RENDERFX_GLOWSHELL);
@@ -3501,8 +3519,94 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 	SDKHook(iHand, SDKHook_SetTransmit, Hook_HandTransmit);
 
+	AttachShimmer(iHand, iItem, iClient);
+
 	SetEntityRenderMode(iWeapon, RENDER_TRANSCOLOR);
 	SetEntityRenderColor(iWeapon, 255, 255, 255, 0);
+}
+
+// A nearly invisible emblem (Invisible: "nearalpha") gets a faint copy of itself that only players right up close
+// ("neardistance") are sent, so it shimmers into view as you walk up to it. The emblem itself stays almost fully
+// see-through, so its flashlight shadow is still cast for everyone.
+void AttachShimmer(int iEntity, int iItem, int iHolder)
+{
+	if (g_Items[iItem].iNearAlpha < 1)
+	{
+		return;
+	}
+
+	char sModel[PLATFORM_MAX_PATH];
+
+	GetEntPropString(iEntity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+
+	int iShimmer = CreateEntityByName("prop_dynamic_override");
+
+	if (iShimmer == -1)
+	{
+		return;
+	}
+
+	if (iShimmer > MAXENTITIES)
+	{
+		AcceptEntityInput(iShimmer, "kill");
+		return;
+	}
+
+	DispatchKeyValue(iShimmer, "model", sModel);
+	DispatchKeyValue(iShimmer, "solid", "0");
+	DispatchKeyValue(iShimmer, "disableshadows", "1");
+
+	DispatchSpawn(iShimmer);
+	DispatchKeyValue(iShimmer, "classname", "cel_emblem_shimmer");
+
+	SetEntProp(iShimmer, Prop_Send, "m_nSkin", GetEntProp(iEntity, Prop_Send, "m_nSkin"));
+
+	if (HasEntProp(iEntity, Prop_Send, "m_flModelScale"))
+	{
+		SetEntPropFloat(iShimmer, Prop_Send, "m_flModelScale", GetEntPropFloat(iEntity, Prop_Send, "m_flModelScale"));
+	}
+
+	SetEntityRenderMode(iShimmer, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(iShimmer, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], g_Items[iItem].iNearAlpha);
+
+	float fOrigin[3], fAngles[3], fZero[3];
+
+	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+	GetEntPropVector(iEntity, Prop_Data, "m_angAbsRotation", fAngles);
+
+	TeleportEntity(iShimmer, fOrigin, fAngles, NULL_VECTOR);
+
+	SetVariantString("!activator");
+	AcceptEntityInput(iShimmer, "SetParent", iEntity, iShimmer);
+
+	SetLocalOffset(iShimmer, fZero, fZero);
+
+	g_iShimmerRef[iEntity] = EntIndexToEntRef(iShimmer);
+	g_iShimmerOwner[iShimmer] = iHolder;
+	g_fShimmerDistance[iShimmer] = g_Items[iItem].fNearDistance;
+
+	SDKHook(iShimmer, SDKHook_SetTransmit, Hook_ShimmerTransmit);
+}
+
+public Action Hook_ShimmerTransmit(int iEntity, int iClient)
+{
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	// The holder in first person doesn't see their own held emblem, the same as the emblem itself.
+	if (iClient == g_iShimmerOwner[iEntity] && !g_cvShowSelf.BoolValue && !g_bThirdPerson[iClient])
+	{
+		return Plugin_Handled;
+	}
+
+	float fEyes[3], fOrigin[3];
+
+	GetClientEyePosition(iClient, fEyes);
+	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+	return GetVectorDistance(fEyes, fOrigin) <= g_fShimmerDistance[iEntity] ? Plugin_Continue : Plugin_Handled;
 }
 
 public Action Hook_HandTransmit(int iEntity, int iClient)
@@ -5925,7 +6029,8 @@ int SpawnDropBox()
 		SetEntProp(iBox, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
 	}
 
-	ApplyItemColor(iBox, iItem);
+	// Opaque even for see-through emblems (Invisible), so the box can still be found.
+	SetEntityRenderColor(iBox, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
 	// It must survive the fall and being thrown around with the gravity gun until the map changes.
 	SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
