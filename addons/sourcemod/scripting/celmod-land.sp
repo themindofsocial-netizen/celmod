@@ -1675,14 +1675,18 @@ void ApplyLandSkin(int iClient)
 {
 	float fMax[3], fMin[3], fStart[3], fEnd[3], fHit[3];
 
-	if (g_alSkinTiles[iClient].Length > 0)
-	{
-		g_alSkinTiles[iClient].Clear();
-		RedrawAllLandSkins(0);
-	}
+	//A land that already had a skin: the old decals have to be cleared off everyone's screen first.
+	bool bHadSkin = g_alSkinTiles[iClient].Length > 0;
+
+	g_alSkinTiles[iClient].Clear();
 
 	if (g_iLandSkin[iClient] < 1 || !g_liLand[iClient].bLandCreated)
 	{
+		if (bHadSkin)
+		{
+			RedrawAllLandSkins(0);
+		}
+
 		return;
 	}
 
@@ -1741,7 +1745,12 @@ void ApplyLandSkin(int iClient)
 		}
 	}
 
-	SendLandSkin(iClient, 0);
+	if (bHadSkin)
+	{
+		RedrawAllLandSkins(0);
+	} else {
+		SendLandSkin(iClient, 0);
+	}
 }
 
 //Sends one land's tiles to a player (or everyone with 0).
@@ -1783,6 +1792,25 @@ void RedrawAllLandSkins(int iTo)
 		}
 	}
 
+	//The clear runs on the player's side a moment after it is sent: decals sent in the same moment would be wiped
+	//by it, so they go a little later.
+	CreateTimer(0.6, Timer_SendAllLandSkins, iTo == 0 ? 0 : GetClientUserId(iTo), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_SendAllLandSkins(Handle hTimer, any iUserId)
+{
+	int iTo = 0;
+
+	if (iUserId != 0)
+	{
+		iTo = GetClientOfUserId(iUserId);
+
+		if (iTo < 1 || !IsClientInGame(iTo))
+		{
+			return Plugin_Stop;
+		}
+	}
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (g_alSkinTiles[i].Length > 0)
@@ -1790,6 +1818,8 @@ void RedrawAllLandSkins(int iTo)
 			SendLandSkin(i, iTo);
 		}
 	}
+
+	return Plugin_Stop;
 }
 
 public Action Timer_SendLandSkins(Handle hTimer, any iUserId)
@@ -1821,6 +1851,24 @@ public Action Command_LandSkin(int iClient, int iArgs)
 	}
 
 	GetCmdArg(1, sArg, sizeof(sArg));
+
+	//Admins: what the land skin system sees (tiles found, decal precached, material on the server).
+	if (StrEqual(sArg, "debug", false))
+	{
+		char sFile[PLATFORM_MAX_PATH];
+		int iSkin = g_iLandSkin[iClient];
+
+		Format(sFile, sizeof(sFile), "materials/celmod/landskins/decal/s%d.vmt", iSkin < 1 ? 1 : iSkin);
+
+		Cel_ReplyToCommand(iClient, "Land skin {green}%d{default}, land made: {green}%s{default}, floor tiles found: {green}%d{default}, decal index: {green}%d{default}, tile size: {green}%.0f{default}.",
+			iSkin, g_liLand[iClient].bLandCreated ? "yes" : "no", g_alSkinTiles[iClient].Length, iSkin > 0 ? g_iSkinDecal[iSkin] : 0, iSkin > 0 ? g_iSkinPixels[iSkin] * LANDSKIN_DECAL_SCALE : 0.0);
+		Cel_ReplyToCommand(iClient, "%s on the server: {green}%s{default} (players can only download it if it is).", sFile, FileExists(sFile, false) ? "yes" : "NO");
+
+		//Draws every land skin again for you only, to test.
+		RedrawAllLandSkins(iClient);
+
+		return Plugin_Handled;
+	}
 
 	if (StrEqual(sArg, "off", false) || StrEqual(sArg, "0"))
 	{

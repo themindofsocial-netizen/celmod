@@ -190,3 +190,5 @@
 		   !dungeonspawners lists and shows them, !deldungeonspawner [number/all] removes one, !dungeonclear removes their enemies.
 		   They only spawn while a player is nearby (cm_dungeon_range), and their kills count toward spawn pads.
 		 - Admins follow event and restricted area rules like everyone now. !zonebypass turns the rules off for you (and back on).
+		 - Fixed: land skins were wiped right after being drawn, because clearing old decals reached players after the new ones.
+		   Admins can check what land skins see with !landskin debug.
