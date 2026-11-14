@@ -146,3 +146,7 @@
 		 - Celweps sit in the hand properly: their models are merged onto the player's hand bone exactly as they were made.
 		 - Celwep guns use the right player animations (Saw Gun like the gravity gun, Melon Launcher like a rocket launcher, Blade Bow like a crossbow).
 		 - Fixed emblem shots, Demon towers and melon explosions stopping with an error (a wrong effect name).
+	 - 12/19/26: Emblems trimmed back to quality over quantity: 50 emblems, your original 31 plus Phantom and a few new collectibles.
+		 - Only a few basics upgrade at the Power Booth (3 of one): Fire > Inferno, Water > Tsunami and Blizzard > Glacier, plus the Error chain. Inferno, Tsunami and Glacier are only made by upgrading.
+		 - New collectibles: the gems Ruby, Emerald, Sapphire and Amethyst, and the very rare Diamond (glowing, no power); plain colors Crimson, Lime, Cyan, Midnight, Sunset and Party; and Bunny (jump), Feather (slow fall), Warp (blink) and Lifeline (healing).
+		 - Removed the other added emblems, including Volcano, Permafrost, Maelstrom, Tempest and Plague. Anyone who owned one keeps it in their inventory file; it comes back if the emblem is ever added again.
