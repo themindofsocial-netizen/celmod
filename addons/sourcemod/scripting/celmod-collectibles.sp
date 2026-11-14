@@ -968,6 +968,7 @@ void ApplyTuning()
 			{
 				kvTuning.GetVector("offset", g_Items[i].fOffset, g_Items[i].fOffset);
 				kvTuning.GetVector("angles", g_Items[i].fAngles, g_Items[i].fAngles);
+				g_Items[i].fScale = kvTuning.GetFloat("scale", g_Items[i].fScale);
 				kvTuning.Rewind();
 			}
 
@@ -980,6 +981,7 @@ void ApplyTuning()
 		{
 			kvTuning.GetVector("offset", g_Items[i].fHandOffset, g_Items[i].fHandOffset);
 			kvTuning.GetVector("angles", g_Items[i].fHandAngles, g_Items[i].fHandAngles);
+			g_Items[i].fHandScale = kvTuning.GetFloat("scale", g_Items[i].fHandScale);
 			kvTuning.Rewind();
 		}
 	}
@@ -994,7 +996,7 @@ void HeldModel(int iItem, char[] sModel, int iMaxLength)
 }
 
 // Sets the position and angles of what the player holds (bHat false) or wears, saves them, and shows the change.
-void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
+void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3], float fScale)
 {
 	char sKey[PLATFORM_MAX_PATH], sModel[PLATFORM_MAX_PATH], sPath[PLATFORM_MAX_PATH];
 
@@ -1004,6 +1006,7 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
 	{
 		g_Items[iItem].fOffset = fOffset;
 		g_Items[iItem].fAngles = fAngles;
+		g_Items[iItem].fScale = fScale;
 
 		Format(sKey, sizeof(sKey), "hat %s", g_Items[iItem].sId);
 	} else {
@@ -1024,6 +1027,7 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
 			{
 				g_Items[i].fHandOffset = fOffset;
 				g_Items[i].fHandAngles = fAngles;
+				g_Items[i].fHandScale = fScale;
 			}
 		}
 
@@ -1038,6 +1042,7 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
 	kvTuning.JumpToKey(sKey, true);
 	kvTuning.SetVector("offset", fOffset);
 	kvTuning.SetVector("angles", fAngles);
+	kvTuning.SetFloat("scale", fScale);
 	kvTuning.Rewind();
 
 	if (!kvTuning.ExportToFile(sPath))
@@ -1064,11 +1069,11 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
 		}
 	}
 
-	Cel_ReplyToCommand(iClient, "Saved: offset {green}%.1f %.1f %.1f{default}  angles {green}%.0f %.0f %.0f{default}", fOffset[0], fOffset[1], fOffset[2], fAngles[0], fAngles[1], fAngles[2]);
+	Cel_ReplyToCommand(iClient, "Saved: offset {green}%.1f %.1f %.1f{default}  angles {green}%.0f %.0f %.0f{default}  scale {green}%.2f{default}", fOffset[0], fOffset[1], fOffset[2], fAngles[0], fAngles[1], fAngles[2], fScale);
 }
 
 // Checks there is something to tune and fills in its current values. Returns false with a message otherwise.
-bool GetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
+bool GetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3], float &fScale)
 {
 	if (bHat)
 	{
@@ -1080,6 +1085,7 @@ bool GetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
 
 		fOffset = g_Items[g_iActiveHat[iClient]].fOffset;
 		fAngles = g_Items[g_iActiveHat[iClient]].fAngles;
+		fScale = g_Items[g_iActiveHat[iClient]].fScale;
 
 		return true;
 	}
@@ -1092,6 +1098,7 @@ bool GetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
 
 	fOffset = g_Items[g_iHandItem[iClient]].fHandOffset;
 	fAngles = g_Items[g_iHandItem[iClient]].fHandAngles;
+	fScale = g_Items[g_iHandItem[iClient]].fHandScale;
 
 	return true;
 }
@@ -1100,7 +1107,7 @@ bool GetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3])
 public Action Command_Tune(int iClient, int iArgs)
 {
 	char sArg[16];
-	float fAngles[3], fOffset[3];
+	float fAngles[3], fOffset[3], fScale;
 
 	if (!IsRealClient(iClient))
 	{
@@ -1109,7 +1116,7 @@ public Action Command_Tune(int iClient, int iArgs)
 
 	if (iArgs < 7)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]tune{default} <hand/hat> <forward> <left> <up> <pitch> <yaw> <roll>. To move a little at a time: {green}[tag]nudge{default} <hand/hat> <forward/left/up/pitch/yaw/roll> <amount>");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]tune{default} <hand/hat> <forward> <left> <up> <pitch> <yaw> <roll> [scale]. To change a little at a time: {green}[tag]nudge{default} <hand/hat> <forward/left/up/pitch/yaw/roll/scale> <amount>");
 		return Plugin_Handled;
 	}
 
@@ -1117,9 +1124,16 @@ public Action Command_Tune(int iClient, int iArgs)
 
 	bool bHat = StrEqual(sArg, "hat", false);
 
-	if (!GetTuning(iClient, bHat, fOffset, fAngles))
+	if (!GetTuning(iClient, bHat, fOffset, fAngles, fScale))
 	{
 		return Plugin_Handled;
+	}
+
+	if (iArgs >= 8)
+	{
+		GetCmdArg(8, sArg, sizeof(sArg));
+
+		fScale = ClampScale(StringToFloat(sArg));
 	}
 
 	for (int i = 0; i < 6; i++)
@@ -1134,9 +1148,18 @@ public Action Command_Tune(int iClient, int iArgs)
 		}
 	}
 
-	SetTuning(iClient, bHat, fOffset, fAngles);
+	SetTuning(iClient, bHat, fOffset, fAngles, fScale);
 
 	return Plugin_Handled;
+}
+
+// Sizes are kept between a tenth and ten times the model's own size.
+float ClampScale(float fScale)
+{
+	if (fScale < 0.1) return 0.1;
+	if (fScale > 10.0) return 10.0;
+
+	return fScale;
 }
 
 // !nudge <hand/hat> <forward/left/up/pitch/yaw/roll> <amount>: moves one value by an amount.
@@ -1144,7 +1167,7 @@ public Action Command_Nudge(int iClient, int iArgs)
 {
 	static const char sAxes[][] = { "forward", "left", "up", "pitch", "yaw", "roll" };
 	char sAmount[16], sAxis[16], sWhat[16];
-	float fAngles[3], fOffset[3];
+	float fAngles[3], fOffset[3], fScale;
 
 	if (!IsRealClient(iClient))
 	{
@@ -1153,7 +1176,7 @@ public Action Command_Nudge(int iClient, int iArgs)
 
 	if (iArgs < 3)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]nudge{default} <hand/hat> <forward/left/up/pitch/yaw/roll> <amount>, e.g. {green}[tag]nudge hand up 2{default} or {green}[tag]nudge hand yaw -10{default}. Use {green}[tag]thirdperson{default} to watch.");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]nudge{default} <hand/hat> <forward/left/up/pitch/yaw/roll/scale> <amount>, e.g. {green}[tag]nudge hat up 2{default}, {green}[tag]nudge hand yaw -10{default} or {green}[tag]nudge hat scale 0.1{default}. Use {green}[tag]thirdperson{default} to watch.");
 		return Plugin_Handled;
 	}
 
@@ -1163,8 +1186,15 @@ public Action Command_Nudge(int iClient, int iArgs)
 
 	bool bHat = StrEqual(sWhat, "hat", false);
 
-	if (!GetTuning(iClient, bHat, fOffset, fAngles))
+	if (!GetTuning(iClient, bHat, fOffset, fAngles, fScale))
 	{
+		return Plugin_Handled;
+	}
+
+	if (StrEqual(sAxis, "scale", false) || StrEqual(sAxis, "size", false))
+	{
+		SetTuning(iClient, bHat, fOffset, fAngles, ClampScale(fScale + StringToFloat(sAmount)));
+
 		return Plugin_Handled;
 	}
 
@@ -1182,12 +1212,12 @@ public Action Command_Nudge(int iClient, int iArgs)
 			fAngles[i - 3] += StringToFloat(sAmount);
 		}
 
-		SetTuning(iClient, bHat, fOffset, fAngles);
+		SetTuning(iClient, bHat, fOffset, fAngles, fScale);
 
 		return Plugin_Handled;
 	}
 
-	Cel_ReplyToCommand(iClient, "Choose one of: forward, left, up, pitch, yaw, roll.");
+	Cel_ReplyToCommand(iClient, "Choose one of: forward, left, up, pitch, yaw, roll, scale.");
 
 	return Plugin_Handled;
 }
@@ -5462,7 +5492,7 @@ void CreateHatEntity(int iClient)
 	IntToString(g_Items[iItem].iSkin, sSkin, sizeof(sSkin));
 
 	DispatchKeyValue(iHat, "skin", sSkin);
-	// Scaled models do not show in this game, so a scale is only applied when one is set.
+	// The size, when it is not the model's own (scale in collectibles.txt, or tuned with !nudge hat scale).
 	if (g_Items[iItem].fScale != 1.0)
 	{
 		DispatchKeyValueFloat(iHat, "modelscale", g_Items[iItem].fScale);

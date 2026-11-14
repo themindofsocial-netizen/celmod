@@ -96,7 +96,7 @@ v_model - Client - Replaces the model on the entity you are looking at.
 v_moveto - Client - Moves one of your entities onto another entity.
 v_noclip - Client - Enables/disables noclip on the player.
 v_nokill - Client - Enables/disables godmode on the player.
-v_nudge - Admin - Moves where held emblems, celweps or your hat sit a little, and saves it.
+v_nudge - Admin - Moves, turns or resizes held emblems, celweps or your hat a little, and saves it.
 v_owner - Client - Gets the owner of the entity you are looking at.
 v_p - Client - Spawns a prop by name.
 v_paint - Client - Colors the prop you are looking at.
@@ -149,7 +149,7 @@ v_takemodel - Admin - Takes a player model away from a player.
 v_teleport - Client - Spawns a teleport pad. Use it twice: the first pad sends players to the second.
 v_thirdperson - Client - Switches to a third person view so you can see your emblem and hat.
 v_trade - Client - Offers the entity you are looking at in a trade with another player.
-v_tune - Admin - Sets where held emblems, celweps or your hat sit, and saves it.
+v_tune - Admin - Sets where held emblems, celweps or your hat sit (and their size), and saves it.
 v_turn - Client - Rotates the prop you are looking at.
 v_undo - Client - Removes the last entity you spawned.
 v_unfreeze - Client - Unfreezes the prop you are looking at.

@@ -88,7 +88,7 @@ v_model|Replaces the model on the entity you are looking at.|None|Client|
 v_moveto|Moves one of your entities onto another entity.|None|Client|
 v_noclip|Enables/disables noclip on the player.|None|Client|
 v_nokill|Enables/disables godmode on the player.|None|Client|
-v_nudge|Moves where held emblems, celweps or your hat sit a little, and saves it.|None|Admin|
+v_nudge|Moves, turns or resizes held emblems, celweps or your hat a little, and saves it.|<hand/hat> <forward/left/up/pitch/yaw/roll/scale> <amount>|Admin|
 v_palette|Colors the prop you are looking at with your own red, green and blue values.|None|Client|
 v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Client|
 v_playermodel|Wears a player model you own, or goes back to your own (off).|None|Client|
@@ -126,7 +126,7 @@ v_takemodel|Takes a player model away from a player.|None|Admin|
 v_teleport|Spawns a teleport pad. Use it twice: the first pad sends players to the second.|None|Client|
 v_thirdperson|Switches to a third person view so you can see your emblem and hat.|None|Client|
 v_trade|Offers the entity you are looking at in a trade with another player.|None|Client|
-v_tune|Sets where held emblems, celweps or your hat sit, and saves it.|None|Admin|
+v_tune|Sets where held emblems, celweps or your hat sit (and their size), and saves it.|<hand/hat> <forward> <left> <up> <pitch> <yaw> <roll> [scale]|Admin|
 v_turn|Rotates the prop you are looking at.|None|Client|
 v_undo|Removes the last entity you spawned.|None|Client|
 v_unfreeze|Unfreezes the prop you are looking at.|v_unfreezeit|Client|

@@ -128,3 +128,4 @@
 		 - The button cel uses the models/dav0r/buttons/switch.mdl switch when the server has it.
 		 - Announcements made in the website's admin panel show in chat as |CelMod| <message> (once, repeated every few minutes, and/or when players join).
 	 - 12/15/26: Fixed hats, Dr. Kleiner's traffic cone and other plugin-made props disappearing: they were renamed before spawning, so the game deleted any whose model is a physics-only prop.
+		 - Hats and held emblems/celweps can be resized in game: !nudge hat scale 0.1 (or -0.1), or a scale at the end of !tune. Saved in data/celmod/tuning.txt with the position.
