@@ -402,7 +402,7 @@ public Action Timer_CommandHUD(Handle hTimer)
 					if (Cel_IsPlayer(iEntity)) {
 						Cel_GetClientBalanceTranslated(iEntity, sBalance, sizeof(sBalance));
 
-						Format(sMessage, sizeof(sMessage), "%N\nBalance: %s | Spawned: %d", iEntity, sBalance, Cel_GetCombinedCount(iEntity));
+						Format(sMessage, sizeof(sMessage), "%N Money: %s\nTactics Lvl: %d", iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
 
 						Cel_GetHudColor(iEntity, iColor);
 					} else {
@@ -626,7 +626,7 @@ public Action Timer_HUD(Handle hTimer)
 					}else if (Cel_IsPlayer(iEntity)) {
 						Cel_GetClientBalanceTranslated(iEntity, sBalance, sizeof(sBalance));
 						
-						Format(sHUDMessage, sizeof(sHUDMessage), "%N\nMoney: %s | Tactics Lvl: %d", iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
+						Format(sHUDMessage, sizeof(sHUDMessage), "%N Money: %s\nTactics Lvl: %d", iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
 						
 						Cel_GetHudColor(iEntity, iHUDColor);
 					}
