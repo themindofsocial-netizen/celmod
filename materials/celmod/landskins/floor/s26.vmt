@@ -1,0 +1,7 @@
+// |CelMod| land skin s26 drawn as a flat floor tile (used by !landskin).
+"Sprite"
+{
+	"$basetexture"		"vgui/progressbar"
+	"$spriteorientation"	"oriented"
+	"$spriteorigin"		"[0.50 0.50]"
+}

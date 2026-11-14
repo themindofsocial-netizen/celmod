@@ -1,0 +1,7 @@
+// |CelMod| land skin s25 drawn as a flat floor tile (used by !landskin).
+"Sprite"
+{
+	"$basetexture"		"skybox/sky_day01_05up"
+	"$spriteorientation"	"oriented"
+	"$spriteorigin"		"[0.50 0.50]"
+}

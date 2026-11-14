@@ -1,0 +1,7 @@
+// |CelMod| land skin s9 drawn as a flat floor tile (used by !landskin).
+"Sprite"
+{
+	"$basetexture"		"dev/water"
+	"$spriteorientation"	"oriented"
+	"$spriteorigin"		"[0.50 0.50]"
+}
