@@ -161,3 +161,8 @@
 		 - Emblems can be translucent: the alpha in an emblem's color now applies to the held emblem and its drop box.
 		 - New decorative emblem: Rust. Invisible now shows a faint shimmer when you are right up close.
 		 - Hoopies bounce players off their face again; cm_hoopie_bounce sets how hard (650 by default).
+		 - Enemy spawn pads: every 500 kills of an enemy (in a map's dungeon) earns one of its spawn pads. !spawnpads lists your kills,
+		   !spawnpad <enemy> places one, and !spawnpad off/on pauses the one you look at. Enemies from pads never count as kills.
+		 - !spawnpoint: a spawn point cel for your land. Anyone who dies inside your land respawns on it.
+		 - Christmas presents: !wrap <player> <emblem/hat/weapon> <name> wraps one of your items in a present only that player can open
+		   (press E on it). !presents brings back any present that went missing, so a wrapped item is never lost.

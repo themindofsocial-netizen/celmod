@@ -55,6 +55,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_ShopFindItem", Native_ShopFindItem);
 	CreateNative("Cel_ShopOwnsItem", Native_ShopOwnsItem);
 	CreateNative("Cel_ShopDeliver", Native_ShopDeliver);
+	CreateNative("Cel_IsSeasonOpen", Native_IsSeasonOpen);
 
 	RegPluginLibrary("celmod-shop");
 
@@ -716,6 +717,16 @@ public int Native_ShopOwnsItem(Handle hPlugin, int iNumParams)
 	g_alItems.GetArray(iIndex, eItem);
 
 	return OwnsItem(iClient, eItem);
+}
+
+public int Native_IsSeasonOpen(Handle hPlugin, int iNumParams)
+{
+	char sSeason[32];
+	bool bOpen = false;
+
+	GetNativeString(1, sSeason, sizeof(sSeason));
+
+	return g_smSeasonOpen.GetValue(sSeason, bOpen) && bOpen;
 }
 
 public int Native_ShopDeliver(Handle hPlugin, int iNumParams)

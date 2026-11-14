@@ -642,6 +642,11 @@ native int Cel_ShopFindItem(const char[] sKey);
 native int Cel_ShopDeliver(int iClient, const char[] sKey, int iMaxPrice, char[] sError, int iErrorLength);
 
 /**
+ * Whether a seasonal shop's season (a key from "Seasons" in shop.txt, like "christmas") is on today.
+ */
+native bool Cel_IsSeasonOpen(const char[] sSeason);
+
+/**
  * Looks up how an emblem, hat or weapon looks, to put one on display.
  *
  * @param sKind  "emblem", "hat" or "weapon".

@@ -49,6 +49,9 @@ int g_iWeldRef[MAXPLAYERS + 1];
 
 float g_fNextTeleport[MAXPLAYERS + 1];
 float g_fNextBounce[MAXPLAYERS + 1];
+int g_iSpawnPointRef[MAXPLAYERS + 1] = {INVALID_ENT_REFERENCE, ...};
+int g_iDiedInLand[MAXPLAYERS + 1];
+ConVar g_cvSpawnPointModel;
 ConVar g_cvHoopieBounce;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
@@ -72,6 +75,11 @@ public void OnPluginStart()
 	LoadTranslations("celmod.phrases");
 	LoadTranslations("common.phrases");
 	
+	g_cvSpawnPointModel = CreateConVar("cm_spawnpoint_model", "models/props_junk/sawblade001a.mdl", "Model of the !spawnpoint cel.");
+	
+	HookEvent("player_death", Event_SpawnPointDeath);
+	HookEvent("player_spawn", Event_SpawnPointSpawn);
+	
 	g_cvHoopieBounce = CreateConVar("cm_hoopie_bounce", "650", "How hard a hoopie bounces players off it.", _, true, 0.0, true, 3000.0);
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
@@ -90,6 +98,7 @@ public void OnPluginStart()
 	
 	RegConsoleCmd("v_model", Command_Model, "|CelMod| Replaces the model on the entity you are looking at.");
 	RegConsoleCmd("v_palette", Command_Palette, "|CelMod| Colors the prop you are looking at with your own red, green and blue values.");
+	RegConsoleCmd("v_spawnpoint", Command_SpawnPoint, "|CelMod| Spawns a spawn point in your land: anyone who dies in your land respawns on it.");
 	RegConsoleCmd("v_teleport", Command_Teleport, "|CelMod| Spawns a teleport pad. Use it twice: the first pad sends players to the second.");
 	RegConsoleCmd("v_hide", Command_Hide, "|CelMod| Hides another player's entities from your view.");
 	RegConsoleCmd("v_block", Command_Block, "|CelMod| Stops you from entering a player's land (use again to allow it). With no name, lists who you have blocked.");
@@ -121,6 +130,8 @@ public void OnClientPutInServer(int iClient)
 	g_iMoveToRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
+	g_iSpawnPointRef[iClient] = INVALID_ENT_REFERENCE;
+	g_iDiedInLand[iClient] = 0;
 	g_fNextBanNotice[iClient] = 0.0;
 	g_fNextTeleport[iClient] = 0.0;
 	g_bOutsideKnown[iClient] = false;
@@ -213,6 +224,16 @@ public void Frame_TrackEntity(any iRef)
 	}
 	
 	g_iTrackOwner[iEntity] = iOwner;
+	
+	//A spawn point loaded from a build becomes its owner's spawn point (only one is kept).
+	char sPropName[64];
+	
+	Cel_GetPropName(iEntity, sPropName, sizeof(sPropName));
+	
+	if (StrEqual(sPropName, "spawnpoint"))
+	{
+		SetSpawnPoint(iOwner, iEntity);
+	}
 	
 	g_alUndo[iOwner].Push(iRef);
 	
@@ -1507,6 +1528,131 @@ public Action Command_Palette(int iClient, int iArgs)
 }
 
 //The first pad a player spawns is the entrance, the second is where it leads. Then the pair is complete.
+//The spawn point cel: anyone who dies inside its owner's land respawns on it. It only works inside that land.
+public Action Command_SpawnPoint(int iClient, int iArgs)
+{
+	float fAngles[3], fOrigin[3];
+	char sModel[PLATFORM_MAX_PATH];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+	
+	if (Cel_GetLandOwnerFromPosition(fOrigin) != iClient)
+	{
+		Cel_ReplyToCommand(iClient, "A spawn point only works inside your own land.");
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckPropCount(iClient))
+	{
+		Cel_ReplyToCommand(iClient, "You have reached your prop limit.");
+		return Plugin_Handled;
+	}
+	
+	g_cvSpawnPointModel.GetString(sModel, sizeof(sModel));
+	
+	GetClientAbsAngles(iClient, fAngles);
+	fAngles[0] = 0.0;
+	
+	int iPoint = Cel_SpawnProp(iClient, "spawnpoint", "prop_physics_override", sModel, fAngles, fOrigin, 0, 220, 170, 255);
+	
+	if (iPoint == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	Cel_FixSpawnPosition(iPoint, fOrigin);
+	AcceptEntityInput(iPoint, "DisableMotion");
+	
+	bool bMoved = SetSpawnPoint(iClient, iPoint);
+	
+	Cel_ReplyToCommand(iClient, bMoved ? "Moved your spawn point. Anyone who dies in your land respawns here." : "Placed a spawn point. Anyone who dies in your land respawns here.");
+	
+	return Plugin_Handled;
+}
+
+//Keeps one spawn point per player; an older one is removed. Returns true when one was replaced.
+bool SetSpawnPoint(int iClient, int iPoint)
+{
+	int iOld = EntRefToEntIndex(g_iSpawnPointRef[iClient]);
+	bool bReplaced = false;
+	
+	if (g_iSpawnPointRef[iClient] != INVALID_ENT_REFERENCE && iOld != INVALID_ENT_REFERENCE && iOld != iPoint)
+	{
+		AcceptEntityInput(iOld, "Kill");
+		bReplaced = true;
+	}
+	
+	g_iSpawnPointRef[iClient] = EntIndexToEntRef(iPoint);
+	
+	return bReplaced;
+}
+
+public void Event_SpawnPointDeath(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return;
+	}
+	
+	float fOrigin[3];
+	
+	GetClientAbsOrigin(iClient, fOrigin);
+	
+	g_iDiedInLand[iClient] = Cel_GetLandOwnerFromPosition(fOrigin);
+}
+
+public void Event_SpawnPointSpawn(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
+	
+	if (iClient > 0 && g_iDiedInLand[iClient] > 0)
+	{
+		//A frame later, so the game has finished placing the player.
+		RequestFrame(Frame_SpawnPointRespawn, GetClientUserId(iClient));
+	}
+}
+
+public void Frame_SpawnPointRespawn(any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+	
+	if (iClient < 1 || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return;
+	}
+	
+	int iOwner = g_iDiedInLand[iClient];
+	
+	g_iDiedInLand[iClient] = 0;
+	
+	if (iOwner < 1 || iOwner > MaxClients || !IsClientInGame(iOwner) || g_bBlockLand[iOwner][iClient] || g_bBlockLand[iClient][iOwner])
+	{
+		return;
+	}
+	
+	int iPoint = EntRefToEntIndex(g_iSpawnPointRef[iOwner]);
+	
+	//The spawn point must still be inside its owner's land.
+	if (g_iSpawnPointRef[iOwner] == INVALID_ENT_REFERENCE || iPoint == INVALID_ENT_REFERENCE || Cel_GetLandOwnerFromEntity(iPoint) != iOwner)
+	{
+		return;
+	}
+	
+	float fOrigin[3];
+	
+	Cel_GetEntityOrigin(iPoint, fOrigin);
+	fOrigin[2] += 16.0;
+	
+	TeleportEntity(iClient, fOrigin, NULL_VECTOR, view_as<float>({0.0, 0.0, 0.0}));
+}
+
 public Action Command_Teleport(int iClient, int iArgs)
 {
 	float fAngles[3], fOrigin[3];

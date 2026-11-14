@@ -1,0 +1,139 @@
+// Enemy spawn pads (models/celmod/spawnpad2.mdl).
+//
+// Killing an enemy (in a map's dungeon, for example) counts toward its pad. Every cm_spawnpad_kills kills
+// (500 by default) earns one pad of that kind, and each pad earned lets you have one more placed at a time.
+// Enemies that come out of a spawn pad never count toward kills.
+//
+// "alias"
+// {
+//     "name"       Display name.
+//     "skin"       The pad's skin, which shows the enemy's icon (read from spawnpad2.mdl).
+//     "classname"  The NPC a placed pad spawns, and whose kills count. Leave empty to disable the pad.
+//     "keyvalues"  Optional keyvalues for the spawned NPC, "key value;key value".
+//     "onfire"     1: the NPC is set alight when spawned, and only kills of a burning one count.
+//     "max"        How many of its enemies one pad keeps alive at once.
+// }
+"SpawnPads"
+{
+	"antlion"
+	{
+		"name"			"Antlion"
+		"skin"			"1"
+		"classname"		"npc_antlion"
+		"max"			"3"
+	}
+	"antlionguard"
+	{
+		"name"			"Antlion Guard"
+		"skin"			"3"
+		"classname"		"npc_antlionguard"
+		"max"			"1"
+	}
+	"headcrab"
+	{
+		"name"			"Headcrab"
+		"skin"			"4"
+		"classname"		"npc_headcrab"
+		"max"			"4"
+	}
+	"headcrab_black"
+	{
+		"name"			"Poison Headcrab"
+		"skin"			"5"
+		"classname"		"npc_headcrab_black"
+		"max"			"3"
+	}
+	"headcrab_fast"
+	{
+		"name"			"Fast Headcrab"
+		"skin"			"6"
+		"classname"		"npc_headcrab_fast"
+		"max"			"4"
+	}
+	"ichthyosaur"
+	{
+		"name"			"Ichthyosaur"
+		"skin"			"7"
+		"classname"		"npc_ichthyosaur"
+		"max"			"1"
+	}
+	"manhack"
+	{
+		"name"			"Manhack"
+		"skin"			"8"
+		"classname"		"npc_manhack"
+		"max"			"3"
+	}
+	"poisonzombie"
+	{
+		"name"			"Poison Zombie"
+		"skin"			"9"
+		"classname"		"npc_poisonzombie"
+		"max"			"2"
+	}
+	"rollermine"
+	{
+		"name"			"Rollermine"
+		"skin"			"10"
+		"classname"		"npc_rollermine"
+		"max"			"3"
+	}
+	"stalker"
+	{
+		"name"			"Stalker"
+		"skin"			"11"
+		"classname"		"npc_stalker"
+		"max"			"2"
+	}
+	"strider"
+	{
+		"name"			"Strider"
+		"skin"			"12"
+		"classname"		"npc_strider"
+		"max"			"1"
+	}
+	"vortigaunt"
+	{
+		"name"			"Vortigaunt"
+		"skin"			"14"
+		"classname"		"npc_vortigaunt"
+		"max"			"2"
+	}
+	"zombie"
+	{
+		"name"			"Zombie"
+		"skin"			"15"
+		"classname"		"npc_zombie"
+		"max"			"3"
+	}
+	"firezombie"
+	{
+		"name"			"Fire Zombie"
+		"skin"			"16"
+		"classname"		"npc_zombie"
+		"onfire"		"1"
+		"max"			"3"
+	}
+	// No HL2DM enemy is known for these icons yet: set a classname to enable them.
+	"advisor"
+	{
+		"name"			"Advisor"
+		"skin"			"0"
+		"classname"		""
+		"max"			"1"
+	}
+	"antlionbomb"
+	{
+		"name"			"Antlion Bomb"
+		"skin"			"2"
+		"classname"		""
+		"max"			"3"
+	}
+	"synth"
+	{
+		"name"			"Synth"
+		"skin"			"13"
+		"classname"		""
+		"max"			"1"
+	}
+}

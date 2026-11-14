@@ -252,6 +252,8 @@ int g_iLastButtons[MAXPLAYERS + 1];
 int g_iMinutesSinceDrop;
 int g_iModdedWeaponRef[MAXPLAYERS + 1];
 int g_iRewardId[MAXENTITIES + 1];
+int g_iPresentUid[MAXENTITIES + 1];
+int g_iPresentFor[MAXENTITIES + 1];
 bool g_bRewardEvent[MAXENTITIES + 1];
 bool g_bRewardLinked[MAXENTITIES + 1];
 bool g_bInEvent[MAXPLAYERS + 1];
@@ -280,6 +282,7 @@ native void CG_GetShootPosition(int iClient, float fPos[3], float fForwardOffset
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("CG_GiveGun");
+	MarkNativeAsOptional("Cel_IsSeasonOpen");
 	MarkNativeAsOptional("Cel_GetZoneType");
 	CreateNative("Cel_GetRewardLabel", Native_GetRewardLabel);
 	MarkNativeAsOptional("CG_ClearInventory");
@@ -389,6 +392,9 @@ public void OnPluginStart()
 	RegConsoleCmd("v_emblems", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
 	RegConsoleCmd("v_hat", Command_Hat, "|CelMod| Spawns a hat you own, or takes off your hat.");
 	RegConsoleCmd("v_hats", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
+	RegConsoleCmd("v_wrap", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
+	RegConsoleCmd("v_gift", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
+	RegConsoleCmd("v_presents", Command_Presents, "|CelMod| Lists the presents waiting for you and brings back any that are not out.");
 	RegConsoleCmd("v_inventory", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
 
 	HookEvent("player_death", Event_Death, EventHookMode_Post);
@@ -615,6 +621,8 @@ public void OnEntityDestroyed(int iEntity)
 		g_iRewardId[iEntity] = -1;
 		g_bRewardEvent[iEntity] = false;
 		g_bRewardLinked[iEntity] = false;
+		g_iPresentUid[iEntity] = 0;
+		g_iPresentFor[iEntity] = 0;
 	}
 }
 
@@ -3515,6 +3523,11 @@ void RestoreWeapon(int iClient)
 public void OnClientPostAdminCheck(int iClient)
 {
 	g_bWalkKeyOff[iClient] = (Cel_GetClientSettingInt(iClient, "walkkeyoff") == 1);
+
+	if (IsRealClient(iClient))
+	{
+		CreateTimer(20.0, Timer_PresentNotice, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
+	}
 }
 
 public Action Command_Speed(int iClient, int iArgs)
@@ -8315,4 +8328,331 @@ public void OnMapEnd()
 			ClaimDropBox(iOwner, iBox, "An emblem box was left in your land");
 		}
 	}
+}
+
+//Presents (Christmas only): an emblem, hat or celwep wrapped up for another player.
+// The item leaves the giver's inventory and waits in the receiver's, under "presents", until they press E on the
+// present and unwrap it. If the present itself is lost (a map change, or someone deletes it), !presents brings it
+// back, so a wrapped item is never lost. Entries are "uid:kind:id:from", split by ";".
+#define PRESENT_MODEL "models/celmod/present02.mdl"
+#define PRESENT_LIST_MAX 2048
+
+public Action Command_Wrap(int iClient, int iArgs)
+{
+	char sTarget[MAX_NAME_LENGTH], sKind[32], sId[64];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (GetFeatureStatus(FeatureType_Native, "Cel_IsSeasonOpen") != FeatureStatus_Available || !Cel_IsSeasonOpen("christmas"))
+	{
+		Cel_ReplyToCommand(iClient, "Presents can only be wrapped at {green}Christmas{default}.");
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 3)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]wrap{default} <player> <emblem/hat/weapon> <name>. It goes in a present only they can open.");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	GetCmdArg(2, sKind, sizeof(sKind));
+	GetCmdArg(3, sId, sizeof(sId));
+
+	int iTarget = FindTarget(iClient, sTarget, true, false);
+
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+
+	if (iTarget == iClient)
+	{
+		Cel_ReplyToCommand(iClient, "You can't wrap a present for yourself.");
+		return Plugin_Handled;
+	}
+
+	int iItem = FindItem(KindFromName(sKind), sId);
+
+	if (iItem == -1)
+	{
+		Cel_ReplyToCommand(iClient, "There is no %s called {green}%s{default}.", sKind, sId);
+		return Plugin_Handled;
+	}
+
+	int iOwned = GetOwned(iClient, iItem);
+
+	if (iOwned < 1)
+	{
+		Cel_ReplyToCommand(iClient, "You don't own a {green}%s{default} %s.", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
+		return Plugin_Handled;
+	}
+
+	if (iOwned - CountSpawned(iClient, iItem) < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Your {green}%s{default} is out in the world. Delete it first, then wrap it.", g_Items[iItem].sName);
+		return Plugin_Handled;
+	}
+
+	char sList[PRESENT_LIST_MAX], sEntry[160], sFrom[MAX_NAME_LENGTH];
+	int iUid = GetRandomInt(1, 2147483646);
+
+	GetClientName(iClient, sFrom, sizeof(sFrom));
+	ReplaceString(sFrom, sizeof(sFrom), ":", " ");
+	ReplaceString(sFrom, sizeof(sFrom), ";", " ");
+
+	FormatEx(sEntry, sizeof(sEntry), "%d:%s:%s:%s", iUid, g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sId, sFrom);
+
+	GetPresentList(iTarget, sList, sizeof(sList));
+
+	if (strlen(sList) + strlen(sEntry) + 2 >= sizeof(sList))
+	{
+		Cel_ReplyToCommand(iClient, "{green}%N{default} has too many unopened presents already.", iTarget);
+		return Plugin_Handled;
+	}
+
+	//Out of the giver's inventory first, the same way a trade takes it.
+	SetOwned(iClient, iItem, iOwned - 1);
+
+	if (iOwned - 1 < 1)
+	{
+		if (g_iActiveEmblem[iClient] == iItem) SetActiveEmblem(iClient, -1);
+		if (g_iActiveHat[iClient] == iItem) SetActiveHat(iClient, -1);
+		if (g_iCelWepItem[iClient] == iItem) SetActiveCelWep(iClient, -1);
+		if (g_bCelWepTaken[iClient][iItem]) SetCelWepTaken(iClient, iItem, false);
+	}
+
+	Format(sList, sizeof(sList), "%s%s%s", sList, sList[0] == '\0' ? "" : ";", sEntry);
+	Inv_SetString(iTarget, "presents", sList);
+
+	float fOrigin[3];
+
+	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+	fOrigin[2] += 16.0;
+
+	SpawnPresent(iTarget, iUid, fOrigin);
+
+	Cel_ReplyToCommand(iClient, "You wrapped your {green}%s{default} %s in a present for {green}%N{default}.", g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind], iTarget);
+	Cel_PrintToChat(iTarget, "{green}%N{default} left you a present! Find it and press {green}E{default} on it to unwrap it ({green}[tag]presents{default} brings it to you).", iClient);
+
+	return Plugin_Handled;
+}
+
+public Action Command_Presents(int iClient, int iArgs)
+{
+	char sList[PRESENT_LIST_MAX], sEntries[32][160], sParts[4][64];
+
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	GetPresentList(iClient, sList, sizeof(sList));
+
+	int iCount = sList[0] == '\0' ? 0 : ExplodeString(sList, ";", sEntries, sizeof(sEntries), sizeof(sEntries[]));
+
+	if (iCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "You have no presents waiting.");
+		return Plugin_Handled;
+	}
+
+	float fOrigin[3], fAngles[3], fForward[3];
+
+	GetClientEyePosition(iClient, fOrigin);
+	GetClientEyeAngles(iClient, fAngles);
+	fAngles[0] = 0.0;
+	GetAngleVectors(fAngles, fForward, NULL_VECTOR, NULL_VECTOR);
+
+	int iBrought = 0;
+
+	for (int i = 0; i < iCount; i++)
+	{
+		if (ExplodeString(sEntries[i], ":", sParts, sizeof(sParts), sizeof(sParts[]), true) < 4)
+		{
+			continue;
+		}
+
+		int iUid = StringToInt(sParts[0]);
+
+		if (FindPresentEntity(iUid) != -1)
+		{
+			continue;
+		}
+
+		float fSpot[3];
+
+		for (int j = 0; j < 3; j++)
+		{
+			fSpot[j] = fOrigin[j] + fForward[j] * 60.0;
+		}
+
+		fSpot[2] += 8.0 * iBrought;
+
+		SpawnPresent(iClient, iUid, fSpot);
+
+		iBrought++;
+	}
+
+	Cel_ReplyToCommand(iClient, "You have {green}%d{default} present%s waiting%s. Press {green}E{default} on one to unwrap it.", iCount, iCount == 1 ? "" : "s", iBrought > 0 ? ", and the missing ones are in front of you" : "");
+
+	return Plugin_Handled;
+}
+
+public Action Timer_PresentNotice(Handle hTimer, any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+	char sList[PRESENT_LIST_MAX];
+
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Stop;
+	}
+
+	GetPresentList(iClient, sList, sizeof(sList));
+
+	if (sList[0] != '\0')
+	{
+		Cel_PrintToChat(iClient, "You have presents waiting to be unwrapped! Type {green}[tag]presents{default}.");
+	}
+
+	return Plugin_Stop;
+}
+
+void GetPresentList(int iClient, char[] sList, int iMaxLength)
+{
+	Inv_GetString(iClient, "presents", sList, iMaxLength);
+
+	if (StrEqual(sList, "none"))
+	{
+		sList[0] = '\0';
+	}
+}
+
+int FindPresentEntity(int iUid)
+{
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (g_iPresentUid[i] == iUid && IsValidEntity(i))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+int SpawnPresent(int iFor, int iUid, float fOrigin[3])
+{
+	int iPresent = CreateEntityByName("prop_physics_override");
+
+	if (iPresent == -1)
+	{
+		return -1;
+	}
+
+	if (iPresent > MAXENTITIES)
+	{
+		AcceptEntityInput(iPresent, "kill");
+		return -1;
+	}
+
+	PrecacheModel(PRESENT_MODEL);
+
+	DispatchKeyValue(iPresent, "model", PRESENT_MODEL);
+
+	DispatchSpawn(iPresent);
+	// Named after spawning, like every other prop_physics_override here.
+	DispatchKeyValue(iPresent, "classname", "cel_present");
+
+	TeleportEntity(iPresent, fOrigin, NULL_VECTOR, NULL_VECTOR);
+
+	SetEntProp(iPresent, Prop_Send, "m_nSkin", GetRandomInt(0, 5));
+	SetEntProp(iPresent, Prop_Data, "m_takedamage", 0, 1);
+
+	g_iPresentUid[iPresent] = iUid;
+	g_iPresentFor[iPresent] = GetClientUserId(iFor);
+
+	SDKHook(iPresent, SDKHook_UsePost, Hook_PresentUse);
+
+	return iPresent;
+}
+
+public void Hook_PresentUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	if (!IsRealClient(iActivator) || iEntity > MAXENTITIES || g_iPresentUid[iEntity] == 0)
+	{
+		return;
+	}
+
+	int iFor = GetClientOfUserId(g_iPresentFor[iEntity]);
+
+	char sList[PRESENT_LIST_MAX], sEntries[32][160], sParts[4][64], sKept[PRESENT_LIST_MAX];
+	int iUid = g_iPresentUid[iEntity], iItem = -1;
+
+	GetPresentList(iActivator, sList, sizeof(sList));
+
+	int iCount = sList[0] == '\0' ? 0 : ExplodeString(sList, ";", sEntries, sizeof(sEntries), sizeof(sEntries[]));
+
+	char sFrom[64];
+
+	for (int i = 0; i < iCount; i++)
+	{
+		char sEntry[160];
+
+		strcopy(sEntry, sizeof(sEntry), sEntries[i]);
+
+		if (iItem == -1 && ExplodeString(sEntries[i], ":", sParts, sizeof(sParts), sizeof(sParts[]), true) == 4 && StringToInt(sParts[0]) == iUid)
+		{
+			iItem = FindItem(KindFromName(sParts[1]), sParts[2]);
+			strcopy(sFrom, sizeof(sFrom), sParts[3]);
+
+			//An item that no longer exists is dropped from the list.
+			if (iItem == -1)
+			{
+				iItem = -2;
+			}
+
+			continue;
+		}
+
+		Format(sKept, sizeof(sKept), "%s%s%s", sKept, sKept[0] == '\0' ? "" : ";", sEntry);
+	}
+
+	//Only the player it is waiting for can open it (checked against their own list, so it still works after
+	//they reconnect).
+	if (iItem == -1)
+	{
+		if (iFor > 0 && iFor != iActivator)
+		{
+			Cel_PrintToChat(iActivator, "This present is for {green}%N{default}.", iFor);
+		}
+		else
+		{
+			Cel_PrintToChat(iActivator, "This present isn't for you.");
+		}
+
+		return;
+	}
+
+	g_iPresentUid[iEntity] = 0;
+
+	Cel_DissolveEntity(iEntity);
+
+	Inv_SetString(iActivator, "presents", sKept);
+
+	if (iItem < 0)
+	{
+		return;
+	}
+
+	SetOwned(iActivator, iItem, GetOwned(iActivator, iItem) + 1);
+
+	EmitSoundToClient(iActivator, SOUND_REWARD);
+
+	Cel_PrintToChatAll("{green}%N{default} unwrapped a present from {green}%s{default}: a {green}%s{default} %s!", iActivator, sFrom, g_Items[iItem].sName, g_sKindName[g_Items[iItem].iKind]);
+	Cel_PrintToChat(iActivator, "Type {green}!%s %s{default} to spawn it.", g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sId);
 }
