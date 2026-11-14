@@ -1021,6 +1021,7 @@ void ApplyTuning()
 			kvTuning.GetVector("offset", g_Items[i].fHandOffset, g_Items[i].fHandOffset);
 			kvTuning.GetVector("angles", g_Items[i].fHandAngles, g_Items[i].fHandAngles);
 			g_Items[i].fHandScale = kvTuning.GetFloat("scale", g_Items[i].fHandScale);
+			g_Items[i].bBoneMerge = (kvTuning.GetNum("bonemerge", g_Items[i].bBoneMerge ? 1 : 0) == 1);
 			kvTuning.Rewind();
 		}
 	}
@@ -1067,6 +1068,10 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3], float
 				g_Items[i].fHandOffset = fOffset;
 				g_Items[i].fHandAngles = fAngles;
 				g_Items[i].fHandScale = fScale;
+
+				// Tuned by hand: placed from the hand attachment with these values, not bone-merged (a model
+				// rigged to a different skeleton sits crooked when bone-merged, and can't be moved).
+				g_Items[i].bBoneMerge = false;
 			}
 		}
 
@@ -1082,6 +1087,12 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3], float
 	kvTuning.SetVector("offset", fOffset);
 	kvTuning.SetVector("angles", fAngles);
 	kvTuning.SetFloat("scale", fScale);
+
+	if (!bHat)
+	{
+		kvTuning.SetNum("bonemerge", 0);
+	}
+
 	kvTuning.Rewind();
 
 	if (!kvTuning.ExportToFile(sPath))

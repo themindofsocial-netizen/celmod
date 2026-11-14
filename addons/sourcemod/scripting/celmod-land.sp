@@ -9,8 +9,9 @@
 bool g_bLandColor[MAXPLAYERS + 1];
 
 ArrayList g_alSkinTiles[MAXPLAYERS + 1];
-ConVar g_cvSkinTexture;
-ConVar g_cvSkinTile;
+ConVar g_cvSkinRefresh;
+ConVar g_cvSkinMaxTiles;
+Handle g_hSkinRefresh;
 int g_iLandSkin[MAXPLAYERS + 1];
 bool g_bLate;
 
@@ -151,12 +152,12 @@ public void OnPluginStart()
 	RegConsoleCmd("v_deathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_dm", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_gravity", Command_LandGravity, "|CelMod| Changes the gravity within the land.");
-	g_cvSkinTile = CreateConVar("cm_landskin_tile", "256", "Size in units of each land skin tile laid over a land's floor (one repeat of the texture).", _, true, 64.0, true, 2048.0);
-	g_cvSkinTexture = CreateConVar("cm_landskin_brightness", "170", "How bright land skins are drawn, 0 to 255 (they are not lit by the map, so a little darker looks more natural).", _, true, 0.0, true, 255.0);
+	g_cvSkinRefresh = CreateConVar("cm_landskin_refresh", "120", "Seconds between redrawing every land skin for everyone (bullet holes and sprays push old decals out). 0 = never.", _, true, 0.0);
+	g_cvSkinMaxTiles = CreateConVar("cm_landskin_maxtiles", "64", "Most decal tiles one land skin can use.", _, true, 1.0, true, 400.0);
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
-		g_alSkinTiles[i] = new ArrayList();
+		g_alSkinTiles[i] = new ArrayList(3);
 	}
 	
 	RegConsoleCmd("v_landskin", Command_LandSkin, "|CelMod| Covers the floor of your land with a land skin (1 to 26), or removes it (off).");
@@ -173,6 +174,12 @@ public void OnPluginStart()
 public void OnClientPostAdminCheck(int iClient)
 {
 	char sId[32];
+	
+	//Land skins already on the map are drawn for the new player once they have loaded in.
+	if (!IsFakeClient(iClient))
+	{
+		CreateTimer(5.0, Timer_SendLandSkins, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
+	}
 	
 	Cel_GetClientSettingString(iClient, "buildteam", g_sTeamIds[iClient], sizeof(g_sTeamIds[]));
 	
@@ -641,6 +648,7 @@ public Action Hook_SkullTransmit(int iEntity, int iClient)
 
 public void OnMapEnd()
 {
+	g_hSkinRefresh = null;
 	g_iBeam = -1;
 	g_iHalo = -1;
 	g_iLand = -1;
@@ -1552,11 +1560,18 @@ public Action Hook_CoopDamage(int iVictim, int &iAttacker, int &iInflictor, floa
 	return Plugin_Continue;
 }
 
-//Land skins: drawn as flat tiles lying just above the land's floor, using materials/celmod/landskins/floor/s1 to s26
-//(Sprite materials set to lie flat; the plain s1 to s26 floor materials would stand up and face the camera).
+//Land skins: the land's floor is painted with tiled decals, materials/celmod/landskins/decal/s1 to s26 (the same
+//textures as the old land skins, made into decals). Decals lie flat on the map's own floor and are lit by the map.
+//They only exist on players' screens, so they are sent again to players who join, and everyone's are cleared and
+//drawn again when one is removed (decals can't be taken off one at a time) and every cm_landskin_refresh seconds,
+//since bullet holes and sprays use up the game's decal slots and push old decals out.
 int g_iSkinPixels[LANDSKIN_COUNT + 1];
+int g_iSkinDecal[LANDSKIN_COUNT + 1];
 
-//Sends the floor materials to players, and works out each texture's width so the tiles are drawn the right size.
+#define LANDSKIN_DECAL_SCALE 0.5
+
+//Sends the decal materials to players, and works out each texture's width, which sets a tile's size (its width in
+//pixels times the decal scale), so the tiles are laid edge to edge.
 void PrecacheLandSkins()
 {
 	char sFile[PLATFORM_MAX_PATH], sLine[256], sTexture[PLATFORM_MAX_PATH];
@@ -1565,15 +1580,15 @@ void PrecacheLandSkins()
 	{
 		g_iSkinPixels[i] = 512;
 
-		Format(sFile, sizeof(sFile), "materials/celmod/landskins/floor/s%d.vmt", i);
+		Format(sFile, sizeof(sFile), "materials/celmod/landskins/decal/s%d.vmt", i);
 
 		if (FileExists(sFile, false))
 		{
 			AddFileToDownloadsTable(sFile);
 		}
 
-		Format(sTexture, sizeof(sTexture), "celmod/landskins/floor/s%d.vmt", i);
-		PrecacheModel(sTexture, true);
+		Format(sTexture, sizeof(sTexture), "celmod/landskins/decal/s%d", i);
+		g_iSkinDecal[i] = PrecacheDecal(sTexture, true);
 
 		//The material's $basetexture, then that texture's width from its VTF header.
 		File fMaterial = OpenFile(sFile, "r", true);
@@ -1623,29 +1638,48 @@ void PrecacheLandSkins()
 			delete fTexture;
 		}
 	}
-}
 
-void RemoveLandSkin(int iClient)
-{
-	for (int i = 0; i < g_alSkinTiles[iClient].Length; i++)
+	if (g_hSkinRefresh != null)
 	{
-		int iTile = EntRefToEntIndex(g_alSkinTiles[iClient].Get(i));
-
-		if (iTile != INVALID_ENT_REFERENCE && iTile > MaxClients)
-		{
-			AcceptEntityInput(iTile, "kill");
-		}
+		delete g_hSkinRefresh;
 	}
 
+	if (g_cvSkinRefresh.FloatValue > 0.0)
+	{
+		g_hSkinRefresh = CreateTimer(g_cvSkinRefresh.FloatValue, Timer_RefreshLandSkins, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
+public Action Timer_RefreshLandSkins(Handle hTimer)
+{
+	RedrawAllLandSkins(0);
+
+	return Plugin_Continue;
+}
+
+//The land's tiles are worked out once (where the floor is under each one) and kept, so they can be sent again.
+void RemoveLandSkin(int iClient)
+{
+	bool bHad = g_alSkinTiles[iClient].Length > 0;
+
 	g_alSkinTiles[iClient].Clear();
+
+	//Decals can't be taken off one at a time: everyone's are cleared and the other lands drawn again.
+	if (bHad)
+	{
+		RedrawAllLandSkins(0);
+	}
 }
 
 void ApplyLandSkin(int iClient)
 {
-	char sMaterial[PLATFORM_MAX_PATH];
-	float fAngles[3] = { -90.0, 0.0, 0.0 }, fMax[3], fMin[3], fPos[3];
+	float fMax[3], fMin[3], fStart[3], fEnd[3], fHit[3];
 
-	RemoveLandSkin(iClient);
+	if (g_alSkinTiles[iClient].Length > 0)
+	{
+		g_alSkinTiles[iClient].Clear();
+		RedrawAllLandSkins(0);
+	}
 
 	if (g_iLandSkin[iClient] < 1 || !g_liLand[iClient].bLandCreated)
 	{
@@ -1658,61 +1692,116 @@ void ApplyLandSkin(int iClient)
 		fMax[k] = (g_liLand[iClient].fLandPosBottom[k] < g_liLand[iClient].fLandPosTop[k]) ? g_liLand[iClient].fLandPosTop[k] : g_liLand[iClient].fLandPosBottom[k];
 	}
 
-	Format(sMaterial, sizeof(sMaterial), "celmod/landskins/floor/s%d.vmt", g_iLandSkin[iClient]);
-
-	float fTile = g_cvSkinTile.FloatValue;
+	float fTile = float(g_iSkinPixels[g_iLandSkin[iClient]]) * LANDSKIN_DECAL_SCALE;
 	float fWidth = fMax[0] - fMin[0], fLength = fMax[1] - fMin[1];
 
-	//Square tiles, overlapping a little where the land is not a whole number of tiles, so they cover it exactly.
 	int iAcross = RoundToCeil(fWidth / fTile), iAlong = RoundToCeil(fLength / fTile);
 
 	if (iAcross < 1) iAcross = 1;
 	if (iAlong < 1) iAlong = 1;
 
-	float fTileX = (fWidth < fTile) ? fWidth : fTile;
-	float fTileY = (fLength < fTile) ? fLength : fTile;
-	float fSize = (fTileX > fTileY) ? fTileX : fTileY;
+	//Very big lands use bigger steps (a little overlap) so the game's decal limit isn't used up by one land.
+	int iMax = g_cvSkinMaxTiles.IntValue;
+
+	if (iAcross * iAlong > iMax)
+	{
+		Cel_PrintToChat(iClient, "Your land is too big to cover completely with a land skin; the middle of it is covered.");
+
+		while (iAcross * iAlong > iMax)
+		{
+			if (iAcross >= iAlong) iAcross--; else iAlong--;
+		}
+	}
 
 	for (int x = 0; x < iAcross; x++)
 	{
 		for (int y = 0; y < iAlong; y++)
 		{
-			int iTile = CreateEntityByName("env_sprite_oriented");
+			//Tile centres, laid edge to edge from the middle of the land outwards.
+			fStart[0] = (fMin[0] + fMax[0]) * 0.5 + (x - (iAcross - 1) * 0.5) * fTile;
+			fStart[1] = (fMin[1] + fMax[1]) * 0.5 + (y - (iAlong - 1) * 0.5) * fTile;
+			fStart[2] = fMin[2] + 48.0;
 
-			if (iTile == -1)
+			fEnd = fStart;
+			fEnd[2] = fMin[2] - 64.0;
+
+			//The decal goes on the map's floor right under the tile.
+			Handle hTrace = TR_TraceRayEx(fStart, fEnd, MASK_SOLID_BRUSHONLY, RayType_EndPoint);
+
+			bool bHit = TR_DidHit(hTrace) && TR_GetEntityIndex(hTrace) == 0;
+
+			TR_GetEndPosition(fHit, hTrace);
+
+			delete hTrace;
+
+			if (bHit)
 			{
-				return;
+				g_alSkinTiles[iClient].PushArray(fHit, 3);
 			}
-
-			fPos[0] = fMin[0] + fTileX * 0.5 + ((iAcross > 1) ? x * (fWidth - fTileX) / (iAcross - 1) : (fWidth - fTileX) * 0.5);
-			fPos[1] = fMin[1] + fTileY * 0.5 + ((iAlong > 1) ? y * (fLength - fTileY) / (iAlong - 1) : (fLength - fTileY) * 0.5);
-
-			//Just above the floor, each tile a hair apart in height so overlapping edges do not flicker.
-			fPos[2] = fMin[2] + 1.0 + ((x + y) % 4) * 0.1;
-
-			DispatchKeyValue(iTile, "model", sMaterial);
-			char sColor[16];
-
-			IntToString(g_cvSkinTexture.IntValue, sColor, sizeof(sColor));
-			Format(sColor, sizeof(sColor), "%s %s %s", sColor, sColor, sColor);
-
-			DispatchKeyValue(iTile, "rendermode", "0");
-			DispatchKeyValue(iTile, "renderamt", "255");
-			DispatchKeyValue(iTile, "rendercolor", sColor);
-			DispatchKeyValue(iTile, "spawnflags", "1");
-			DispatchKeyValueFloat(iTile, "scale", fSize / float(g_iSkinPixels[g_iLandSkin[iClient]]));
-
-			DispatchSpawn(iTile);
-
-			DispatchKeyValue(iTile, "classname", "cel_landskin");
-
-			TeleportEntity(iTile, fPos, fAngles, NULL_VECTOR);
-
-			AcceptEntityInput(iTile, "ShowSprite");
-
-			g_alSkinTiles[iClient].Push(EntIndexToEntRef(iTile));
 		}
 	}
+
+	SendLandSkin(iClient, 0);
+}
+
+//Sends one land's tiles to a player (or everyone with 0).
+void SendLandSkin(int iOwner, int iTo)
+{
+	float fPos[3];
+	int iDecal = g_iSkinDecal[g_iLandSkin[iOwner]];
+
+	if (g_iLandSkin[iOwner] < 1 || iDecal <= 0)
+	{
+		return;
+	}
+
+	for (int i = 0; i < g_alSkinTiles[iOwner].Length; i++)
+	{
+		g_alSkinTiles[iOwner].GetArray(i, fPos, 3);
+
+		TE_Start("World Decal");
+		TE_WriteVector("m_vecOrigin", fPos);
+		TE_WriteNum("m_nIndex", iDecal);
+
+		if (iTo > 0)
+		{
+			TE_SendToClient(iTo);
+		} else {
+			TE_SendToAll();
+		}
+	}
+}
+
+//Clears the decals on a player's screen (or everyone's with 0) and draws every land skin again.
+void RedrawAllLandSkins(int iTo)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i) && (iTo == 0 || iTo == i))
+		{
+			ClientCommand(i, "r_cleardecals");
+		}
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_alSkinTiles[i].Length > 0)
+		{
+			SendLandSkin(i, iTo);
+		}
+	}
+}
+
+public Action Timer_SendLandSkins(Handle hTimer, any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+
+	if (iClient > 0 && IsClientInGame(iClient))
+	{
+		RedrawAllLandSkins(iClient);
+	}
+
+	return Plugin_Stop;
 }
 
 public Action Command_LandSkin(int iClient, int iArgs)

@@ -1,0 +1,7 @@
+// |CelMod| land skin s19 as a floor decal (used by !landskin). Drawn lit by the map, lying flat on the floor.
+"LightmappedGeneric"
+{
+	"$basetexture"	"dev/dev_corrugatedmetal"
+	"$decal"		"1"
+	"$decalscale"	"0.5"
+}

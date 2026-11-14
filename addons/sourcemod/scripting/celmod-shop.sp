@@ -42,6 +42,7 @@ ArrayList g_alItems;
 StringMap g_smSeasonOpen;
 char g_sOpenShops[256];
 StringMap g_smSeasonForced;
+StringMap g_smSeasonName;
 KeyValues g_kvStock;
 
 char g_sShopDB[PLATFORM_MAX_PATH];
@@ -77,6 +78,7 @@ public void OnPluginStart()
 	g_alItems = new ArrayList(sizeof(ShopItem));
 	g_smSeasonOpen = new StringMap();
 	g_smSeasonForced = new StringMap();
+	g_smSeasonName = new StringMap();
 
 	BuildPath(Path_SM, g_sShopDB, sizeof(g_sShopDB), "data/celmod/shop.txt");
 	BuildPath(Path_SM, g_sStockDB, sizeof(g_sStockDB), "data/celmod/shopstock.txt");
@@ -237,6 +239,12 @@ void LoadCatalog()
 		StringToLowerCase(sKey);
 
 		ResetItem(eItem, TYPE_MODEL, sKey, "Player Models");
+
+		// A seasonal model is listed in its season's shop (the Skeleton in the Halloween Shop).
+		if (sSeason[0] != '\0')
+		{
+			g_smSeasonName.GetString(sSeason, eItem.sCategory, sizeof(eItem.sCategory));
+		}
 		strcopy(eItem.sName, sizeof(eItem.sName), sName);
 		strcopy(eItem.sTarget, sizeof(eItem.sTarget), sId);
 		eItem.iPrice = iPrice;
@@ -301,6 +309,7 @@ void LoadSeasons(KeyValues kvShop)
 		}
 
 		g_smSeasonOpen.SetValue(sKey, bOpen);
+		g_smSeasonName.SetString(sKey, sName);
 
 		if (bOpen)
 		{

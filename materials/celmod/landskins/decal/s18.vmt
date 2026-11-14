@@ -1,0 +1,7 @@
+// |CelMod| land skin s18 as a floor decal (used by !landskin). Drawn lit by the map, lying flat on the floor.
+"LightmappedGeneric"
+{
+	"$basetexture"	"metal/citadel_metalwall078a"
+	"$decal"		"1"
+	"$decalscale"	"0.5"
+}

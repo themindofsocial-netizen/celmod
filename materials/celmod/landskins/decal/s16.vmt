@@ -1,0 +1,7 @@
+// |CelMod| land skin s16 as a floor decal (used by !landskin). Drawn lit by the map, lying flat on the floor.
+"LightmappedGeneric"
+{
+	"$basetexture"	"tile/tilefloor010a"
+	"$decal"		"1"
+	"$decalscale"	"0.5"
+}

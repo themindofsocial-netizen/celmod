@@ -1,0 +1,7 @@
+// |CelMod| land skin s25 as a floor decal (used by !landskin). Drawn lit by the map, lying flat on the floor.
+"LightmappedGeneric"
+{
+	"$basetexture"	"skybox/sky_day01_05up"
+	"$decal"		"1"
+	"$decalscale"	"0.5"
+}

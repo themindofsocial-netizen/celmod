@@ -178,3 +178,8 @@
 		 - Hoopies bounce players who land or stand on them (checked every frame now), and the Hoopie is a shop exclusive.
 		 - Invisible casts shadows again (the flashlight too): it now uses its own never-drawn model, phys8_inv.mdl, instead of
 		   being see-through, and a faint copy still shows when you are right up close.
+		 - Land skins are painted on your land's floor as decals now, lit by the map. They are sent to players who join, and
+		   redrawn for everyone every cm_landskin_refresh seconds (120) because bullet holes push old decals out.
+		 - Celweps: !tune or !nudge on a held celwep now places it from the hand with your values (instead of bone-merging it),
+		   so every celwep can be lined up in game and stays that way.
+		 - Seasonal player models are listed in their season's shop (the Skeleton in the Halloween Shop).
