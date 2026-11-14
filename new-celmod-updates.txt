@@ -194,3 +194,5 @@
 		   Admins can check what land skins see with !landskin debug.
 		 - Land skins write their own decal materials when the server is missing them, so they work without uploading the folder.
 		 - Fixed: the land border flickered (each redraw ran out just before the next one).
+		 - Event areas: emblems, hats, celweps and cleers boxes can no longer be spawned inside them (!emblem off and listing
+		   still work), and nothing can be built into one by aiming at it from outside or loading a build over it.

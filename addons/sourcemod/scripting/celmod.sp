@@ -42,6 +42,9 @@ int g_iPropLimit;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("Cel_GetZoneType");
+	MarkNativeAsOptional("Cel_IsZoneExempt");
+	
 	CreateNative("Cel_AddToBlacklist", Native_AddToBlacklist);
 	CreateNative("Cel_AddToCelCount", Native_AddToCelCount);
 	CreateNative("Cel_AddToPropCount", Native_AddToPropCount);
@@ -1296,6 +1299,15 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	iColor[1] = GetNativeCell(8);
 	iColor[2] = GetNativeCell(9);
 	iColor[3] = GetNativeCell(10);
+	
+	//Nothing is built inside an event area (a maze or parkour course), even by aiming into it from outside or
+	//loading a build over it. Admins with !zonebypass on are the exception.
+	if (iClient > 0 && iClient <= MaxClients && GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available
+		&& Cel_GetZoneType(fOrigin) == CEL_ZONE_EVENT && !Cel_ZoneExempt(iClient))
+	{
+		Cel_PrintToChat(iClient, "You cannot spawn things inside an event area.");
+		return -1;
+	}
 	
 	//A physics prop needs the model's .phy file. Without one it would not spawn at all, so it becomes a solid
 	//prop that does not move instead.

@@ -41,12 +41,16 @@ int g_iPendingType[MAXPLAYERS + 1];
 int g_iZoneCount;
 int g_iZoneType[MAX_ZONES];
 
+//Commands that spawn something (an emblem, hat or celwep, or a cleers box): inside an event area they only work to
+//list what you own or check your balance (no arguments), or to put an item away ("off").
+char g_sEventNoSpawn[][] = { "v_emblem", "v_hat", "v_weapon", "v_cl" };
+
 //Commands that still work inside an event area. Everything else that starts with v_ is a building command.
 char g_sEventAllowed[][] = 
 {
-	"v_balance", "v_buy", "v_cl", "v_emblems", "v_hats", "v_weapons", "v_inventory", "v_thirdperson", "v_firstperson", "v_stuck", 
+	"v_balance", "v_buy", "v_emblems", "v_hats", "v_weapons", "v_inventory", "v_thirdperson", "v_firstperson", "v_stuck", 
 	"v_owner", "v_commandlist", "v_cmds", "v_commands", "v_updates", "v_updatelist", "v_switch", "v_guess", "v_bid", 
-	"v_playermodel", "v_playermodels", "v_buymodel", "v_emblem", "v_hat", "v_weapon", "v_zones", "v_celmusic", "v_block", "v_unblock", "v_speed"
+	"v_playermodel", "v_playermodels", "v_buymodel", "v_zones", "v_celmusic", "v_block", "v_unblock", "v_speed"
 };
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
@@ -279,9 +283,32 @@ public Action Listener_AnyCommand(int iClient, const char[] sCommand, int iArgs)
 	
 	int iZone = ZoneOfClient(iClient);
 	
-	if (iZone == -1 || IsExempt(iClient))
+	if (IsExempt(iClient))
 	{
 		return Plugin_Continue;
+	}
+	
+	//Standing outside, but aiming into an event area: building commands are refused there too, so nothing can be
+	//spawned into a maze or parkour course from outside it.
+	if (iZone == -1)
+	{
+		if (!bBuild || bFly)
+		{
+			return Plugin_Continue;
+		}
+		
+		float fAim[3];
+		
+		Cel_GetCrosshairHitOrigin(iClient, fAim);
+		
+		int iAimZone = FindZone(fAim);
+		
+		if (iAimZone == -1 || g_iZoneType[iAimZone] != ZONE_EVENT || StrEqual(sLower, "v_land"))
+		{
+			return Plugin_Continue;
+		}
+		
+		iZone = iAimZone;
 	}
 	
 	//Admins can always manage areas and turn the bypass on, even standing inside one.
@@ -310,6 +337,31 @@ public Action Listener_AnyCommand(int iClient, const char[] sCommand, int iArgs)
 		{
 			return Plugin_Continue;
 		}
+	}
+	
+	for (int i = 0; i < sizeof(g_sEventNoSpawn); i++)
+	{
+		if (!StrEqual(sLower, g_sEventNoSpawn[i]))
+		{
+			continue;
+		}
+		
+		char sArg[16];
+		
+		if (iArgs > 0)
+		{
+			GetCmdArg(1, sArg, sizeof(sArg));
+		}
+		
+		if (iArgs == 0 || (i < 3 && (StrEqual(sArg, "off", false) || StrEqual(sArg, "none", false))))
+		{
+			return Plugin_Continue;
+		}
+		
+		Format(sMessage, sizeof(sMessage), "You cannot spawn things inside {green}%s{default}.", g_sZoneName[iZone]);
+		Notice(iClient, sMessage);
+		
+		return Plugin_Stop;
 	}
 	
 	Format(sMessage, sizeof(sMessage), "Building commands do not work inside {green}%s{default}.", g_sZoneName[iZone]);

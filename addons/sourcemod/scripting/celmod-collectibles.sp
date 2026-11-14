@@ -849,6 +849,13 @@ Action HandleItemCommand(int iClient, int iArgs, int iKind)
 
 	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
 
+	// Nothing can be spawned into an event area, even by aiming into it from outside.
+	if (!IsZoneExempt(iClient) && ZoneTypeAt(fOrigin) == CEL_ZONE_EVENT)
+	{
+		Cel_ReplyToCommand(iClient, "You cannot spawn things inside an event area.");
+		return Plugin_Handled;
+	}
+
 	GetClientAbsAngles(iClient, fAngles);
 
 	fAngles[0] = 0.0;
@@ -2820,6 +2827,12 @@ public int Native_SpawnCollectible(Handle hPlugin, int iNumParams)
 
 	// Only as many copies as the player really owns can exist, so loading a build never duplicates an item.
 	if (CountSpawned(iClient, iItem) >= GetOwned(iClient, iItem))
+	{
+		return -1;
+	}
+
+	// A build loaded over an event area leaves its items out of it.
+	if (!IsZoneExempt(iClient) && ZoneTypeAt(fOrigin) == CEL_ZONE_EVENT)
 	{
 		return -1;
 	}
