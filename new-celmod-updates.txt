@@ -126,4 +126,4 @@
 		 - Seasonal shops open around each holiday (dates in the "Seasons" section of shop.txt): the Halloween Shop (gift, jackolantern, jackolanternbig, pumpkin1-3), the Christmas Shop (candycane, present, santahat, xmastree), the New Year Shop (partyhat, yearhat) and the Clock Day Shop (sbc, the Strawberry Clock, around August 15th). Bought seasonal props can be spawned all year. !seasons lists them; players are told when one is open.
 		 - Shop models (and the materials they use) are sent to players automatically, read from the model itself. A model without a .phy file spawns as a solid prop that does not move instead of failing.
 		 - The button cel uses the models/dav0r/buttons/switch.mdl switch when the server has it.
-		 - Announcements made in the website's admin panel show in chat (once, repeated every few minutes, and/or when players join).
+		 - Announcements made in the website's admin panel show in chat as |CelMod| <message> (once, repeated every few minutes, and/or when players join).

@@ -244,7 +244,7 @@ void Announce(int iIndex)
 	{
 		if (IsClientInGame(i) && !IsFakeClient(i))
 		{
-			Cel_PrintToChat(i, "{green}Announcement:{default} %s", g_sAnnounce[iIndex]);
+			Cel_PrintToChat(i, "%s", g_sAnnounce[iIndex]);
 		}
 	}
 }
@@ -272,7 +272,7 @@ public Action Timer_JoinAnnouncements(Handle hTimer, any iUserID)
 	{
 		if (g_bAnnounceOnJoin[i])
 		{
-			Cel_PrintToChat(iClient, "{green}Announcement:{default} %s", g_sAnnounce[i]);
+			Cel_PrintToChat(iClient, "%s", g_sAnnounce[i]);
 		}
 	}
 
