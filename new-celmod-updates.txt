@@ -156,3 +156,6 @@
 		 - Teleport pads use the teleporter platform from Dr. Kleiner's lab again.
 		 - New decorative emblem: Core, with the shimmering core skin.
 		 - New decorative emblems: Vector (a red wireframe) and Spectral (a shifting rainbow).
+		 - New decorative emblems: Metal, Force, Curse, Dragon and Invisible (only its flashlight shadow shows).
+		 - Phantom is now see-through, Cyan is a brighter sky blue, and Nuke uses the animated skin.
+		 - Emblems can be translucent: the alpha in an emblem's color now applies to the held emblem and its drop box.

@@ -540,7 +540,7 @@
 		{
 			"name"			"Nuke"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"0"
+			"skin"			"6"
 			"color"			"0 0 80 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
@@ -862,7 +862,7 @@
 			"name"			"Cyan"
 			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
-			"color"			"0 255 255 255"
+			"color"			"30 140 255 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
@@ -920,12 +920,77 @@
 			"power"			"none"
 			"dropweight"	"4"
 		}
+		// Decorative: rusted tram metal, no power.
+		"metal"
+		{
+			"name"			"Metal"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"11"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
+		// Decorative: the grey combine shield skin, no power.
+		"force"
+		{
+			"name"			"Force"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"7"
+			"color"			"255 255 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
+		// Decorative: a deep violet, no power.
+		"curse"
+		{
+			"name"			"Curse"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"120 0 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
+		// Decorative: the animated nuke skin in magenta, no power.
+		"dragon"
+		{
+			"name"			"Dragon"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"6"
+			"color"			"255 0 255 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
+		// Decorative: fully invisible, only its flashlight shadow gives it away, no power.
+		"invisible"
+		{
+			"name"			"Invisible"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 0"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"4"
+		}
 		"phantom"
 		{
 			"name"			"Phantom"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"8"
-			"color"			"80 255 140 255"
+			"skin"			"0"
+			"color"			"255 255 255 140"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"

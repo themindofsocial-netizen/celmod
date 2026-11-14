@@ -3441,7 +3441,7 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	// when its model is a physics-only prop (hats, the traffic cone...).
 	DispatchKeyValue(iHand, "classname", "cel_emblem_held");
 
-	SetEntityRenderColor(iHand, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+	ApplyItemColor(iHand, iItem);
 
 	if (g_Items[iItem].bGlow)
 	{
@@ -3954,6 +3954,14 @@ void PlayShotSound(int iClient, const char[] sSound)
 }
 
 // A sprite that flies from one point to another and removes itself on arrival.
+// Tints an entity in the item's color. An alpha below 255 makes it see-through (Phantom),
+// and 0 hides it completely (Invisible).
+void ApplyItemColor(int iEntity, int iItem)
+{
+	SetEntityRenderMode(iEntity, g_Items[iItem].iColor[3] < 255 ? RENDER_TRANSCOLOR : RENDER_NORMAL);
+	SetEntityRenderColor(iEntity, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], g_Items[iItem].iColor[3]);
+}
+
 int LaunchSprite(int iItem, float fStart[3], float fEnd[3], int iColor[4], float fSpeed, float fScale, bool bGravity)
 {
 	char sBuffer[64];
@@ -5882,7 +5890,7 @@ int SpawnDropBox()
 		SetEntProp(iBox, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
 	}
 
-	SetEntityRenderColor(iBox, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+	ApplyItemColor(iBox, iItem);
 
 	// It must survive the fall and being thrown around with the gravity gun until the map changes.
 	SetEntProp(iBox, Prop_Data, "m_takedamage", 0, 1);
