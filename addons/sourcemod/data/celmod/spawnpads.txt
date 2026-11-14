@@ -12,6 +12,8 @@
 //     "keyvalues"  Optional keyvalues for the spawned NPC, "key value;key value".
 //     "onfire"     1: the NPC is set alight when spawned, and only kills of a burning one count.
 //     "max"        How many of its enemies one pad keeps alive at once.
+//     "health"     Optional: the enemy's health. Without it the game's own value is used (HL2DM doesn't load
+//                  Half-Life 2's skill settings, so celmod-spawnpads fills in the normal ones).
 // }
 "SpawnPads"
 {

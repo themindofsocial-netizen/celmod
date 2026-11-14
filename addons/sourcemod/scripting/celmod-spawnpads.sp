@@ -36,6 +36,7 @@ int g_iPadType[MAXENTITIES + 1];
 int g_iSpawnedBy[MAXENTITIES + 1];
 int g_iTypeCount;
 int g_iTypeMax[MAX_PADTYPES];
+int g_iTypeHealth[MAX_PADTYPES];
 int g_iTypeSkin[MAX_PADTYPES];
 
 #define MAX_DUNGEON 64
@@ -51,6 +52,7 @@ int g_iDungeonOf[MAXENTITIES + 1] = { -1, ... };
 int g_iBeamSprite;
 ConVar g_cvDungeonInterval;
 ConVar g_cvDungeonRange;
+ConVar g_cvHuntRange;
 
 ArrayList g_alPads;
 StringMap g_smHookedClasses;
@@ -94,6 +96,7 @@ public void OnPluginStart()
 	LoadPadTypes();
 
 	g_cvDungeonInterval = CreateConVar("cm_dungeon_interval", "15.0", "Default seconds between a dungeon spawner's spawns.", _, true, 2.0);
+	g_cvHuntRange = CreateConVar("cm_dungeon_hunt_range", "1500.0", "How far away dungeon and spawn pad enemies notice a player they can see.", _, true, 0.0);
 	g_cvDungeonRange = CreateConVar("cm_dungeon_range", "2000.0", "Dungeon spawners only spawn while a player is this close (0 = always).", _, true, 0.0);
 
 	RegAdminCmd("v_dungeonspawner", Command_DungeonSpawner, ADMFLAG_SLAY, "|CelMod| Places a dungeon enemy spawner where you aim: <enemy> [max alive] [seconds between spawns]. Saved for this map.");
@@ -126,6 +129,40 @@ public void OnMapStart()
 	LoadDungeon();
 
 	CreateTimer(1.0, Timer_SpawnPads, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+}
+
+//HL2DM never loads Half-Life 2's skill settings, so every enemy's health and damage ConVar is 0: enemies spawn
+//with almost no health and their attacks do nothing. Any of them still at 0 gets Half-Life 2's normal value.
+public void OnConfigsExecuted()
+{
+	static const char sSkill[][][] =
+	{
+		{ "sk_zombie_health", "50" }, { "sk_zombie_dmg_one_slash", "10" }, { "sk_zombie_dmg_both_slash", "25" },
+		{ "sk_zombie_poison_health", "175" }, { "sk_zombie_poison_dmg_spit", "20" },
+		{ "sk_fastzombie_health", "50" }, { "sk_fastzombie_dmg_one_slash", "6" }, { "sk_fastzombie_dmg_both_slash", "10" },
+		{ "sk_zombine_health", "100" },
+		{ "sk_headcrab_health", "10" }, { "sk_headcrab_melee_dmg", "5" },
+		{ "sk_headcrab_fast_health", "10" },
+		{ "sk_headcrab_poison_health", "35" },
+		{ "sk_antlion_health", "30" }, { "sk_antlion_swipe_damage", "5" }, { "sk_antlion_jump_damage", "5" },
+		{ "sk_antlionguard_health", "500" }, { "sk_antlionguard_dmg_charge", "20" }, { "sk_antlionguard_dmg_shove", "10" },
+		{ "sk_manhack_health", "25" }, { "sk_manhack_melee_dmg", "20" },
+		{ "sk_stalker_health", "50" }, { "sk_stalker_melee_dmg", "5" },
+		{ "sk_strider_health", "350" }, { "sk_strider_num_missiles1", "5" }, { "sk_strider_num_missiles2", "7" }, { "sk_strider_num_missiles3", "7" },
+		{ "sk_vortigaunt_health", "100" }, { "sk_vortigaunt_dmg_claw", "10" }, { "sk_vortigaunt_dmg_rake", "25" }, { "sk_vortigaunt_dmg_zap", "25" },
+		{ "sk_ichthyosaur_health", "200" }, { "sk_ichthyosaur_melee_dmg", "8" },
+		{ "sk_rollermine_shock", "10" }, { "sk_rollermine_stun_delay", "3" }, { "sk_rollermine_vehicle_intercept", "1" }
+	};
+
+	for (int i = 0; i < sizeof(sSkill); i++)
+	{
+		ConVar cvSkill = FindConVar(sSkill[i][0]);
+
+		if (cvSkill != null && cvSkill.FloatValue == 0.0)
+		{
+			cvSkill.SetString(sSkill[i][1]);
+		}
+	}
 }
 
 public void OnClientDisconnect(int iClient)
@@ -161,6 +198,7 @@ void LoadPadTypes()
 
 		g_iTypeSkin[i] = kvPads.GetNum("skin", 0);
 		g_iTypeMax[i] = kvPads.GetNum("max", 2);
+		g_iTypeHealth[i] = kvPads.GetNum("health", 0);
 		g_bTypeOnFire[i] = kvPads.GetNum("onfire", 0) != 0;
 
 		//Every kill of this enemy is heard through its OnDeath output.
@@ -550,6 +588,20 @@ public Action Timer_SpawnPads(Handle hTimer)
 
 	ThinkDungeon(fNow);
 
+	//Every couple of seconds, idle enemies from dungeons and pads go looking for a player.
+	static int iTick;
+
+	if (++iTick % 2 == 0)
+	{
+		for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+		{
+			if ((g_iDungeonOf[i] != -1 || g_iSpawnedBy[i] != INVALID_ENT_REFERENCE) && IsValidEntity(i))
+			{
+				HuntPlayers(i);
+			}
+		}
+	}
+
 	for (int i = 0; i < g_alPads.Length; i++)
 	{
 		int iPad = EntRefToEntIndex(g_alPads.Get(i));
@@ -630,7 +682,14 @@ void SpawnEnemy(int iPad, int iType)
 
 	fOrigin[2] += 16.0;
 
-	int iEnemy = SpawnEnemyAt(iType, fOrigin, fAngles[1]);
+	float fSpot[3];
+
+	if (!FindSpawnSpot(fOrigin, fSpot))
+	{
+		return;
+	}
+
+	int iEnemy = SpawnEnemyAt(iType, fSpot, fAngles[1]);
 
 	if (iEnemy == -1)
 	{
@@ -680,9 +739,21 @@ int SpawnEnemyAt(int iType, float fOrigin[3], float fYaw)
 
 	fAngles[1] = fYaw;
 
+	//Corpses fade away instead of piling up.
+	DispatchKeyValue(iEnemy, "spawnflags", "512");
+
 	TeleportEntity(iEnemy, fOrigin, fAngles, NULL_VECTOR);
 	DispatchSpawn(iEnemy);
 	ActivateEntity(iEnemy);
+
+	//A health set for this enemy in spawnpads.txt ("health") wins over the game's default.
+	if (g_iTypeHealth[iType] > 0)
+	{
+		SetEntProp(iEnemy, Prop_Data, "m_iHealth", g_iTypeHealth[iType]);
+		SetEntProp(iEnemy, Prop_Data, "m_iMaxHealth", g_iTypeHealth[iType]);
+	}
+
+	AcceptEntityInput(iEnemy, "Wake");
 
 	if (g_bTypeOnFire[iType])
 	{
@@ -690,6 +761,121 @@ int SpawnEnemyAt(int iType, float fOrigin[3], float fYaw)
 	}
 
 	return iEnemy;
+}
+
+//A clear spot for a new enemy near a point: the point itself if nothing stands there, otherwise a few tries in a ring
+//around it, so enemies never spawn inside each other (stuck in a stack) or inside a player. False if all are taken.
+bool FindSpawnSpot(const float fCenter[3], float fSpot[3])
+{
+	float fMins[3] = { -18.0, -18.0, 0.0 }, fMaxs[3] = { 18.0, 18.0, 72.0 };
+
+	for (int i = 0; i < 12; i++)
+	{
+		fSpot = fCenter;
+
+		if (i > 0)
+		{
+			float fAngle = GetRandomFloat(0.0, 6.2832), fDist = GetRandomFloat(40.0, 110.0);
+
+			fSpot[0] += Cosine(fAngle) * fDist;
+			fSpot[1] += Sine(fAngle) * fDist;
+		}
+
+		fSpot[2] += 4.0;
+
+		TR_TraceHullFilter(fSpot, fSpot, fMins, fMaxs, MASK_NPCSOLID, Filter_SpawnSpot);
+
+		if (TR_DidHit())
+		{
+			continue;
+		}
+
+		//There must be a way there from the spawner (not through a wall).
+		TR_TraceRayFilter(fCenter, fSpot, MASK_NPCSOLID_BRUSHONLY, RayType_EndPoint, Filter_SpawnSpot);
+
+		if (!TR_DidHit())
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+public bool Filter_SpawnSpot(int iEntity, int iMask)
+{
+	return true;
+}
+
+//Enemies that haven't noticed anyone are told about the nearest player they can see, so they come for them
+//instead of standing where they spawned.
+void HuntPlayers(int iEnemy)
+{
+	if (!HasEntProp(iEnemy, Prop_Data, "m_hEnemy"))
+	{
+		return;
+	}
+
+	int iCurrent = GetEntPropEnt(iEnemy, Prop_Data, "m_hEnemy");
+
+	if (iCurrent > 0 && iCurrent <= MaxClients && IsClientInGame(iCurrent) && IsPlayerAlive(iCurrent))
+	{
+		return;
+	}
+
+	float fEyes[3], fPos[3], fBest = g_cvHuntRange.FloatValue;
+	int iTarget = -1;
+
+	GetEntPropVector(iEnemy, Prop_Data, "m_vecAbsOrigin", fEyes);
+	fEyes[2] += 40.0;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || GetEntityMoveType(i) == MOVETYPE_NOCLIP)
+		{
+			continue;
+		}
+
+		GetClientEyePosition(i, fPos);
+
+		float fDist = GetVectorDistance(fEyes, fPos);
+
+		if (fDist >= fBest)
+		{
+			continue;
+		}
+
+		TR_TraceRayFilter(fEyes, fPos, MASK_VISIBLE, RayType_EndPoint, Filter_NotEnemy, iEnemy);
+
+		if (TR_DidHit() && TR_GetEntityIndex() != i)
+		{
+			continue;
+		}
+
+		fBest = fDist;
+		iTarget = i;
+	}
+
+	if (iTarget == -1)
+	{
+		return;
+	}
+
+	//UpdateEnemyMemory takes a targetname: the player gets a short-lived one for it, then their own back.
+	char sOld[64];
+
+	GetEntPropString(iTarget, Prop_Data, "m_iName", sOld, sizeof(sOld));
+	SetEntPropString(iTarget, Prop_Data, "m_iName", "cm_hunt_target");
+
+	SetVariantString("cm_hunt_target");
+	AcceptEntityInput(iEnemy, "UpdateEnemyMemory");
+
+	SetEntPropString(iTarget, Prop_Data, "m_iName", sOld);
+}
+
+public bool Filter_NotEnemy(int iEntity, int iMask, any iEnemy)
+{
+	return iEntity != iEnemy;
 }
 
 /*
@@ -1097,7 +1283,14 @@ void ThinkDungeon(float fNow)
 			continue;
 		}
 
-		int iEnemy = SpawnEnemyAt(g_iDungeonType[i], g_fDungeonOrigin[i], g_fDungeonYaw[i]);
+		float fSpot[3];
+
+		if (!FindSpawnSpot(g_fDungeonOrigin[i], fSpot))
+		{
+			continue;
+		}
+
+		int iEnemy = SpawnEnemyAt(g_iDungeonType[i], fSpot, g_fDungeonYaw[i]);
 
 		if (iEnemy != -1)
 		{
