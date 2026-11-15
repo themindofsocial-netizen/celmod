@@ -322,3 +322,4 @@
 		 - The download list works on Linux servers: Windows line endings and \ in paths no longer stop files from being
 		   sent, and the server log says how many were sent and which are missing.
 		 - !setpass and !pass never show in the command feed, so nobody else sees a button's passcode.
+		 - Looking at another player shows their name, money and tactics level again (the HUD's aim check skipped players).

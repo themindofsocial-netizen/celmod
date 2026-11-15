@@ -504,9 +504,20 @@ public Action Timer_HUD(Handle hTimer)
 		{
 			if (Cel_IsPlayer(i))
 			{
-				iEntity = Cel_GetClientAimTarget(i);
+				//Another player under the crosshair: their name, money and tactics level. (Cel_GetClientAimTarget only
+				//finds props: its trace goes through players.)
+				int iPlayer = GetClientAimTarget(i, true);
 				
-				if (iEntity != -1)
+				iEntity = (iPlayer > 0 && iPlayer != i && IsClientInGame(iPlayer) && IsPlayerAlive(iPlayer) && Cel_IsPlayer(iPlayer)) ? -1 : Cel_GetClientAimTarget(i);
+				
+				if (iEntity == -1 && iPlayer > 0 && iPlayer != i && IsClientInGame(iPlayer) && IsPlayerAlive(iPlayer) && Cel_IsPlayer(iPlayer))
+				{
+					Cel_GetClientBalanceTranslated(iPlayer, sBalance, sizeof(sBalance));
+					
+					Format(sHUDMessage, sizeof(sHUDMessage), "%N Money: %s\nTactics Lvl: %d", iPlayer, sBalance, Cel_GetTacticsLevel(iPlayer));
+					
+					Cel_GetHudColor(iPlayer, iHUDColor);
+				} else if (iEntity != -1)
 				{
 					if (Cel_GetEntityType(iEntity) == ENTTYPE_CLEER && Cel_GetCleerBoxAmount(iEntity) > 0)
 					{
