@@ -89,7 +89,7 @@ public void OnPluginStart()
 		g_iSpawnedBy[i] = INVALID_ENT_REFERENCE;
 	}
 
-	g_cvKills = CreateConVar("cm_spawnpad_kills", "500", "Kills of an enemy needed for each of its spawn pads.", _, true, 1.0);
+	g_cvKills = CreateConVar("cm_spawnpad_kills", "1000", "Kills of an enemy needed for each of its spawn pads.", _, true, 1.0);
 	g_cvInterval = CreateConVar("cm_spawnpad_interval", "8.0", "Seconds between a spawn pad's spawns.", _, true, 1.0);
 
 	RegConsoleCmd("v_spawnpad", Command_SpawnPad, "|CelMod| Places an enemy spawn pad you have earned, or lists your kills and pads.");

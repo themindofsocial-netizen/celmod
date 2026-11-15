@@ -240,3 +240,6 @@
 		 - The Power Booth only appears on about one map in three now (cm_powerbooth_chance).
 		 - Black and White emblems are rarer from digging: 0.02 of finds (cm_dig_emblem_chance).
 		 - !buildmessage <text>: players walking into your build see "From <you>: <text>" in chat (!buildmessage off removes it).
+		 - Spawn pads now take 1,000 kills of an enemy each (cm_spawnpad_kills).
+		 - Map timer announcements (celmod-maptimer): at 60, 30, 15, 5 and 1 minutes left, "-=-=-=X MINUTES REMAINING=-=-=-"
+		   (with "- SAVE YOUR BUILDS" from 5 minutes down), a gong, a Metro Cop saying the minutes, and "stay alert" at 5.

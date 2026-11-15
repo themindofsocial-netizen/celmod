@@ -1,7 +1,7 @@
 // Enemy spawn pads (models/celmod/spawnpad2.mdl).
 //
 // Killing an enemy (in a map's dungeon, for example) counts toward its pad. Every cm_spawnpad_kills kills
-// (500 by default) earns one pad of that kind, and each pad earned lets you have one more placed at a time.
+// (1000 by default) earns one pad of that kind, and each pad earned lets you have one more placed at a time.
 // Enemies that come out of a spawn pad never count toward kills.
 //
 // "alias"
