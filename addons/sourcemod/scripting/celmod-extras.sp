@@ -25,6 +25,8 @@ bool g_bHideHooked[MAXENTITIES + 1];
 bool g_bLandBan[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bBlockLand[MAXPLAYERS + 1][MAXPLAYERS + 1];
 char g_sBlockIds[MAXPLAYERS + 1][1024];
+char g_sBuildMessage[MAXPLAYERS + 1][128];
+int g_iLastLandIn[MAXPLAYERS + 1];
 bool g_bOutsideKnown[MAXPLAYERS + 1];
 float g_fLastOutside[MAXPLAYERS + 1][3];
 float g_fNextBlockNotice[MAXPLAYERS + 1];
@@ -109,6 +111,8 @@ public void OnPluginStart()
 	CreateTimer(0.1, Timer_BlockLands, _, TIMER_REPEAT);
 	RegConsoleCmd("v_landban", Command_LandBan, "|CelMod| Bans a player from your land.");
 	RegConsoleCmd("v_landunban", Command_LandUnban, "|CelMod| Lets a banned player back into your land.");
+	RegConsoleCmd("v_buildmessage", Command_BuildMessage, "|CelMod| Sets the message players see when they walk into your build (off to remove it).");
+	CreateTimer(0.5, Timer_BuildMessages, _, TIMER_REPEAT);
 	RegConsoleCmd("v_message", Command_Message, "|CelMod| Spawns a message cel that shows your text to whoever uses it.");
 	RegConsoleCmd("v_release", Command_Release, "|CelMod| Releases the entity you are looking at from a weld.");
 	RegConsoleCmd("v_show", Command_Show, "|CelMod| Shows a hidden player's entities again.");
@@ -130,6 +134,8 @@ public void OnPluginStart()
 
 public void OnClientPutInServer(int iClient)
 {
+	g_sBuildMessage[iClient][0] = '\0';
+	g_iLastLandIn[iClient] = 0;
 	g_iMoveToRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
@@ -318,6 +324,16 @@ public void OnClientPostAdminCheck(int iClient)
 	char sId[32];
 	
 	Cel_GetClientSettingString(iClient, "blockedlands", g_sBlockIds[iClient], sizeof(g_sBlockIds[]));
+	
+	//The message players see when they walk into this player's build.
+	Cel_GetClientSettingString(iClient, "buildmessage", g_sBuildMessage[iClient], sizeof(g_sBuildMessage[]));
+	
+	if (StrEqual(g_sBuildMessage[iClient], "none"))
+	{
+		g_sBuildMessage[iClient][0] = '\0';
+	}
+	
+	g_iLastLandIn[iClient] = 0;
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -1975,4 +1991,81 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 	
 	g_alLoadLinks[iClient].Clear();
 	g_smLoadIds[iClient].Clear();
+}
+
+//Build messages: !buildmessage <text> sets what players see in chat when they walk into your build (your land).
+public Action Command_BuildMessage(int iClient, int iArgs)
+{
+	char sMessage[128];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		if (g_sBuildMessage[iClient][0] != '\0')
+		{
+			Cel_ReplyToCommand(iClient, "Your build message: {green}%s{default}. Change it with {green}[tag]buildmessage{default} <text>, or remove it with {green}[tag]buildmessage off{default}.", g_sBuildMessage[iClient]);
+		} else {
+			Cel_ReplyToCommand(iClient, "Usage: {green}[tag]buildmessage{default} <text>. Players see it when they walk into your build.");
+		}
+		
+		return Plugin_Handled;
+	}
+	
+	GetCmdArgString(sMessage, sizeof(sMessage));
+	StripQuotes(sMessage);
+	TrimString(sMessage);
+	
+	if (StrEqual(sMessage, "off", false) || StrEqual(sMessage, "none", false))
+	{
+		g_sBuildMessage[iClient][0] = '\0';
+		Cel_SetClientSettingString(iClient, "buildmessage", "none");
+		
+		Cel_ReplyToCommand(iClient, "Your build message has been removed.");
+		return Plugin_Handled;
+	}
+	
+	strcopy(g_sBuildMessage[iClient], sizeof(g_sBuildMessage[]), sMessage);
+	Cel_SetClientSettingString(iClient, "buildmessage", sMessage);
+	
+	Cel_ReplyToCommand(iClient, "Players walking into your build will now see: {green}From %N:{default} %s", iClient, sMessage);
+	
+	return Plugin_Handled;
+}
+
+//Shows a build's message to each player as they walk into it (once each time they come in).
+public Action Timer_BuildMessages(Handle hTimer)
+{
+	float fOrigin[3];
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || IsFakeClient(i) || !IsPlayerAlive(i))
+		{
+			g_iLastLandIn[i] = 0;
+			continue;
+		}
+		
+		GetClientAbsOrigin(i, fOrigin);
+		fOrigin[2] += 16.0;
+		
+		int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+		
+		if (iOwner < 1 || iOwner > MaxClients)
+		{
+			iOwner = 0;
+		}
+		
+		if (iOwner != g_iLastLandIn[i] && iOwner != 0 && iOwner != i && IsClientInGame(iOwner) && g_sBuildMessage[iOwner][0] != '\0')
+		{
+			Cel_PrintToChat(i, "{green}From %N:{default} %s", iOwner, g_sBuildMessage[iOwner]);
+		}
+		
+		g_iLastLandIn[i] = iOwner;
+	}
+	
+	return Plugin_Continue;
 }

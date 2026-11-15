@@ -239,3 +239,4 @@
 		 - Fixed: an error in the server log when a player left before fully joining ("Entity -1 is invalid" in Cel_SetNoKill).
 		 - The Power Booth only appears on about one map in three now (cm_powerbooth_chance).
 		 - Black and White emblems are rarer from digging: 0.02 of finds (cm_dig_emblem_chance).
+		 - !buildmessage <text>: players walking into your build see "From <you>: <text>" in chat (!buildmessage off removes it).
