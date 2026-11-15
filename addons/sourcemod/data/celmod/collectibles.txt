@@ -69,6 +69,10 @@
 //               flames frost drip sparks thunder glint prism smoke glitch speed bolt dust float bounce
 //               wisp halo shield gold drain demon radiation vortex blink sun eclipse embers confetti
 //               stars rising pulse dusk code crackle haze void radiant phase heart, or none.
+//   rarity      Emblem drops: common, uncommon, rare, epic or legendary. Without it, it comes from the dropweight
+//               (10+ common, 6-9 uncommon, 3-5 rare, 2 epic, 1 legendary). A box first rolls a tier
+//               (cm_drop_tier_chances), then an emblem in it; epic and legendary have a daily cap
+//               (cm_drop_tier_daily_caps).
 //   nearalpha   For see-through emblems (a low alpha in "color"): how solid a faint copy of it looks to players within
 //               "neardistance" units (default 96), so it only shows when you are right up close.
 //   sprite      Sprite material used by fx, e.g. "sprites/flamelet1.vmt".

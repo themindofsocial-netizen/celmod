@@ -79,6 +79,7 @@ enum struct Item
 	float fDuration;
 	float fRange;
 	int iWeight;
+	int iRarity;
 	float fOffset[3];
 	float fAngles[3];
 	float fScale;
@@ -138,6 +139,7 @@ enum struct PlayerModel
 	char sSeason[32];
 }
 
+char g_sRarityName[][] = { "Common", "Uncommon", "Rare", "Epic", "Legendary" };
 char g_sKindClass[][] = { "cel_emblem", "cel_hat", "cel_weapon" };
 char g_sKindName[][] = { "emblem", "hat", "weapon" };
 char g_sKindPlural[][] = { "emblems", "hats", "weapons" };
@@ -246,6 +248,8 @@ ConVar g_cvDropDelay;
 ConVar g_cvThirdPersonAimFix;
 ConVar g_cvBoothAlpha;
 ConVar g_cvBoothChance;
+ConVar g_cvTierChances;
+ConVar g_cvTierCaps;
 ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
@@ -385,6 +389,8 @@ public void OnPluginStart()
 	}
 
 	g_cvThirdPersonAimFix = CreateConVar("cm_thirdperson_aimfix", "1", "1 = keep the !thirdperson view following the player's aim. Set 0 if the view acts strangely.", _, true, 0.0, true, 1.0);
+	g_cvTierChances = CreateConVar("cm_drop_tier_chances", "60 25 10 4 1", "Chances (out of their total) that an emblem box is common, uncommon, rare, epic or legendary.");
+	g_cvTierCaps = CreateConVar("cm_drop_tier_daily_caps", "0 0 0 3 1", "Most emblem boxes of each tier (common uncommon rare epic legendary) that can drop server-wide per day. 0 = no limit.");
 	g_cvBoothChance = CreateConVar("cm_powerbooth_chance", "0.333", "Chance the Power Booth appears on a map (1 = every map). Admins can still place it with !powerbooth.", _, true, 0.0, true, 1.0);
 	g_cvBoothAlpha = CreateConVar("cm_powerbooth_alpha", "90", "How see-through the Power Booth is (0 invisible, 255 solid). Lower is harder to spot.", _, true, 0.0, true, 255.0);
 	g_cvAura = CreateConVar("cm_emblem_aura", "1", "1 = an emblem held out shows its own aura around the player.", _, true, 0.0, true, 1.0);
@@ -3197,6 +3203,20 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fRange = kvItems.GetFloat("range", 900.0);
 	g_Items[iItem].fScale = kvItems.GetFloat("scale", 1.0);
 	g_Items[iItem].iWeight = kvItems.GetNum("dropweight", 0);
+
+	// Rarity tier for emblem drops: a "rarity" key (common, uncommon, rare, epic, legendary), or worked out from the
+	// dropweight (10+ common, 6-9 uncommon, 3-5 rare, 2 epic, 1 legendary).
+	char sRarity[16];
+
+	kvItems.GetString("rarity", sRarity, sizeof(sRarity), "");
+	g_Items[iItem].iRarity = RarityFromName(sRarity);
+
+	if (g_Items[iItem].iRarity == -1)
+	{
+		int iW = g_Items[iItem].iWeight;
+
+		g_Items[iItem].iRarity = iW >= 10 ? 0 : (iW >= 6 ? 1 : (iW >= 3 ? 2 : (iW == 2 ? 3 : 4)));
+	}
 	g_Items[iItem].iSkin = kvItems.GetNum("skin", 0);
 	g_Items[iItem].fIgnite = kvItems.GetFloat("ignite", 0.0);
 	g_Items[iItem].fSlow = kvItems.GetFloat("slow", 0.0);
@@ -6276,7 +6296,7 @@ int SpawnDropBox()
 {
 	float fOrigin[3];
 
-	int iItem = PickRandomItem(KIND_EMBLEM);
+	int iItem = PickDropEmblem();
 
 	if (iItem == -1 || !FindDropPosition(fOrigin))
 	{
@@ -6389,7 +6409,12 @@ public int Native_GetDropBoxEmblem(Handle hPlugin, int iNumParams)
 		return false;
 	}
 
-	SetNativeString(2, g_Items[g_iEntItem[iEntity]].sName, GetNativeCell(3));
+	char sLabel[96];
+
+	// The HUD shows the box's emblem with its rarity, e.g. "Fire (Common)".
+	FormatEx(sLabel, sizeof(sLabel), "%s (%s)", g_Items[g_iEntItem[iEntity]].sName, g_sRarityName[g_Items[g_iEntItem[iEntity]].iRarity]);
+
+	SetNativeString(2, sLabel, GetNativeCell(3));
 
 	return true;
 }
@@ -9789,4 +9814,159 @@ int HeldByGravityGun(int iClient, int iWeapon)
 	}
 
 	return iBest;
+}
+
+//Rarity tiers: emblem boxes first roll a tier (cm_drop_tier_chances), then an emblem in it, so rare emblems stay rare.
+//The top tiers also have a daily server-wide cap (cm_drop_tier_daily_caps), kept in data/celmod/dropcaps.txt, so a
+//busy day can't flood the server with them. Emblems that can't drop (dropweight 0) are never picked.
+
+int RarityFromName(const char[] sName)
+{
+	for (int i = 0; i < sizeof(g_sRarityName); i++)
+	{
+		if (StrEqual(sName, g_sRarityName[i], false))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+void ReadTierNumbers(ConVar cvList, int iValues[5])
+{
+	char sList[64], sParts[5][12];
+
+	cvList.GetString(sList, sizeof(sList));
+
+	int iCount = ExplodeString(sList, " ", sParts, sizeof(sParts), sizeof(sParts[]));
+
+	for (int i = 0; i < 5; i++)
+	{
+		iValues[i] = i < iCount ? StringToInt(sParts[i]) : 0;
+	}
+}
+
+// How many boxes of a tier dropped today (and, with bAdd, count one more).
+int TierDroppedToday(int iTier, bool bAdd)
+{
+	char sPath[PLATFORM_MAX_PATH], sToday[16], sKey[16];
+
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/dropcaps.txt");
+	FormatTime(sToday, sizeof(sToday), "%Y-%m-%d", GetTime());
+	IntToString(iTier, sKey, sizeof(sKey));
+
+	KeyValues kvCaps = new KeyValues("DropCaps");
+
+	kvCaps.ImportFromFile(sPath);
+
+	char sDay[16];
+
+	kvCaps.GetString("day", sDay, sizeof(sDay), "");
+
+	// A new day starts the counts again.
+	if (!StrEqual(sDay, sToday))
+	{
+		delete kvCaps;
+		kvCaps = new KeyValues("DropCaps");
+		kvCaps.SetString("day", sToday);
+	}
+
+	int iCount = kvCaps.GetNum(sKey, 0);
+
+	if (bAdd)
+	{
+		kvCaps.SetNum(sKey, iCount + 1);
+		kvCaps.ExportToFile(sPath);
+	}
+
+	delete kvCaps;
+
+	return iCount;
+}
+
+int PickDropEmblem()
+{
+	int iChances[5], iCaps[5], iTotal = 0;
+
+	ReadTierNumbers(g_cvTierChances, iChances);
+	ReadTierNumbers(g_cvTierCaps, iCaps);
+
+	for (int i = 0; i < 5; i++)
+	{
+		iTotal += iChances[i] > 0 ? iChances[i] : 0;
+	}
+
+	if (iTotal <= 0)
+	{
+		return PickRandomItem(KIND_EMBLEM);
+	}
+
+	int iRoll = GetRandomInt(1, iTotal), iTier = 0;
+
+	for (int i = 0; i < 5; i++)
+	{
+		iRoll -= iChances[i] > 0 ? iChances[i] : 0;
+
+		if (iRoll <= 0)
+		{
+			iTier = i;
+			break;
+		}
+	}
+
+	// A tier that's used up for today, or has no emblems, drops to the next one down.
+	for (; iTier >= 0; iTier--)
+	{
+		if (iCaps[iTier] > 0 && TierDroppedToday(iTier, false) >= iCaps[iTier])
+		{
+			continue;
+		}
+
+		int iItem = PickEmblemInTier(iTier);
+
+		if (iItem != -1)
+		{
+			TierDroppedToday(iTier, true);
+			return iItem;
+		}
+	}
+
+	return -1;
+}
+
+// A random droppable emblem of a tier, weighted by dropweight within it.
+int PickEmblemInTier(int iTier)
+{
+	int iTotal = 0;
+
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier)
+		{
+			iTotal += g_Items[i].iWeight;
+		}
+	}
+
+	if (iTotal == 0)
+	{
+		return -1;
+	}
+
+	int iRoll = GetRandomInt(1, iTotal);
+
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier)
+		{
+			iRoll -= g_Items[i].iWeight;
+
+			if (iRoll <= 0)
+			{
+				return i;
+			}
+		}
+	}
+
+	return -1;
 }
