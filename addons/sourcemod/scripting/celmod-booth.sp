@@ -337,7 +337,7 @@ public Action Command_DelGuessBooth(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
-int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false)
+int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false, bool bHologram = false)
 {
 	float fMaxs[3], fMins[3], fOrigin[3];
 	
@@ -351,12 +351,22 @@ int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false)
 	}
 	
 	DispatchKeyValue(iEntity, "model", sModel);
-	DispatchKeyValue(iEntity, "classname", "cel_boothdisplay");
 	
 	//A physics prop whose model is missing or has no physics removes itself while spawning.
 	if (!DispatchSpawn(iEntity) || !IsValidEntity(iEntity))
 	{
 		return -1;
+	}
+	
+	// Named after spawning: renamed before, a prop_physics_override loses its override.
+	DispatchKeyValue(iEntity, "classname", "cel_boothdisplay");
+	
+	//The Guess Booth's props are holograms: see-through, tinted cyan, flickering like a projection.
+	if (bHologram)
+	{
+		SetEntityRenderMode(iEntity, RENDER_TRANSCOLOR);
+		SetEntityRenderColor(iEntity, 90, 210, 255, 150);
+		SetEntityRenderFx(iEntity, RENDERFX_HOLOGRAM);
 	}
 	
 	AcceptEntityInput(iEntity, "DisableMotion");
@@ -493,7 +503,7 @@ void PlaceBooth(float fOrigin[3])
 			//Left to right as seen from the front of the booth.
 			BoothPoint(fOrigin, 0.0, (iShown - 1) * 72.0, 72.0, fPos);
 			
-			int iEntity = SpawnDisplay(sValue, fPos, true);
+			int iEntity = SpawnDisplay(sValue, fPos, true, true);
 			
 			if (iEntity == -1)
 			{
@@ -843,6 +853,27 @@ public Action Timer_Booth(Handle hTimer)
 		BoothPoint(g_fCenter, (iNext >= 2) ? BOOTH_HALF : -BOOTH_HALF, (iNext == 1 || iNext == 2) ? BOOTH_HALF : -BOOTH_HALF, 4.0, fB);
 		
 		TE_SetupBeamPoints(fA, fB, g_iBeam, 0, 0, 0, 1.05, 3.0, 3.0, 0, 0.0, iYellow, 0);
+		TE_SendToAll();
+	}
+	
+	//Each hologram is projected from the floor: a faint cyan beam widening up to the prop.
+	int iHolo[4] = { 90, 210, 255, 70 };
+	
+	for (int i = 0; i < 3; i++)
+	{
+		int iProp = EntRefToEntIndex(g_iPropRef[i]);
+		
+		if (iProp == INVALID_ENT_REFERENCE)
+		{
+			continue;
+		}
+		
+		float fBase[3], fTop[3];
+		
+		BoothPoint(g_fCenter, 0.0, (i - 1) * 72.0, 2.0, fBase);
+		GetEntPropVector(iProp, Prop_Data, "m_vecAbsOrigin", fTop);
+		
+		TE_SetupBeamPoints(fBase, fTop, g_iBeam, 0, 0, 0, 1.05, 2.0, 24.0, 0, 0.0, iHolo, 0);
 		TE_SendToAll();
 	}
 	
