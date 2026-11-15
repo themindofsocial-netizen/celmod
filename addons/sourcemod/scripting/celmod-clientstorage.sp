@@ -12,6 +12,10 @@ char g_sClientSettings[MAXPLAYERS + 1][PLATFORM_MAX_PATH];
 KeyValues g_kvClientPurchases[MAXPLAYERS + 1];
 KeyValues g_kvClientSettings[MAXPLAYERS + 1];
 
+//The Steam id the two paths above belong to. A player's files are only used once Steam has confirmed who they are,
+//so data is never read from, or written to, the wrong player's files (or a shared one) while they're joining.
+char g_sFilesFor[MAXPLAYERS + 1][32];
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_CheckClientPurchase", Native_CheckClientPurchase);
@@ -42,38 +46,80 @@ public void OnPluginStart()
 {
 	if (g_bLate)
 	{
-		for (int i = 1; i < MaxClients; i++)
+		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (IsClientAuthorized(i))
+			if (IsClientConnected(i))
 			{
-				OnClientPutInServer(i);
+				EnsureClientFiles(i);
 			}
 		}
 	}
 }
 
-public void OnClientPutInServer(int iClient)
+public void OnClientAuthorized(int iClient, const char[] sAuth)
 {
-	char sAuthID[64];
-	
-	Cel_GetAuthID(iClient, sAuthID, sizeof(sAuthID));
-	
-	BuildPath(Path_SM, g_sClientPurchases[iClient], sizeof(g_sClientPurchases[]), "data/celmod/users/%s/purchases.txt", sAuthID);
-	if (!FileExists(g_sClientPurchases[iClient]))
-	{
-		Cel_CreateClientPurchases(iClient);
-	}
-	
-	BuildPath(Path_SM, g_sClientSettings[iClient], sizeof(g_sClientSettings[]), "data/celmod/users/%s/settings.txt", sAuthID);
-	if (!FileExists(g_sClientSettings[iClient]))
-	{
-		Cel_CreateClientSettings(iClient);
-	}
+	EnsureClientFiles(iClient);
 }
 
-public void OnClientDisconnect(int iClient)
+public void OnClientDisconnect_Post(int iClient)
 {
+	g_sFilesFor[iClient][0] = '\0';
+	g_sClientPurchases[iClient][0] = '\0';
+	g_sClientSettings[iClient][0] = '\0';
+}
+
+//Points the player's slot at their own files (data/celmod/users/<SteamID64>/), making them if they're new.
+//False while Steam hasn't confirmed the player yet (or for bots): nothing is read or saved then.
+bool EnsureClientFiles(int iClient)
+{
+	char sAuth[32], sDir[PLATFORM_MAX_PATH];
 	
+	if (iClient < 1 || iClient > MaxClients || !IsClientConnected(iClient) || IsFakeClient(iClient) || !IsClientAuthorized(iClient)
+		|| !GetClientAuthId(iClient, AuthId_SteamID64, sAuth, sizeof(sAuth)) || sAuth[0] == '\0')
+	{
+		return false;
+	}
+	
+	if (g_sClientSettings[iClient][0] != '\0' && StrEqual(sAuth, g_sFilesFor[iClient]))
+	{
+		return true;
+	}
+	
+	BuildPath(Path_SM, sDir, sizeof(sDir), "data/celmod/users/%s", sAuth);
+	
+	if (!DirExists(sDir))
+	{
+		CreateDirectory(sDir, 511);
+	}
+	
+	strcopy(g_sFilesFor[iClient], sizeof(g_sFilesFor[]), sAuth);
+	
+	BuildPath(Path_SM, g_sClientPurchases[iClient], sizeof(g_sClientPurchases[]), "data/celmod/users/%s/purchases.txt", sAuth);
+	BuildPath(Path_SM, g_sClientSettings[iClient], sizeof(g_sClientSettings[]), "data/celmod/users/%s/settings.txt", sAuth);
+	
+	if (!FileExists(g_sClientPurchases[iClient]))
+	{
+		CreateFile(g_sClientPurchases[iClient], "Purchases");
+	}
+	
+	if (!FileExists(g_sClientSettings[iClient]))
+	{
+		CreateFile(g_sClientSettings[iClient], "Settings");
+	}
+	
+	return true;
+}
+
+void CreateFile(const char[] sPath, const char[] sSection)
+{
+	KeyValues kvFile = new KeyValues("Vault");
+	
+	kvFile.ImportFromFile(sPath);
+	kvFile.JumpToKey(sSection, true);
+	kvFile.Rewind();
+	kvFile.ExportToFile(sPath);
+	
+	delete kvFile;
 }
 
 //Natives:
@@ -81,6 +127,11 @@ public any Native_CheckClientPurchase(Handle hPlugin, int iNumParams)
 {
 	char sPurchase[64];
 	int iClient = GetNativeCell(1);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		return false;
+	}
 	
 	GetNativeString(2, sPurchase, sizeof(sPurchase));
 	
@@ -104,11 +155,16 @@ public any Native_CheckClientSetting(Handle hPlugin, int iNumParams)
 	char sSetting[64];
 	int iClient = GetNativeCell(1);
 	
+	if (!EnsureClientFiles(iClient))
+	{
+		return false;
+	}
+	
 	GetNativeString(2, sSetting, sizeof(sSetting));
 	
 	g_kvClientSettings[iClient] = new KeyValues("Vault");
 	
-	g_kvClientSettings[iClient].ImportFromFile(g_sClientPurchases[iClient]);
+	g_kvClientSettings[iClient].ImportFromFile(g_sClientSettings[iClient]);
 	
 	g_kvClientSettings[iClient].JumpToKey("Settings");
 	
@@ -124,6 +180,11 @@ public any Native_CheckClientSetting(Handle hPlugin, int iNumParams)
 public void Native_CreateClientPurchases(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		return;
+	}
 	
 	g_kvClientPurchases[iClient] = new KeyValues("Vault");
 	
@@ -142,6 +203,11 @@ public void Native_CreateClientSettings(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
 	
+	if (!EnsureClientFiles(iClient))
+	{
+		return;
+	}
+	
 	g_kvClientSettings[iClient] = new KeyValues("Vault");
 	
 	g_kvClientSettings[iClient].ImportFromFile(g_sClientSettings[iClient]);
@@ -159,6 +225,11 @@ public any Native_GetClientSettingFloat(Handle hPlugin, int iNumParams)
 {
 	char sSetting[64];
 	int iClient = GetNativeCell(1);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		return 0.0;
+	}
 	
 	GetNativeString(2, sSetting, sizeof(sSetting));
 	
@@ -182,6 +253,11 @@ public int Native_GetClientSettingInt(Handle hPlugin, int iNumParams)
 	char sSetting[64];
 	int iClient = GetNativeCell(1);
 	
+	if (!EnsureClientFiles(iClient))
+	{
+		return -1;
+	}
+	
 	GetNativeString(2, sSetting, sizeof(sSetting));
 	
 	g_kvClientSettings[iClient] = new KeyValues("Vault");
@@ -203,6 +279,12 @@ public void Native_GetClientSettingString(Handle hPlugin, int iNumParams)
 {
 	char sSetting[64], sValue[128];
 	int iClient = GetNativeCell(1), iMaxLength = GetNativeCell(4);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		SetNativeString(3, "none", GetNativeCell(4));
+		return;
+	}
 	
 	GetNativeString(2, sSetting, sizeof(sSetting));
 	
@@ -226,6 +308,11 @@ public void Native_RemoveClientPurchase(Handle hPlugin, int iNumParams)
 	char sPurchase[64];
 	int iClient = GetNativeCell(1);
 	
+	if (!EnsureClientFiles(iClient))
+	{
+		return;
+	}
+	
 	GetNativeString(2, sPurchase, sizeof(sPurchase));
 	
 	g_kvClientPurchases[iClient] = new KeyValues("Vault");
@@ -247,6 +334,11 @@ public void Native_SaveClientPurchase(Handle hPlugin, int iNumParams)
 {
 	char sPurchase[64];
 	int iClient = GetNativeCell(1);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		return;
+	}
 	
 	GetNativeString(2, sPurchase, sizeof(sPurchase));
 	
@@ -270,6 +362,11 @@ public void Native_SetClientSettingFloat(Handle hPlugin, int iNumParams)
 	char sSetting[64];
 	int iClient = GetNativeCell(1);
 	
+	if (!EnsureClientFiles(iClient))
+	{
+		return;
+	}
+	
 	GetNativeString(2, sSetting, sizeof(sSetting));
 	
 	g_kvClientSettings[iClient] = new KeyValues("Vault");
@@ -292,6 +389,11 @@ public void Native_SetClientSettingInt(Handle hPlugin, int iNumParams)
 	char sSetting[64];
 	int iClient = GetNativeCell(1);
 	
+	if (!EnsureClientFiles(iClient))
+	{
+		return;
+	}
+	
 	GetNativeString(2, sSetting, sizeof(sSetting));
 	
 	g_kvClientSettings[iClient] = new KeyValues("Vault");
@@ -313,6 +415,11 @@ public void Native_SetClientSettingString(Handle hPlugin, int iNumParams)
 {
 	char sSetting[64], sValue[128];
 	int iClient = GetNativeCell(1);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		return;
+	}
 	
 	GetNativeString(2, sSetting, sizeof(sSetting));
 	GetNativeString(3, sValue, sizeof(sValue));

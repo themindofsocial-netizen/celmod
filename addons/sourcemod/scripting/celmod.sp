@@ -239,6 +239,9 @@ public void OnClientDisconnect(int iClient)
 	
 	GetClientName(iClient, sClient, sizeof(sClient));
 	
+	//The next player in this slot gets their own id.
+	g_sAuthID[iClient][0] = '\0';
+	
 	Cel_SetCelCount(iClient, 0);
 	Cel_SetNoKill(iClient, false);
 	Cel_SetPlayer(iClient, false);
@@ -1030,6 +1033,12 @@ public int Native_DownloadClientFiles(Handle hPlugin, int iNumParams)
 public int Native_GetAuthID(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1), iMaxLength = GetNativeCell(3);
+	
+	//Not known at join yet (Steam answered late): asked again now.
+	if (g_sAuthID[iClient][0] == '\0' && IsClientConnected(iClient) && IsClientAuthorized(iClient))
+	{
+		GetClientAuthId(iClient, AuthId_SteamID64, g_sAuthID[iClient], sizeof(g_sAuthID[]));
+	}
 	
 	SetNativeString(2, g_sAuthID[iClient], iMaxLength);
 	

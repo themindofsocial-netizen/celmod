@@ -154,7 +154,7 @@ public void OnClientPutInServer(int iClient)
 	g_sBuildMessage[iClient][0] = '\0';
 	g_iLastLandIn[iClient] = 0;
 	g_iNoWepsOwner[iClient] = 0;
-	g_bNoWeps[iClient] = (Cel_GetClientSettingInt(iClient, "land-noweps") == 1);
+	g_bNoWeps[iClient] = false;
 	g_iMoveToRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
@@ -349,6 +349,8 @@ public Action Hook_HideTransmit(int iEntity, int iClient)
 public void OnClientPostAdminCheck(int iClient)
 {
 	char sId[32];
+	
+	g_bNoWeps[iClient] = (Cel_GetClientSettingInt(iClient, "land-noweps") == 1);
 	
 	Cel_GetClientSettingString(iClient, "blockedlands", g_sBlockIds[iClient], sizeof(g_sBlockIds[]));
 	

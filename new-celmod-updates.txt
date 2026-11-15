@@ -306,3 +306,6 @@
 		   country, the time and the map printed in it. Needs SourceTV (tv_enable 1). The reporter sees the same line
 		   without the IP. The Disputes tab on the website shows which demo goes with each dispute.
 		 - !news: see what's new. Shows the latest updates posted on the website in a panel, with the full list a press away.
+		 - Fixed money, tactics level and settings sometimes not loading until you reconnected (when Steam confirms a
+		   player after they've joined, which is common on a freshly started server). Player data now loads once Steam has
+		   confirmed you, and is never read from or saved to the wrong file while you're joining.

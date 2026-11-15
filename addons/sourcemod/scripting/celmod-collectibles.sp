@@ -3897,6 +3897,9 @@ void RestoreWeapon(int iClient)
 //The setting is remembered between visits.
 public void OnClientPostAdminCheck(int iClient)
 {
+	// The inventory is opened at join, but Steam may not have known the player yet: it's opened again now.
+	Inv_Open(iClient);
+
 	g_bWalkKeyOff[iClient] = (Cel_GetClientSettingInt(iClient, "walkkeyoff") == 1);
 
 	if (IsRealClient(iClient))

@@ -73,7 +73,8 @@ public void OnMapEnd()
 	g_alCommands.Close();
 }
 
-public void OnClientPutInServer(int iClient)
+//Read from the player's files once Steam has confirmed them.
+public void OnClientPostAdminCheck(int iClient)
 {
 	if(Cel_GetClientSettingInt(iClient, "hud-pos-left") != -1)
 	{

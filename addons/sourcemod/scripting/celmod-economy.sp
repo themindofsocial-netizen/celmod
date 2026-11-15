@@ -23,6 +23,7 @@ int g_iCleerAmount[MAXENTITIES + 1];
 int g_iCleerOwner[MAXENTITIES + 1];
 int g_iTacticsLevel[MAXPLAYERS + 1];
 int g_iTacticsXP[MAXPLAYERS + 1];
+bool g_bDataLoaded[MAXPLAYERS + 1]; //money and tactics loaded from the player's files (only then are they saved back)
 
 float g_fNextBuildXP[MAXPLAYERS + 1];
 
@@ -82,11 +83,11 @@ public void OnPluginStart()
 	
 	if (g_bLate)
 	{
-		for (int i = 1; i < MaxClients; i++)
+		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (IsClientAuthorized(i))
+			if (IsClientInGame(i) && IsClientAuthorized(i))
 			{
-				OnClientPutInServer(i);
+				OnClientPostAdminCheck(i);
 			}
 		}
 	}
@@ -127,8 +128,16 @@ public void OnPluginStart()
 	RegConsoleCmd("v_cl", Command_Cleer, "|CelMod| Shows your balance, or drops an amount of cleers for another player to pick up.");
 }
 
-public void OnClientPutInServer(int iClient)
+//Loaded once the player is in the server and Steam has confirmed who they are (both are needed to find their files).
+public void OnClientPostAdminCheck(int iClient)
 {
+	if (IsFakeClient(iClient))
+	{
+		return;
+	}
+	
+	g_bDataLoaded[iClient] = true;
+	
 	g_iTacticsLevel[iClient] = Cel_GetClientSettingInt(iClient, "tactics_level");
 	g_iTacticsXP[iClient] = Cel_GetClientSettingInt(iClient, "tactics_xp");
 	g_fNextBuildXP[iClient] = 0.0;
@@ -153,9 +162,17 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
-	Cel_SetClientSettingInt(iClient, "balance", Cel_GetClientBalance(iClient));
+	//Only what was loaded is saved: a player who left before their files were found can't overwrite them.
+	if (g_bDataLoaded[iClient])
+	{
+		Cel_SetClientSettingInt(iClient, "balance", Cel_GetClientBalance(iClient));
+		
+		SaveTactics(iClient);
+	}
 	
-	SaveTactics(iClient);
+	g_bDataLoaded[iClient] = false;
+	g_iTacticsLevel[iClient] = 0;
+	g_iTacticsXP[iClient] = 0;
 	
 	g_iTradeTarget[iClient] = 0;
 	
@@ -991,7 +1008,7 @@ int TacticsXPNeeded(int iLevel)
 
 void SaveTactics(int iClient)
 {
-	if (g_iTacticsLevel[iClient] < 1)
+	if (!g_bDataLoaded[iClient] || g_iTacticsLevel[iClient] < 1)
 	{
 		return;
 	}

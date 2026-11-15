@@ -179,6 +179,13 @@ public void OnClientPostAdminCheck(int iClient)
 {
 	char sId[32];
 	
+	g_iLandSkin[iClient] = Cel_GetClientSettingInt(iClient, "landskin");
+	
+	if (g_iLandSkin[iClient] < 1 || g_iLandSkin[iClient] > LANDSKIN_COUNT)
+	{
+		g_iLandSkin[iClient] = 0;
+	}
+	
 	//Land skins already on the map are drawn for the new player once they have loaded in.
 	if (!IsFakeClient(iClient))
 	{
@@ -422,12 +429,8 @@ public void OnClientPutInServer(int iClient)
 	
 	SDKHook(iClient, SDKHook_OnTakeDamage, Hook_CoopDamage);
 	
-	g_iLandSkin[iClient] = Cel_GetClientSettingInt(iClient, "landskin");
-	
-	if (g_iLandSkin[iClient] < 1 || g_iLandSkin[iClient] > LANDSKIN_COUNT)
-	{
-		g_iLandSkin[iClient] = 0;
-	}
+	//Read from the player's files once Steam has confirmed them (OnClientPostAdminCheck).
+	g_iLandSkin[iClient] = 0;
 	
 	g_hGettingTop[iClient] = CreateTimer(0.1, Timer_GettingTop, GetClientUserId(iClient), TIMER_REPEAT);
 	g_hLandTimer[iClient] = CreateTimer(0.1, Timer_Land, GetClientUserId(iClient), TIMER_REPEAT);
