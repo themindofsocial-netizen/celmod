@@ -56,6 +56,7 @@ int g_iDiedInLand[MAXPLAYERS + 1];
 ConVar g_cvSpawnPointModel;
 ConVar g_cvSpawnHealth;
 ConVar g_cvDoubleJump;
+ConVar g_cvUnlimitedAux;
 bool g_bDoubleJumped[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
 ConVar g_cvHoopieBounce;
@@ -91,6 +92,7 @@ public void OnPluginStart()
 	HookEvent("player_spawn", Event_SpawnHealth);
 	
 	g_cvSpawnHealth = CreateConVar("cm_spawn_health", "225", "Health (and full health) players spawn with.", _, true, 1.0);
+	g_cvUnlimitedAux = CreateConVar("cm_unlimited_aux", "1", "1: the suit's aux power (sprint, flashlight, breath underwater) never runs out.", _, true, 0.0, true, 1.0);
 	g_cvDoubleJump = CreateConVar("cm_double_jump", "300.0", "Upward speed of a double jump (jump again in the air). 0 turns double jumping off. Never in event areas.", _, true, 0.0);
 	
 	g_cvHoopieBounce = CreateConVar("cm_hoopie_bounce", "650", "How hard a hoopie bounces players off it.", _, true, 0.0, true, 3000.0);
@@ -1755,6 +1757,12 @@ public void OnGameFrame()
 		if (!IsClientInGame(i) || !IsPlayerAlive(i))
 		{
 			continue;
+		}
+
+		// Unlimited aux power: kept full, so sprinting, the flashlight and swimming never drain it.
+		if (g_cvUnlimitedAux.BoolValue && GetEntPropFloat(i, Prop_Send, "m_flSuitPower") < 100.0)
+		{
+			SetEntPropFloat(i, Prop_Send, "m_flSuitPower", 100.0);
 		}
 		
 		int iGround = GetEntPropEnt(i, Prop_Send, "m_hGroundEntity");

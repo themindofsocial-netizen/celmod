@@ -274,3 +274,4 @@
 		 - celmod-database sends the server's collectibles.txt to the shared database (cm_collectibles) when it connects
 		   and every map if it has changed, so the website's Emblem Drops tab, Emblem Editor and suggestions always
 		   have the server's real emblems.
+		 - Unlimited aux power (cm_unlimited_aux, on by default): sprinting, the flashlight and swimming never drain the suit.
