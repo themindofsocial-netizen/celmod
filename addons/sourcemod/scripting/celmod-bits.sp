@@ -23,6 +23,9 @@ int g_iLinkedEntity[MAXENTITIES + 1];
 int g_iLinkingEntity[MAXPLAYERS + 1];
 int g_iLinkStage[MAXPLAYERS + 1];
 
+char g_sPasscode[MAXENTITIES + 1][32];
+int g_iPassButton[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_GetAmmoType", Native_GetAmmoType);
@@ -81,6 +84,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_button", Command_SpawnButton, "|CelMod| Spawns a button trigger bit.");
 	RegConsoleCmd("v_charger", Command_SpawnChargerBit, "|CelMod| Creates a health/suit charger bit that will give health/suit to the player.");
 	RegConsoleCmd("v_link", Command_Link, "|CelMod| Creates a link between a trigger bit and an entity.");
+	RegConsoleCmd("v_setpass", Command_SetPass, "|CelMod| Gives the button you are looking at a passcode (off to remove it).");
+	RegConsoleCmd("v_pass", Command_Pass, "|CelMod| Uses a passcode button with its passcode: !pass <passcode>.");
 	RegConsoleCmd("v_wep", Command_SpawnWeaponBit, "|CelMod| Creates a weapon bit that will give a weapon when the player touches it.");
 }
 
@@ -1246,6 +1251,25 @@ public void Hook_AmmoBitTouch(int iEntity, int iClient)
 
 public void Hook_ButtonUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
 {
+	//A button with a passcode: only its owner presses it straight away; everyone else needs !pass.
+	if (!Cel_IsLocked(iEntity) && g_sPasscode[iEntity][0] != '\0' && iActivator > 0 && iActivator <= MaxClients && !Cel_CheckOwner(iActivator, iEntity))
+	{
+		g_iPassButton[iActivator] = EntIndexToEntRef(iEntity);
+		
+		PrecacheSound("buttons/combine_button_locked.wav");
+		EmitSoundToClient(iActivator, "buttons/combine_button_locked.wav", iEntity);
+		
+		Cel_PrintToChat(iActivator, "This button requires a passcode.");
+		Cel_PrintToChat(iActivator, "If you know the passcode, type {green}!pass{default} and the passcode to use it.");
+		
+		return;
+	}
+	
+	PressButton(iEntity, iActivator);
+}
+
+void PressButton(int iEntity, int iActivator)
+{
 	if(!Cel_IsLocked(iEntity))
 	{
 		if(g_bHasLink[iEntity])
@@ -1350,4 +1374,128 @@ public int Native_SetTriggerLink(Handle hPlugin, int iNumParams)
 	g_bHasLink[iEntity] = (iTarget != -1);
 	
 	return true;
+}
+
+//Passcode buttons: the owner sets one with !setpass while looking at the button; anyone else pressing it is asked for
+//it, and types !pass <passcode> to use it. The passcode is saved with the build.
+
+public void OnEntityDestroyed(int iEntity)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		g_sPasscode[iEntity][0] = '\0';
+	}
+}
+
+bool IsButton(int iEntity)
+{
+	return iEntity > MaxClients && iEntity <= MAXENTITIES && IsValidEntity(iEntity) && Cel_IsEntity(iEntity) && Cel_GetEntityType(iEntity) == ENTTYPE_TRIGGER;
+}
+
+public Action Command_SetPass(int iClient, int iArgs)
+{
+	char sCode[32];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	int iButton = Cel_GetClientAimTarget(iClient);
+	
+	if (!IsButton(iButton))
+	{
+		Cel_ReplyToCommand(iClient, "Look at one of your buttons (from {green}[tag]button{default}) first.");
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckOwner(iClient, iButton))
+	{
+		Cel_ReplyToCommand(iClient, "That button isn't yours.");
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]setpass{default} <passcode>, or {green}[tag]setpass off{default} to remove it.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sCode, sizeof(sCode));
+	
+	if (StrEqual(sCode, "off", false) || StrEqual(sCode, "none", false))
+	{
+		g_sPasscode[iButton][0] = '\0';
+		Cel_ReplyToCommand(iClient, "That button no longer needs a passcode.");
+		return Plugin_Handled;
+	}
+	
+	strcopy(g_sPasscode[iButton], sizeof(g_sPasscode[]), sCode);
+	
+	Cel_ReplyToCommand(iClient, "That button now needs the passcode {green}%s{default}. You can still press it yourself.", sCode);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_Pass(int iClient, int iArgs)
+{
+	char sCode[32];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]pass{default} <passcode>, for the passcode button you pressed (or are looking at).");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sCode, sizeof(sCode));
+	
+	// The button they're looking at, or else the last passcode button they pressed.
+	int iButton = Cel_GetClientAimTarget(iClient);
+	
+	if (!IsButton(iButton) || g_sPasscode[iButton][0] == '\0')
+	{
+		iButton = EntRefToEntIndex(g_iPassButton[iClient]);
+	}
+	
+	if (iButton == INVALID_ENT_REFERENCE || !IsButton(iButton) || g_sPasscode[iButton][0] == '\0')
+	{
+		Cel_ReplyToCommand(iClient, "Press the passcode button first (or look at it), then type {green}[tag]pass{default} and the passcode.");
+		return Plugin_Handled;
+	}
+	
+	if (!StrEqual(sCode, g_sPasscode[iButton]))
+	{
+		PrecacheSound("buttons/combine_button_locked.wav");
+		EmitSoundToClient(iClient, "buttons/combine_button_locked.wav", iButton);
+		
+		Cel_ReplyToCommand(iClient, "Wrong passcode.");
+		return Plugin_Handled;
+	}
+	
+	Cel_ReplyToCommand(iClient, "Passcode accepted.");
+	
+	PressButton(iButton, iClient);
+	
+	return Plugin_Handled;
+}
+
+public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES && g_sPasscode[iEntity][0] != '\0')
+	{
+		kvSave.SetString("x_passcode", g_sPasscode[iEntity]);
+	}
+}
+
+public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		kvSave.GetString("x_passcode", g_sPasscode[iEntity], sizeof(g_sPasscode[]), "");
+	}
 }

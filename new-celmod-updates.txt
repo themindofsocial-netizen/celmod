@@ -243,3 +243,5 @@
 		 - Spawn pads now take 1,000 kills of an enemy each (cm_spawnpad_kills).
 		 - Map timer announcements (celmod-maptimer): at 60, 30, 15, 5 and 1 minutes left, "-=-=-=X MINUTES REMAINING=-=-=-"
 		   (with "- SAVE YOUR BUILDS" from 5 minutes down), a gong, a Metro Cop saying the minutes, and "stay alert" at 5.
+		 - Passcode buttons: look at your button and type !setpass <passcode> (or !setpass off). Others pressing it are told
+		   "This button requires a passcode" and use it with !pass <passcode>. Passcodes are saved with your build.
