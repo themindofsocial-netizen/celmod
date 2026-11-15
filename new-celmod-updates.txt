@@ -245,3 +245,4 @@
 		   (with "- SAVE YOUR BUILDS" from 5 minutes down), a gong, a Metro Cop saying the minutes, and "stay alert" at 5.
 		 - Passcode buttons: look at your button and type !setpass <passcode> (or !setpass off). Others pressing it are told
 		   "This button requires a passcode" and use it with !pass <passcode>. Passcodes are saved with your build.
+		 - Map timer: the warning bell (ambient/alarms/warningbell1.wav), and "final warning" after the Metro Cop at 1 minute.

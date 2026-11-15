@@ -10,7 +10,8 @@
  * Announces how long is left on the map at 60, 30, 15, 5 and 1 minutes, like the original server:
  *   -=-=-=15 MINUTES REMAINING=-=-=-
  *   -=-=-=5 MINUTES REMAINING - SAVE YOUR BUILDS=-=-=-   (5 minutes and below)
- * with a gong, then a Metro Cop saying the number of minutes, and "stay alert" at 5 minutes.
+ * with a warning bell, then a Metro Cop saying the number of minutes, "stay alert" at 5 minutes and "final warning"
+ * at 1 minute.
  *
  * Each sound is a list of paths separated by ";": the first one the server really has is used (missing ones are
  * noted in the error log once), so the sounds can be changed without editing the plugin.
@@ -25,9 +26,11 @@ ConVar g_cvEnabled;
 ConVar g_cvGong;
 ConVar g_cvNumber;
 ConVar g_cvStayAlert;
+ConVar g_cvFinalWarning;
 
 char g_sGong[PLATFORM_MAX_PATH];
 char g_sStayAlert[PLATFORM_MAX_PATH];
+char g_sFinalWarning[PLATFORM_MAX_PATH];
 char g_sNumber[sizeof(g_iMarks)][PLATFORM_MAX_PATH];
 
 public Plugin myinfo =
@@ -42,9 +45,11 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	g_cvEnabled = CreateConVar("cm_maptimer", "1", "Announce the time left on the map at 60, 30, 15, 5 and 1 minutes.", _, true, 0.0, true, 1.0);
-	g_cvGong = CreateConVar("cm_maptimer_gong", "ambient/misc/brass_bell_d.wav;plats/elevbell1.wav;buttons/bell1.wav", "The gong played with each announcement (paths under sound/, the first one the server has is used).");
+	g_cvGong = CreateConVar("cm_maptimer_gong", "ambient/alarms/warningbell1.wav", "The gong played with each announcement (paths under sound/, the first one the server has is used).");
 	g_cvNumber = CreateConVar("cm_maptimer_number", "npc/metropolice/vo/%s.wav", "The Metro Cop saying the number of minutes (%s becomes sixty, thirty, fifteen, five or one).");
 	g_cvStayAlert = CreateConVar("cm_maptimer_stayalert", "npc/metropolice/vo/stayalert.wav;npc/metropolice/vo/stayalertreportsightlines.wav;npc/combine_soldier/vo/stayalert.wav", "The \"stay alert\" line played at 5 minutes.");
+
+	g_cvFinalWarning = CreateConVar("cm_maptimer_finalwarning", "npc/metropolice/vo/finalwarning.wav", "The \"final warning\" line played at 1 minute.");
 
 	AutoExecConfig(true, "celmod.maptimer");
 
@@ -70,6 +75,9 @@ public void OnConfigsExecuted()
 
 	g_cvStayAlert.GetString(sList, sizeof(sList));
 	PickSound(sList, g_sStayAlert, sizeof(g_sStayAlert), "stay alert");
+
+	g_cvFinalWarning.GetString(sList, sizeof(sList));
+	PickSound(sList, g_sFinalWarning, sizeof(g_sFinalWarning), "final warning");
 
 	g_cvNumber.GetString(sPattern, sizeof(sPattern));
 
@@ -174,6 +182,18 @@ public Action Timer_SayNumber(Handle hTimer, DataPack dpSay)
 	{
 		CreateTimer(1.2, Timer_StayAlert, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
+
+	if (g_iMarks[iMark] == 1 && g_sFinalWarning[0] != '\0')
+	{
+		CreateTimer(1.2, Timer_FinalWarning, _, TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	return Plugin_Stop;
+}
+
+public Action Timer_FinalWarning(Handle hTimer)
+{
+	EmitSoundToAll(g_sFinalWarning);
 
 	return Plugin_Stop;
 }
