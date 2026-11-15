@@ -290,3 +290,5 @@
 		 - !pmute <name>: mutes a player just for you, voice and chat. Type it again (or !punmute) to unmute; !pmute alone
 		   lists who you've muted.
 		 - The Updater was removed: updates are installed by hand from the release zip.
+		 - !feed turns the command feed (the list of recent commands at the top of the screen) on or off, remembered
+		   between visits.

@@ -8,6 +8,7 @@ ArrayList g_alCommands;
 
 bool g_bHudEnable;
 bool g_bHudLeft[MAXPLAYERS + 1];
+bool g_bFeedOff[MAXPLAYERS + 1]; //!feed: the command feed (history at the top of the screen) hidden for this player
 
 ConVar g_cvHudEnable;
 
@@ -51,6 +52,7 @@ public void OnPluginStart()
 	AddCommandListener(Handle_Chat, "say_team");
 	
 	RegConsoleCmd("v_switch", Command_Switch, "|CelMod| Switches the side the hud is on the screen.");
+	RegConsoleCmd("v_feed", Command_Feed, "|CelMod| Turns the command feed (the list of recent commands) on or off.");
 }
 
 public void OnMapStart()
@@ -79,6 +81,24 @@ public void OnClientPutInServer(int iClient)
 	}else{
 		Cel_SetClientSettingInt(iClient, "hud-pos-left", 0);
 	}
+	
+	g_bFeedOff[iClient] = (Cel_GetClientSettingInt(iClient, "hud-feed-off") == 1);
+}
+
+public Action Command_Feed(int iClient, int iArgs)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	g_bFeedOff[iClient] = !g_bFeedOff[iClient];
+	
+	Cel_SetClientSettingInt(iClient, "hud-feed-off", g_bFeedOff[iClient] ? 1 : 0);
+	
+	Cel_ReplyToCommand(iClient, "The command feed is now {green}%s{default}. Type {green}!feed{default} to turn it %s.", g_bFeedOff[iClient] ? "off" : "on", g_bFeedOff[iClient] ? "back on" : "off");
+	
+	return Plugin_Handled;
 }
 
 public void OnClientDisconnect(int iClient)
@@ -240,7 +260,7 @@ public Action Timer_CommandHUD(Handle hTimer)
 	{
 		for (int i = 1; i < MaxClients; i++)
 		{
-			if (Cel_IsPlayer(i))
+			if (Cel_IsPlayer(i) && !g_bFeedOff[i])
 			{
 				if(g_alCommands.Length >= 1) g_alCommands.GetString(0, sCommands[0], sizeof(sCommands[]));
 				if(g_alCommands.Length >= 2) g_alCommands.GetString(1, sCommands[1], sizeof(sCommands[]));
