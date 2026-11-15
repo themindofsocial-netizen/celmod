@@ -212,7 +212,7 @@ public Action Timer_PollAnnouncements(Handle hTimer)
 //Emblem drops from the website's admin panel (Emblem Drops tab): which emblems can drop, and scheduled drops.
 void PollEmblemDrops()
 {
-	char sQuery[512];
+	char sQuery[2600];
 
 	if (GetFeatureStatus(FeatureType_Native, "Cel_StartEmblemDrop") != FeatureStatus_Available)
 	{
@@ -220,6 +220,25 @@ void PollEmblemDrops()
 	}
 
 	g_dbCelMod.Query(SQL_OnDropPool, "SELECT emblem_id, droppable FROM cm_drop_pool");
+	g_dbCelMod.Query(SQL_OnGiftList, "SELECT value FROM cm_site_settings WHERE name = 'gift_list'");
+
+	// The website shows the server's own list (cm_emblem_gift_list) as the default for build emblems.
+	static char sLastDefault[1024] = "\x01";
+	char sDefault[1024], sEscaped[2100];
+	ConVar cvGiftList = FindConVar("cm_emblem_gift_list");
+
+	if (cvGiftList != null)
+	{
+		cvGiftList.GetString(sDefault, sizeof(sDefault));
+
+		if (!StrEqual(sDefault, sLastDefault) && g_dbCelMod.Escape(sDefault, sEscaped, sizeof(sEscaped)))
+		{
+			strcopy(sLastDefault, sizeof(sLastDefault), sDefault);
+
+			FormatEx(sQuery, sizeof(sQuery), "INSERT INTO cm_site_settings (name, value) VALUES ('gift_list_default', '%s') ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = NOW()", sEscaped);
+			g_dbCelMod.Query(SQL_Generic, sQuery);
+		}
+	}
 
 	FormatEx(sQuery, sizeof(sQuery), "SELECT id, boxes FROM cm_drop_schedule WHERE active = 1 AND run_at <= NOW() AND (server_id IS NULL OR server_id = %d) ORDER BY run_at LIMIT 5", g_cvServerID.IntValue);
 	g_dbCelMod.Query(SQL_OnDueDrops, sQuery);
@@ -242,6 +261,23 @@ public void SQL_OnDropPool(Database dbDatabase, DBResultSet rsResults, const cha
 		rsResults.FetchString(0, sId, sizeof(sId));
 		Cel_SetEmblemDroppable(sId, rsResults.FetchInt(1) == 1);
 	}
+}
+
+public void SQL_OnGiftList(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
+{
+	char sList[2048];
+
+	if (rsResults == null)
+	{
+		return;
+	}
+
+	if (rsResults.FetchRow())
+	{
+		rsResults.FetchString(0, sList, sizeof(sList));
+	}
+
+	Cel_SetEmblemGiftList(sList);
 }
 
 public void SQL_OnDueDrops(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
@@ -1129,6 +1165,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	MarkNativeAsOptional("Cel_SetEmblemDroppable");
 	MarkNativeAsOptional("Cel_ResetEmblemDroppable");
 	MarkNativeAsOptional("Cel_StartEmblemDrop");
+	MarkNativeAsOptional("Cel_SetEmblemGiftList");
 	CreateNative("Cel_SetPlayerStat", Native_SetPlayerStat);
 
 	RegPluginLibrary("celmod-database");

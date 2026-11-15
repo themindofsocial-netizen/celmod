@@ -272,6 +272,7 @@ ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
 ConVar g_cvGiftChance;
 ConVar g_cvGiftList;
+char g_sGiftListOverride[2048]; // set from the website (admin panel, Emblem Drops tab); empty = cm_emblem_gift_list
 ConVar g_cvXmasForce;
 ConVar g_cvXmasItems;
 ConVar g_cvCaneMaxHealth;
@@ -358,6 +359,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetDropBoxEmblem", Native_GetDropBoxEmblem);
 	CreateNative("Cel_SetEmblemDroppable", Native_SetEmblemDroppable);
 	CreateNative("Cel_ResetEmblemDroppable", Native_ResetEmblemDroppable);
+	CreateNative("Cel_SetEmblemGiftList", Native_SetEmblemGiftList);
 	CreateNative("Cel_StartEmblemDrop", Native_StartEmblemDrop);
 	CreateNative("Cel_SpawnCollectible", Native_SpawnCollectible);
 	CreateNative("Cel_GetCollectibleCount", Native_GetCollectibleCount);
@@ -842,13 +844,18 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 	Cel_PrintToChat(iClient, "Something new has appeared in your build... a {green}%s{default} emblem! Press {green}E{default} on it to enable it.", g_Items[iItem].sName);
 }
 
-// A random emblem from cm_emblem_gift_list, or -1 if none of its ids exist.
+// A random emblem from the website's list (admin panel) or else cm_emblem_gift_list, or -1 if none of its ids exist.
 int PickGiftEmblem()
 {
-	char sList[512], sIds[32][32];
-	int iChoices[32], iCount = 0;
+	char sList[2048], sIds[96][32];
+	int iChoices[96], iCount = 0;
 
-	g_cvGiftList.GetString(sList, sizeof(sList));
+	if (g_sGiftListOverride[0] != '\0')
+	{
+		strcopy(sList, sizeof(sList), g_sGiftListOverride);
+	} else {
+		g_cvGiftList.GetString(sList, sizeof(sList));
+	}
 
 	int iIds = ExplodeString(sList, ",", sIds, sizeof(sIds), sizeof(sIds[]));
 
@@ -10104,6 +10111,14 @@ public int Native_SetEmblemDroppable(Handle hPlugin, int iNumParams)
 	g_Items[iItem].iDropOverride = GetNativeCell(2) ? 1 : 0;
 
 	return true;
+}
+
+public int Native_SetEmblemGiftList(Handle hPlugin, int iNumParams)
+{
+	GetNativeString(1, g_sGiftListOverride, sizeof(g_sGiftListOverride));
+	TrimString(g_sGiftListOverride);
+
+	return 0;
 }
 
 public int Native_ResetEmblemDroppable(Handle hPlugin, int iNumParams)

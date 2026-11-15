@@ -269,3 +269,5 @@
 		   emerald, ruby and diamond, each its own colour. Throw one in a trash can for more than junk (a turd pays nothing),
 		   up to 25-40 CL for a diamond.
 		 - The website moved to celmod.net: the MOTD, readme and the list commands' default URLs point there now.
+		 - The Emblem Drops tab also picks which emblems the free emblem in a player's build can be (a Build tick per
+		   emblem), in place of cm_emblem_gift_list until it's reset. celmod-database applies it with the drop list.

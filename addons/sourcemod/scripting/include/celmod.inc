@@ -556,6 +556,12 @@ native bool Cel_SetEmblemDroppable(const char[] sId, bool bDroppable);
 /** Every emblem goes back to collectibles.txt deciding whether it drops. */
 native void Cel_ResetEmblemDroppable();
 
+/**
+ * Sets which emblems the one-time free emblem in a player's build is picked from (comma separated ids),
+ * in place of cm_emblem_gift_list. An empty list goes back to the cvar.
+ */
+native void Cel_SetEmblemGiftList(const char[] sList);
+
 /** Starts an emblem drop of a number of boxes (1 to 30). Returns how many fell. */
 native int Cel_StartEmblemDrop(int iCount);
 
