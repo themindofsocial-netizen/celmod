@@ -22,7 +22,7 @@
  * created automatically.
  */
 
-#define SCHEMA_QUERIES 19
+#define SCHEMA_QUERIES 20
 #define MIGRATION_QUERIES 12
 
 Database g_dbCelMod;
@@ -81,6 +81,16 @@ int g_iRotateLastID;
 
 //!reportbug: one report a minute per player.
 float g_fLastBugReport[MAXPLAYERS + 1];
+
+//!dispute: pick the player causing problems, then what they're doing (or "Other", typed in chat).
+static const char g_sDisputeReasons[][] =
+{
+	"Wrecking or stealing my build", "Blocking my land or spawn", "Spamming props or effects", "Harassing or spamming chat",
+	"Killing me over and over", "Lagging or crashing the server", "Other (type it in chat)"
+};
+float g_fLastDispute[MAXPLAYERS + 1];
+int g_iDisputeTarget[MAXPLAYERS + 1]; // userid of the player picked
+bool g_bDisputeTyping[MAXPLAYERS + 1]; // waiting for the "Other" text in chat
 StringMap g_smAnnounceShown;
 ConVar g_cvAnnouncePoll;
 Handle g_hAnnounceTimer;
@@ -100,6 +110,7 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_announcements (id INT UNSIGNED NOT NULL AUTO_INCREMENT, message VARCHAR(255) NOT NULL, server_id INT NULL, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, show_on_join TINYINT(1) NOT NULL DEFAULT 0, active TINYINT(1) NOT NULL DEFAULT 1, starts_at DATETIME NULL, ends_at DATETIME NULL, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_updates (id INT UNSIGNED NOT NULL AUTO_INCREMENT, posted_on DATE NOT NULL, body TEXT NOT NULL, published TINYINT(1) NOT NULL DEFAULT 1, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_posted (posted_on)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_disputes (id INT UNSIGNED NOT NULL AUTO_INCREMENT, server_id INT NULL, steamid64 VARCHAR(20) NOT NULL, name VARCHAR(64) NOT NULL DEFAULT '', target_steamid64 VARCHAR(20) NOT NULL DEFAULT '', target_name VARCHAR(64) NOT NULL DEFAULT '', map VARCHAR(64) NOT NULL DEFAULT '', reason VARCHAR(64) NOT NULL DEFAULT '', message VARCHAR(255) NOT NULL DEFAULT '', status ENUM('open','resolved','closed') NOT NULL DEFAULT 'open', admin_note VARCHAR(255) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_bug_reports (id INT UNSIGNED NOT NULL AUTO_INCREMENT, server_id INT NULL, steamid64 VARCHAR(20) NOT NULL, name VARCHAR(64) NOT NULL DEFAULT '', map VARCHAR(64) NOT NULL DEFAULT '', pos_x FLOAT NOT NULL DEFAULT 0, pos_y FLOAT NOT NULL DEFAULT 0, pos_z FLOAT NOT NULL DEFAULT 0, message VARCHAR(255) NOT NULL, status ENUM('open','fixed','closed') NOT NULL DEFAULT 'open', admin_note VARCHAR(255) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_collectibles (server_id INT NOT NULL, content MEDIUMTEXT NOT NULL, file_hash INT NOT NULL DEFAULT 0, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (server_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_drop_pool (emblem_id VARCHAR(64) NOT NULL, droppable TINYINT(1) NOT NULL DEFAULT 1, updated_by VARCHAR(20) NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (emblem_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
@@ -160,6 +171,9 @@ public void OnPluginStart()
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
 	HookEvent("player_death", Event_StatsPlayerDeath);
 
+	RegConsoleCmd("v_dispute", Command_Dispute, "|CelMod| Reports a player who is causing you problems to the admins.");
+	AddCommandListener(Listener_DisputeChat, "say");
+	AddCommandListener(Listener_DisputeChat, "say_team");
 	RegConsoleCmd("v_reportbug", Command_ReportBug, "|CelMod| Reports a bug or glitch to the admins: !reportbug <what happened>.");
 	RegAdminCmd("cm_db_status", Command_DBStatus, ADMFLAG_ROOT, "|CelMod| Shows the shared database connection status.");
 }
@@ -916,6 +930,9 @@ public void SQL_OnSessionCreated(Database dbDatabase, DBResultSet rsResults, con
 public void OnClientDisconnect(int iClient)
 {
 	g_fLastBugReport[iClient] = 0.0;
+	g_fLastDispute[iClient] = 0.0;
+	g_bDisputeTyping[iClient] = false;
+	g_iDisputeTarget[iClient] = 0;
 
 	char sQuery[512];
 
@@ -1532,4 +1549,187 @@ void FlushPlayerStats(int iClient, Transaction txAdd)
 	} else {
 		g_dbCelMod.Query(SQL_Generic, sQuery);
 	}
+}
+
+//!dispute: a menu of the other players, then of what's wrong. The report goes to the admins on the server, the
+//website's admin panel (Disputes tab) and data/celmod/disputes.txt.
+public Action Command_Dispute(int iClient, int iArgs)
+{
+	char sInfo[16], sName[MAX_NAME_LENGTH];
+
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (g_fLastDispute[iClient] > 0.0 && GetEngineTime() - g_fLastDispute[iClient] < 60.0)
+	{
+		Cel_ReplyToCommand(iClient, "Thanks, the admins have your last dispute. Please wait a minute before sending another.");
+		return Plugin_Handled;
+	}
+
+	Menu mPlayers = new Menu(Menu_DisputePlayer);
+
+	mPlayers.SetTitle("|CelMod| Dispute\nWho is causing you problems?");
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i != iClient && IsClientInGame(i) && !IsFakeClient(i))
+		{
+			IntToString(GetClientUserId(i), sInfo, sizeof(sInfo));
+			GetClientName(i, sName, sizeof(sName));
+			mPlayers.AddItem(sInfo, sName);
+		}
+	}
+
+	if (mPlayers.ItemCount < 1)
+	{
+		delete mPlayers;
+		Cel_ReplyToCommand(iClient, "There's nobody else on the server to report. If something else is wrong, use {green}!reportbug{default}.");
+		return Plugin_Handled;
+	}
+
+	mPlayers.Display(iClient, 30);
+
+	return Plugin_Handled;
+}
+
+public int Menu_DisputePlayer(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_End)
+	{
+		delete mMenu;
+	} else if (maAction == MenuAction_Select)
+	{
+		char sInfo[16], sTitle[128];
+
+		mMenu.GetItem(iItem, sInfo, sizeof(sInfo));
+
+		int iTarget = GetClientOfUserId(StringToInt(sInfo));
+
+		if (iTarget < 1)
+		{
+			Cel_PrintToChat(iClient, "That player has left the server.");
+			return 0;
+		}
+
+		g_iDisputeTarget[iClient] = GetClientUserId(iTarget);
+
+		Menu mReasons = new Menu(Menu_DisputeReason);
+
+		FormatEx(sTitle, sizeof(sTitle), "|CelMod| Dispute: %N\nWhat are they doing?", iTarget);
+		mReasons.SetTitle(sTitle);
+
+		for (int i = 0; i < sizeof(g_sDisputeReasons); i++)
+		{
+			IntToString(i, sInfo, sizeof(sInfo));
+			mReasons.AddItem(sInfo, g_sDisputeReasons[i]);
+		}
+
+		mReasons.ExitBackButton = false;
+		mReasons.Display(iClient, 30);
+	}
+
+	return 0;
+}
+
+public int Menu_DisputeReason(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_End)
+	{
+		delete mMenu;
+	} else if (maAction == MenuAction_Select)
+	{
+		int iReason = iItem;
+
+		if (iReason == sizeof(g_sDisputeReasons) - 1)
+		{
+			g_bDisputeTyping[iClient] = true;
+
+			Cel_PrintToChat(iClient, "Type what's happening in chat (your message only goes to the admins). Type {green}cancel{default} to stop.");
+			return 0;
+		}
+
+		SendDispute(iClient, iReason, "");
+	}
+
+	return 0;
+}
+
+//The "Other" text: the next thing the player says is the dispute, and isn't shown in chat.
+public Action Listener_DisputeChat(int iClient, const char[] sCommand, int iArgs)
+{
+	char sText[256];
+
+	if (iClient < 1 || !g_bDisputeTyping[iClient])
+	{
+		return Plugin_Continue;
+	}
+
+	GetCmdArgString(sText, sizeof(sText));
+	StripQuotes(sText);
+	TrimString(sText);
+
+	if (sText[0] == '\0' || sText[0] == '!' || sText[0] == '/')
+	{
+		return Plugin_Continue;
+	}
+
+	g_bDisputeTyping[iClient] = false;
+
+	if (StrEqual(sText, "cancel", false))
+	{
+		Cel_PrintToChat(iClient, "Dispute cancelled.");
+		return Plugin_Handled;
+	}
+
+	SendDispute(iClient, sizeof(g_sDisputeReasons) - 1, sText);
+
+	return Plugin_Handled;
+}
+
+void SendDispute(int iClient, int iReason, const char[] sMessage)
+{
+	char sName[64], sTargetName[64], sTargetSteam[32] = "", sReason[64], sQuery[1600];
+	char sEscName[136], sEscTarget[136], sEscMap[136], sEscReason[136], sEscMessage[520];
+
+	int iTarget = GetClientOfUserId(g_iDisputeTarget[iClient]);
+
+	if (iTarget < 1 || !IsClientInGame(iTarget))
+	{
+		Cel_PrintToChat(iClient, "That player has left the server, so the dispute wasn't sent.");
+		return;
+	}
+
+	g_fLastDispute[iClient] = GetEngineTime();
+
+	strcopy(sReason, sizeof(sReason), iReason == sizeof(g_sDisputeReasons) - 1 ? "Other" : g_sDisputeReasons[iReason]);
+	GetClientName(iClient, sName, sizeof(sName));
+	GetClientName(iTarget, sTargetName, sizeof(sTargetName));
+	GetClientAuthId(iTarget, AuthId_SteamID64, sTargetSteam, sizeof(sTargetSteam));
+
+	if (g_dbCelMod != null && g_sSteamID[iClient][0] != '\0'
+		&& g_dbCelMod.Escape(sName, sEscName, sizeof(sEscName)) && g_dbCelMod.Escape(sTargetName, sEscTarget, sizeof(sEscTarget))
+		&& g_dbCelMod.Escape(g_sMap, sEscMap, sizeof(sEscMap)) && g_dbCelMod.Escape(sReason, sEscReason, sizeof(sEscReason))
+		&& g_dbCelMod.Escape(sMessage, sEscMessage, sizeof(sEscMessage)))
+	{
+		FormatEx(sQuery, sizeof(sQuery), "INSERT INTO cm_disputes (server_id, steamid64, name, target_steamid64, target_name, map, reason, message) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', '%s')", g_cvServerID.IntValue, g_sSteamID[iClient], sEscName, sTargetSteam, sEscTarget, sEscMap, sEscReason, sEscMessage);
+
+		g_dbCelMod.Query(SQL_Generic, sQuery);
+	}
+
+	char sPath[PLATFORM_MAX_PATH];
+
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/disputes.txt");
+	LogToFileEx(sPath, "%N against %N (%s) on %s: %s%s%s", iClient, iTarget, sTargetSteam, g_sMap, sReason, sMessage[0] != '\0' ? ": " : "", sMessage);
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i != iClient && IsClientInGame(i) && !IsFakeClient(i) && CheckCommandAccess(i, "cm_disputes_notify", ADMFLAG_GENERIC))
+		{
+			Cel_PrintToChat(i, "Dispute from {green}%N{default} against {green}%N{default}: %s%s%s", iClient, iTarget, sReason, sMessage[0] != '\0' ? ": " : "", sMessage);
+		}
+	}
+
+	Cel_PrintToChat(iClient, "Thanks! Your dispute about {green}%N{default} was sent to the admins. Use {green}!landban{default} to keep them off your land meanwhile.", iTarget);
 }

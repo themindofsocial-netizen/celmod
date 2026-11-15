@@ -136,6 +136,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_clear", Command_Clear, "|CelMod| Deletes one of your saved builds.");
 	RegConsoleCmd("v_fire", Command_Fire, "|CelMod| Spawns a fire effect cel.");
 	RegConsoleCmd("v_landkick", Command_LandKick, "|CelMod| Kicks a player out of your land for 10 seconds.");
+	RegConsoleCmd("v_kick", Command_LandKick, "|CelMod| Kicks a player out of your land for 10 seconds (same as !landkick).");
 	RegConsoleCmd("v_landslay", Command_LandSlay, "|CelMod| Slays a player, or everyone, inside your land.");
 	RegConsoleCmd("v_moveto", Command_MoveTo, "|CelMod| Moves one of your entities onto another entity.");
 	RegConsoleCmd("v_noclip", Command_NoClip, "|CelMod| Enables/disables noclip on the player.");
@@ -941,7 +942,11 @@ public Action Command_LandKick(int iClient, int iArgs)
 	
 	if (iArgs < 1)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]landkick{default} <player>");
+		char sCommand[16];
+		
+		GetCmdArg(0, sCommand, sizeof(sCommand));
+		ReplaceString(sCommand, sizeof(sCommand), "v_", "", false);
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]%s{default} <player> (kicks them out of your land for 10 seconds)", sCommand);
 		return Plugin_Handled;
 	}
 	

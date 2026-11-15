@@ -292,3 +292,7 @@
 		 - The Updater was removed: updates are installed by hand from the release zip.
 		 - !feed turns the command feed (the list of recent commands at the top of the screen) on or off, remembered
 		   between visits.
+		 - !dispute: report a player causing you problems. Pick the player, then what they're doing (or Other and type it).
+		   It goes to the admins on the server, the website's admin panel (Disputes tab) and data/celmod/disputes.txt.
+		 - !kick <player> kicks someone out of your land for 10 seconds (the same as !landkick).
+		 - Typing a command that doesn't exist says "Invalid command. Type !cmds for a command list."

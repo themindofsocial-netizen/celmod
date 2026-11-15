@@ -291,6 +291,28 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 			
 			SetCmdReplySource(rsOldReplySrc);
 		}
+		else
+		{
+			//Not a CelMod command. SourceMod's own chat commands (!rtv, !admin, ...) are sm_ commands that it runs
+			//itself, so only a command that is neither is called invalid.
+			char sWord[64], sSourceMod[72];
+			
+			strcopy(sWord, sizeof(sWord), sCommandString[2]);
+			
+			int iSpace = FindCharInString(sWord, ' ');
+			
+			if (iSpace != -1)
+			{
+				sWord[iSpace] = '\0';
+			}
+			
+			FormatEx(sSourceMod, sizeof(sSourceMod), "sm_%s", sWord);
+			
+			if (sWord[0] != '\0' && !CommandExists(sSourceMod))
+			{
+				Cel_PrintToChat(iClient, "Invalid command. Type {green}!cmds{default} for a command list.");
+			}
+		}
 		
 		return Plugin_Handled;
 	}else if (IsChatTrigger()) {
