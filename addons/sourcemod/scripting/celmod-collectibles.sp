@@ -6341,7 +6341,7 @@ int SpawnDropBox()
 	return iBox;
 }
 
-// Pressing E on an emblem box that is inside your own land opens it.
+// Pressing E on an emblem box says what is inside and how to claim it (hold it with the gravity gun at map change).
 public void Hook_DropBoxUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
 {
 	float fOrigin[3];
