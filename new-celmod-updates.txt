@@ -222,3 +222,5 @@
 		 - Looking at a player shows "<name> Money: <amount>" and "Tactics Lvl: <level>" on the HUD, like the original server.
 		 - The one time free emblem that appears in your build is now always one of the basic solid colour emblems (Fire,
 		   Water, Speed, Orange, Grey, Peach, Pink, Crimson, Lime, Cyan; cm_emblem_gift_list), never a rare one. Still one per player.
+		 - !setguessbooth (and !moveguessbooth) turn the Guess Booth to face the way you're facing: Dr. Kleiner stands ahead of
+		   you, the three props run left to right in front of him, and the square turns with it. The facing is saved per map.

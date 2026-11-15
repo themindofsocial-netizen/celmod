@@ -39,6 +39,9 @@ ConVar g_cvXPGuess;
 
 float g_fAuctionEnd;
 float g_fCenter[3];
+//Which way the booth faces: the way the admin who placed it was looking. Dr. Kleiner stands at the far side facing
+//back, and the three props run left to right in front of him. 90 (north) is the old fixed layout.
+float g_fBoothYaw = 90.0;
 
 int g_iAnswer;
 int g_iAuctionRef = INVALID_ENT_REFERENCE;
@@ -174,11 +177,15 @@ bool GetSavedSpot(float fSpot[3])
 	
 	SpotFile(sPath, sizeof(sPath));
 	
+	//Spots saved before the booth could face a way face north, like they always did.
+	g_fBoothYaw = 90.0;
+	
 	KeyValues kvSpot = new KeyValues("GuessBooth");
 	
 	if (FileExists(sPath) && kvSpot.ImportFromFile(sPath))
 	{
 		kvSpot.GetVector("origin", fSpot);
+		g_fBoothYaw = kvSpot.GetFloat("yaw", 90.0);
 		
 		bFound = true;
 	}
@@ -241,6 +248,7 @@ bool SetSavedSpot(const float fSpot[3], bool bRemove)
 	KeyValues kvSpot = new KeyValues("GuessBooth");
 	
 	kvSpot.SetVector("origin", fSpot);
+	kvSpot.SetFloat("yaw", g_fBoothYaw);
 	
 	bool bSaved = kvSpot.ExportToFile(sPath);
 	
@@ -283,6 +291,12 @@ public Action Command_SetGuessBooth(int iClient, int iArgs)
 	
 	GetClientAbsOrigin(iClient, fOrigin);
 	GetCurrentMap(sMap, sizeof(sMap));
+	
+	//The booth faces the way the admin is facing.
+	float fEyes[3];
+	
+	GetClientEyeAngles(iClient, fEyes);
+	g_fBoothYaw = fEyes[1];
 	
 	MoveBooth(fOrigin);
 	
@@ -410,6 +424,16 @@ void RemoveRef(int &iRef)
 	iRef = INVALID_ENT_REFERENCE;
 }
 
+//A point in the booth: forward (toward Kleiner), right and up from the centre, turned to the booth's facing.
+void BoothPoint(const float fCenter[3], float fForward, float fRight, float fUp, float fOut[3])
+{
+	float fYaw = DegToRad(g_fBoothYaw);
+	
+	fOut[0] = fCenter[0] + Cosine(fYaw) * fForward + Sine(fYaw) * fRight;
+	fOut[1] = fCenter[1] + Sine(fYaw) * fForward - Cosine(fYaw) * fRight;
+	fOut[2] = fCenter[2] + fUp;
+}
+
 void PlaceBooth(float fOrigin[3])
 {
 	char sAlias[64], sBuffer[2][PLATFORM_MAX_PATH], sValue[PLATFORM_MAX_PATH];
@@ -466,9 +490,8 @@ void PlaceBooth(float fOrigin[3])
 			alAliases.Erase(iPick);
 			alModels.Erase(iPick);
 			
-			fPos[0] = fOrigin[0] + (iShown - 1) * 72.0;
-			fPos[1] = fOrigin[1];
-			fPos[2] = fOrigin[2] + 72.0;
+			//Left to right as seen from the front of the booth.
+			BoothPoint(fOrigin, 0.0, (iShown - 1) * 72.0, 72.0, fPos);
 			
 			int iEntity = SpawnDisplay(sValue, fPos, true);
 			
@@ -515,12 +538,10 @@ void PlaceKleiner(float fCenter[3])
 		return;
 	}
 	
-	fPos[0] = fCenter[0];
-	fPos[1] = fCenter[1] + BOOTH_HALF - 24.0;
-	fPos[2] = fCenter[2];
+	BoothPoint(fCenter, BOOTH_HALF - 24.0, 0.0, 0.0, fPos);
 	
-	//Facing into the booth.
-	fAngles[1] = 270.0;
+	//Facing into the booth, back toward whoever walks up.
+	fAngles[1] = g_fBoothYaw + 180.0;
 	
 	DispatchKeyValue(iKleiner, "model", KLEINER_MODEL);
 	DispatchKeyValue(iKleiner, "solid", "2");
@@ -602,7 +623,11 @@ bool IsInBooth(int iClient)
 	
 	GetClientAbsOrigin(iClient, fOrigin);
 	
-	return (g_bBooth && FloatAbs(fOrigin[0] - g_fCenter[0]) <= BOOTH_HALF && FloatAbs(fOrigin[1] - g_fCenter[1]) <= BOOTH_HALF && FloatAbs(fOrigin[2] - g_fCenter[2]) <= 160.0);
+	//Measured along the booth's own sides, as it can face any way.
+	float fYaw = DegToRad(g_fBoothYaw), fDX = fOrigin[0] - g_fCenter[0], fDY = fOrigin[1] - g_fCenter[1];
+	float fForward = fDX * Cosine(fYaw) + fDY * Sine(fYaw), fRight = fDX * Sine(fYaw) - fDY * Cosine(fYaw);
+	
+	return (g_bBooth && FloatAbs(fForward) <= BOOTH_HALF && FloatAbs(fRight) <= BOOTH_HALF && FloatAbs(fOrigin[2] - g_fCenter[2]) <= 160.0);
 }
 
 //Turns the booth's props and the auction item slowly around their middles, a full turn about every 15 seconds.
@@ -659,13 +684,8 @@ public Action Timer_Booth(Handle hTimer)
 	{
 		int iNext = (iEdge + 1) % 4;
 		
-		fA[0] = g_fCenter[0] + ((iEdge == 1 || iEdge == 2) ? BOOTH_HALF : -BOOTH_HALF);
-		fA[1] = g_fCenter[1] + ((iEdge >= 2) ? BOOTH_HALF : -BOOTH_HALF);
-		fA[2] = g_fCenter[2] + 4.0;
-		
-		fB[0] = g_fCenter[0] + ((iNext == 1 || iNext == 2) ? BOOTH_HALF : -BOOTH_HALF);
-		fB[1] = g_fCenter[1] + ((iNext >= 2) ? BOOTH_HALF : -BOOTH_HALF);
-		fB[2] = fA[2];
+		BoothPoint(g_fCenter, (iEdge >= 2) ? BOOTH_HALF : -BOOTH_HALF, (iEdge == 1 || iEdge == 2) ? BOOTH_HALF : -BOOTH_HALF, 4.0, fA);
+		BoothPoint(g_fCenter, (iNext >= 2) ? BOOTH_HALF : -BOOTH_HALF, (iNext == 1 || iNext == 2) ? BOOTH_HALF : -BOOTH_HALF, 4.0, fB);
 		
 		TE_SetupBeamPoints(fA, fB, g_iBeam, 0, 0, 0, 1.05, 3.0, 3.0, 0, 0.0, iYellow, 0);
 		TE_SendToAll();
@@ -733,6 +753,11 @@ public Action Command_GuessBooth(int iClient, int iArgs)
 	}
 	
 	GetClientAbsOrigin(iClient, fOrigin);
+	
+	float fEyes[3];
+	
+	GetClientEyeAngles(iClient, fEyes);
+	g_fBoothYaw = fEyes[1];
 	
 	MoveBooth(fOrigin);
 	
