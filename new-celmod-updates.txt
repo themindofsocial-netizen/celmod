@@ -353,3 +353,9 @@
 		 - The Health Vial is now the Beacon: a 20 second cooldown per player (cm_beacon_cooldown), a small range
 		   (cm_beacon_range, 64), and it only alerts when one of the rare diggable emblems is buried right there
 		   (cm_beacon_emblem_chance, 3%).
+		 - !bank: your bank, as a menu in the ESC menu. Celweps and Emblems list what you own (pick one to spawn it), and
+		   CelItems lists the shop props you've bought (Delaware, Hoopie, Christmas props, the Strawberry Clock...) and the
+		   finds you've banked. "Deposit what I'm looking at" puts a hobo, ore, turd or Beacon you dug up in the bank;
+		   taking one out puts it where you aim.
+		 - Emblems, hats, celweps, cleers boxes and hobos can't be recolored, reskinned, re-modelled or copied.
+		 - Turning off an emblem while it's in your hand no longer leaves your gravity gun invisible.

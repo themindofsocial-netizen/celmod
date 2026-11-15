@@ -1711,6 +1711,44 @@ stock void Cel_ActivateEffect(int iEntity)
 	Cel_SetEffectActive(iEntity, !Cel_IsEffectActive(iEntity));
 }
 
+/**
+ * Special things that keep their own look and can't be copied: emblems, hats, celweps, cleers boxes, and finds such as
+ * the hobo. They can still be moved, frozen or deleted by their owner.
+ */
+stock bool Cel_IsSpecialEntity(int iEntity)
+{
+	if (iEntity <= 0 || !IsValidEntity(iEntity))
+	{
+		return false;
+	}
+	
+	EntityType etType = Cel_GetEntityType(iEntity);
+	
+	if (etType == ENTTYPE_CLEER || etType == ENTTYPE_EMBLEM || etType == ENTTYPE_HAT || etType == ENTTYPE_CELWEP)
+	{
+		return true;
+	}
+	
+	char sName[64];
+	
+	Cel_GetPropName(iEntity, sName, sizeof(sName));
+	
+	return StrEqual(sName, "hobo", false);
+}
+
+/** Says so and returns true when the entity is special (see Cel_IsSpecialEntity). */
+stock bool Cel_RefuseSpecial(int iClient, int iEntity)
+{
+	if (!Cel_IsSpecialEntity(iEntity))
+	{
+		return false;
+	}
+	
+	Cel_ReplyToCommand(iClient, "Emblems, hats, celweps, cleers boxes and other special items keep their own look and can't be copied.");
+	
+	return true;
+}
+
 #define CEL_MONEYBOX_MODEL "models/celmod/cleers.mdl"
 
 /**

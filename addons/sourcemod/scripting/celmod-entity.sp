@@ -266,7 +266,7 @@ public Action Command_Alpha(int iClient, int iArgs)
 		{
 			for (int i = 0; i < GetMaxEntities(); i++)
 			{
-				if (Cel_CheckOwner(iClient, i) && Cel_IsEntity(i) && IsValidEntity(i))
+				if (Cel_CheckOwner(iClient, i) && Cel_IsEntity(i) && IsValidEntity(i) && !Cel_IsSpecialEntity(i))
 				{
 					Cel_SetColor(i, -1, -1, -1, iAlpha);
 					
@@ -288,6 +288,11 @@ public Action Command_Alpha(int iClient, int iArgs)
 		}
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
+		
+		if (Cel_RefuseSpecial(iClient, iProp))
+		{
+			return Plugin_Handled;
+		}
 		
 		if (Cel_CanEdit(iClient, iProp))
 		{
@@ -412,7 +417,7 @@ public Action Command_Color(int iClient, int iArgs)
 		{
 			for (int i = 0; i < GetMaxEntities(); i++)
 			{
-				if (Cel_CheckOwner(iClient, i) && Cel_IsEntity(i) && IsValidEntity(i))
+				if (Cel_CheckOwner(iClient, i) && Cel_IsEntity(i) && IsValidEntity(i) && !Cel_IsSpecialEntity(i))
 				{
 					if(StrEqual(sColor, "rainbow", false))
 					{
@@ -474,6 +479,11 @@ public Action Command_Color(int iClient, int iArgs)
 		}
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
+		
+		if (Cel_RefuseSpecial(iClient, iProp))
+		{
+			return Plugin_Handled;
+		}
 		
 		if (Cel_CanEdit(iClient, iProp))
 		{
@@ -541,6 +551,11 @@ public Action Command_CopyProp(int iClient, int iArgs)
 	}
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (Cel_RefuseSpecial(iClient, iProp))
+	{
+		return Plugin_Handled;
+	}
 	
 	if (Cel_CanEdit(iClient, iProp))
 	{
@@ -732,7 +747,7 @@ public Action Command_FadeColor(int iClient, int iArgs)
 		{
 			for (int i = 0; i < GetMaxEntities(); i++)
 			{
-				if (Cel_CheckOwner(iClient, i) && Cel_IsEntity(i) && IsValidEntity(i))
+				if (Cel_CheckOwner(iClient, i) && Cel_IsEntity(i) && IsValidEntity(i) && !Cel_IsSpecialEntity(i))
 				{
 					if (Cel_CheckColorDB(sColor[0], sColorString, sizeof(sColorString)))
 					{
@@ -774,6 +789,11 @@ public Action Command_FadeColor(int iClient, int iArgs)
 		}
 		
 		int iProp = Cel_GetClientAimTarget(iClient);
+		
+		if (Cel_RefuseSpecial(iClient, iProp))
+		{
+			return Plugin_Handled;
+		}
 		
 		if (Cel_CanEdit(iClient, iProp))
 		{
@@ -1055,6 +1075,11 @@ public Action Command_Replace(int iClient, int iArgs)
 		Cel_ReplyToCommand(iClient, "%t", "CantReplace");
 	}
 	
+	if (Cel_RefuseSpecial(iClient, iProp))
+	{
+		return Plugin_Handled;
+	}
+	
 	if (Cel_CanEdit(iClient, iProp))
 	{
 		if (iShopProp == 1 || Cel_CheckSpawnDB(sAlias, sSpawnString, sizeof(sSpawnString)))
@@ -1120,6 +1145,11 @@ public Action Command_RenderFX(int iClient, int iArgs)
 	}
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (Cel_RefuseSpecial(iClient, iProp))
+	{
+		return Plugin_Handled;
+	}
 	
 	if (Cel_CanEdit(iClient, iProp))
 	{
@@ -1211,6 +1241,11 @@ public Action Command_Skin(int iClient, int iArgs)
 	}
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (Cel_RefuseSpecial(iClient, iProp))
+	{
+		return Plugin_Handled;
+	}
 	
 	if (Cel_CanEdit(iClient, iProp))
 	{
@@ -1376,6 +1411,11 @@ public Action Command_Stack(int iClient, int iArgs)
 	if (fOffset[0] == 0.0 && fOffset[1] == 0.0 && fOffset[2] == 0.0)
 	{
 		Cel_ReplyToCommand(iClient, "Give an offset to stack by, e.g. {green}[tag]stack 0 0 50{default} puts a copy 50 units above. {green}[tag]stackinfo{default} on two props tells you theirs.");
+		return Plugin_Handled;
+	}
+	
+	if (Cel_RefuseSpecial(iClient, iProp))
+	{
 		return Plugin_Handled;
 	}
 	
@@ -1549,6 +1589,11 @@ public Action Command_StartCopy(int iClient, int iArgs)
 	}
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (Cel_RefuseSpecial(iClient, iProp))
+	{
+		return Plugin_Handled;
+	}
 	
 	if (Cel_CanEdit(iClient, iProp))
 	{

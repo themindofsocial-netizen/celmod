@@ -343,6 +343,9 @@ native void CG_GetShootPosition(int iClient, float fPos[3], float fForwardOffset
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("CG_GiveGun");
+	MarkNativeAsOptional("Cel_ShopGetItemCount");
+	MarkNativeAsOptional("Cel_ShopGetItem");
+	MarkNativeAsOptional("Cel_ShopGetItemType");
 	MarkNativeAsOptional("Cel_IsSeasonOpen");
 	MarkNativeAsOptional("Cel_AddPlayerStat");
 	MarkNativeAsOptional("Cel_AddTacticsXP");
@@ -484,6 +487,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_wrap", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
 	RegConsoleCmd("v_gift", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
 	RegConsoleCmd("v_presents", Command_Presents, "|CelMod| Lists the presents waiting for you and brings back any that are not out.");
+	RegConsoleCmd("v_bank", Command_Bank, "|CelMod| Opens your bank (in the ESC menu): your celweps, emblems and CelItems.");
 	RegConsoleCmd("v_inventory", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
 
 	HookEvent("player_death", Event_Death, EventHookMode_Post);
@@ -2610,6 +2614,19 @@ public Action Timer_Think(Handle hTimer)
 		} else if (g_bHeldShown[i])
 		{
 			RestoreWeapon(i);
+		} else if (g_bHoldingGravGun[i] && iWeapon > MaxClients && GetEntityRenderMode(iWeapon) == RENDER_TRANSCOLOR)
+		{
+			// No emblem in hand, but the gravity gun is still see-through (the emblem was turned off while it was the
+			// one being hidden): it's made visible again, whatever path left it hidden.
+			int iR, iG, iB, iA;
+
+			GetEntityRenderColor(iWeapon, iR, iG, iB, iA);
+
+			if (iA < 255)
+			{
+				SetEntityRenderMode(iWeapon, RENDER_NORMAL);
+				SetEntityRenderColor(iWeapon, 255, 255, 255, 255);
+			}
 		}
 
 		// Movement speed: slowed by a blizzard emblem, or boosted by the player's own speed emblem.
@@ -8133,19 +8150,10 @@ void DigUpRock(int iClient, float fSpot[3])
 		}
 	}
 
-	SpawnDugUp(MODEL_ROCK, fSpot, 0);
-
-	int iProp = g_iLastDugUp;
-
-	if (iProp == -1 || !IsValidEntity(iProp))
+	if (SpawnRock(iRock, fSpot) == -1)
 	{
 		return;
 	}
-
-	g_iDugRock[iProp] = iRock + 1;
-
-	SetEntityRenderMode(iProp, RENDER_TRANSCOLOR);
-	SetEntityRenderColor(iProp, g_iRockColors[iRock][0], g_iRockColors[iRock][1], g_iRockColors[iRock][2], 255);
 
 	if (iRock == 0)
 	{
@@ -8153,6 +8161,26 @@ void DigUpRock(int iClient, float fSpot[3])
 	} else {
 		Cel_PrintToChat(iClient, "You dug up {green}%s{default}! Throw it in a trash can for {green}%d-%d CL{default}.", g_sRockNames[iRock], g_iRockPayMin[iRock], g_iRockPayMax[iRock]);
 	}
+}
+
+// A rock of one kind (0 = turd, 1 = coal ... 8 = diamond), coloured, that a trash can pays for.
+int SpawnRock(int iRock, float fSpot[3])
+{
+	SpawnDugUp(MODEL_ROCK, fSpot, 0);
+
+	int iProp = g_iLastDugUp;
+
+	if (iProp == -1 || !IsValidEntity(iProp))
+	{
+		return -1;
+	}
+
+	g_iDugRock[iProp] = iRock + 1;
+
+	SetEntityRenderMode(iProp, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(iProp, g_iRockColors[iRock][0], g_iRockColors[iRock][1], g_iRockColors[iRock][2], 255);
+
+	return iProp;
 }
 
 // A buried find a Beacon sensed: one of the shovel's emblems (Black or White).
@@ -8182,7 +8210,7 @@ void DigUpTreasure(int iClient, int iItem, float fSpot[3])
 }
 
 // A hobo: an idle Eli, coloured brown, who belongs to whoever dug him up.
-void DigUpHobo(int iClient, float fSpot[3])
+void DigUpHobo(int iClient, float fSpot[3], bool bFromBank = false)
 {
 	float fAngles[3];
 
@@ -8198,6 +8226,11 @@ void DigUpHobo(int iClient, float fSpot[3])
 	}
 
 	Cel_DropEntityToFloor(iHobo);
+
+	if (bFromBank)
+	{
+		return;
+	}
 
 	EmitSoundToAll(SOUND_REWARD, iClient);
 	Cel_PrintToChat(iClient, "You dug up... a {green}hobo{default}! He's yours now.");
@@ -8568,6 +8601,8 @@ public Action Command_TrashCan(int iClient, int iArgs)
 }
 
 // Something dug up: it pops out of the ground and is gone again after a while. Money boxes hold cleers.
+bool g_bDugNoExpiry; // set while a find is taken out of the bank: it stays until it's used, sold or deleted
+
 void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
 {
 	g_iLastDugUp = -1;
@@ -8604,7 +8639,7 @@ void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
 		SDKHook(iProp, SDKHook_UsePost, Hook_MoneyBoxUse);
 
 		KillAfter(iProp, 90.0);
-	} else {
+	} else if (!g_bDugNoExpiry) {
 		KillAfter(iProp, 180.0);
 	}
 
@@ -10248,4 +10283,434 @@ public int Native_StartEmblemDrop(Handle hPlugin, int iNumParams)
 	if (iCount > 30) iCount = 30;
 
 	return StartDrop(iCount);
+}
+
+//The bank (!bank): a menu in the ESC menu, like the banks of HL2DM roleplay servers.
+//  Celweps / Emblems: what you own; picking one spawns it, as !weapon / !emblem do.
+//  CelItems: shop props you've bought (picking one spawns it where you aim), and finds put in the bank with
+//  "Deposit what I'm looking at": hobos, ores and turds, and Beacons. Each kind is counted; taking one out spawns
+//  it where you aim.
+#define BANK_HOBO 0
+#define BANK_BEACON 1
+#define BANK_ROCK 2 // BANK_ROCK + rock kind (0 = turd ... 8 = diamond)
+
+int BankKinds()
+{
+	return BANK_ROCK + sizeof(g_sRockNames);
+}
+
+void BankKey(int iKind, char[] sKey, int iMaxLength)
+{
+	if (iKind == BANK_HOBO)
+	{
+		strcopy(sKey, iMaxLength, "bank_hobo");
+	} else if (iKind == BANK_BEACON) {
+		strcopy(sKey, iMaxLength, "bank_beacon");
+	} else {
+		FormatEx(sKey, iMaxLength, "bank_rock%d", iKind - BANK_ROCK);
+	}
+}
+
+void BankName(int iKind, char[] sName, int iMaxLength)
+{
+	if (iKind == BANK_HOBO)
+	{
+		strcopy(sName, iMaxLength, "Hobo");
+	} else if (iKind == BANK_BEACON) {
+		strcopy(sName, iMaxLength, "Beacon");
+	} else {
+		strcopy(sName, iMaxLength, g_sRockNames[iKind - BANK_ROCK]);
+	}
+}
+
+int BankCount(int iClient, int iKind)
+{
+	char sKey[32];
+
+	BankKey(iKind, sKey, sizeof(sKey));
+
+	int iCount = Inv_GetInt(iClient, sKey);
+
+	return iCount > 0 ? iCount : 0;
+}
+
+void BankAdd(int iClient, int iKind, int iAmount)
+{
+	char sKey[32];
+
+	BankKey(iKind, sKey, sizeof(sKey));
+
+	int iCount = BankCount(iClient, iKind) + iAmount;
+
+	Inv_SetInt(iClient, sKey, iCount > 0 ? iCount : 0);
+}
+
+public Action Command_Bank(int iClient, int iArgs)
+{
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	ShowBankMain(iClient);
+
+	Cel_ReplyToCommand(iClient, "Your bank is open: press {green}ESC{default} to see it.");
+
+	return Plugin_Handled;
+}
+
+void ShowBankMain(int iClient)
+{
+	char sLine[64];
+	int iWeps = 0, iEmblems = 0, iItems = 0;
+
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (GetOwned(iClient, i) > 0)
+		{
+			if (g_Items[i].iKind == KIND_WEAPON) iWeps++;
+			else if (g_Items[i].iKind == KIND_EMBLEM) iEmblems++;
+		}
+	}
+
+	for (int k = 0; k < BankKinds(); k++)
+	{
+		iItems += BankCount(iClient, k) > 0 ? 1 : 0;
+	}
+
+	iItems += CountOwnedShopProps(iClient);
+
+	Menu mBank = CreateMenuEx(GetMenuStyleHandle(MenuStyle_Valve), Menu_Bank);
+
+	Cel_GetClientBalanceTranslated(iClient, sLine, sizeof(sLine));
+	mBank.SetTitle("|CelMod| Bank - %s", sLine);
+
+	FormatEx(sLine, sizeof(sLine), "Celweps (%d)", iWeps);
+	mBank.AddItem("weps", sLine);
+	FormatEx(sLine, sizeof(sLine), "Emblems (%d)", iEmblems);
+	mBank.AddItem("emblems", sLine);
+	FormatEx(sLine, sizeof(sLine), "CelItems (%d)", iItems);
+	mBank.AddItem("items", sLine);
+	mBank.AddItem("deposit", "Deposit what I'm looking at");
+
+	mBank.Display(iClient, MENU_TIME_FOREVER);
+}
+
+public int Menu_Bank(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_End)
+	{
+		delete mMenu;
+	} else if (maAction == MenuAction_Select)
+	{
+		char sInfo[16];
+
+		mMenu.GetItem(iItem, sInfo, sizeof(sInfo));
+
+		if (StrEqual(sInfo, "weps"))
+		{
+			ShowBankCollectibles(iClient, KIND_WEAPON);
+		} else if (StrEqual(sInfo, "emblems")) {
+			ShowBankCollectibles(iClient, KIND_EMBLEM);
+		} else if (StrEqual(sInfo, "items")) {
+			ShowBankItems(iClient);
+		} else {
+			BankDeposit(iClient);
+			ShowBankMain(iClient);
+		}
+	}
+
+	return 0;
+}
+
+void ShowBankCollectibles(int iClient, int iKind)
+{
+	char sInfo[16], sLine[96];
+
+	Menu mList = CreateMenuEx(GetMenuStyleHandle(MenuStyle_Valve), Menu_BankCollectible);
+
+	mList.SetTitle("|CelMod| Bank - %s", iKind == KIND_WEAPON ? "Celweps" : "Emblems");
+
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		int iOwned = GetOwned(iClient, i);
+
+		if (g_Items[i].iKind != iKind || iOwned < 1)
+		{
+			continue;
+		}
+
+		IntToString(i, sInfo, sizeof(sInfo));
+
+		if (iKind == KIND_EMBLEM)
+		{
+			FormatEx(sLine, sizeof(sLine), "%s (%s)%s", g_Items[i].sName, g_sRarityName[g_Items[i].iRarity], iOwned > 1 ? " x" : "");
+
+			if (iOwned > 1)
+			{
+				Format(sLine, sizeof(sLine), "%s%d", sLine, iOwned);
+			}
+		} else {
+			strcopy(sLine, sizeof(sLine), g_Items[i].sName);
+		}
+
+		mList.AddItem(sInfo, sLine);
+	}
+
+	if (mList.ItemCount < 1)
+	{
+		mList.AddItem("", iKind == KIND_WEAPON ? "You don't have any celweps yet." : "You don't have any emblems yet.", ITEMDRAW_DISABLED);
+	}
+
+	mList.ExitBackButton = true;
+	mList.Display(iClient, MENU_TIME_FOREVER);
+}
+
+public int Menu_BankCollectible(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_End)
+	{
+		delete mMenu;
+	} else if (maAction == MenuAction_Cancel && iItem == MenuCancel_ExitBack)
+	{
+		ShowBankMain(iClient);
+	} else if (maAction == MenuAction_Select)
+	{
+		char sInfo[16];
+
+		mMenu.GetItem(iItem, sInfo, sizeof(sInfo));
+
+		int i = StringToInt(sInfo);
+
+		if (i >= 0 && i < g_iItemCount)
+		{
+			// The same as typing !weapon <id> / !emblem <id>.
+			FakeClientCommand(iClient, "%s %s", g_Items[i].iKind == KIND_WEAPON ? "v_weapon" : "v_emblem", g_Items[i].sId);
+		}
+	}
+
+	return 0;
+}
+
+int CountOwnedShopProps(int iClient)
+{
+	char sKey[64], sName[64], sCat[32], sDesc[8], sType[16], sTarget[64], sSpawn[256];
+	int iPrice, iLeft, iCount = 0;
+	bool bRepeat;
+
+	if (GetFeatureStatus(FeatureType_Native, "Cel_ShopGetItemCount") != FeatureStatus_Available)
+	{
+		return 0;
+	}
+
+	for (int i = 0; i < Cel_ShopGetItemCount(); i++)
+	{
+		if (Cel_ShopGetItem(i, sKey, sizeof(sKey), sName, sizeof(sName), sCat, sizeof(sCat), sDesc, sizeof(sDesc), iPrice, iLeft, bRepeat)
+			&& Cel_ShopGetItemType(i, sType, sizeof(sType), sTarget, sizeof(sTarget)) && StrEqual(sType, "prop")
+			&& Cel_CheckShopProp(iClient, sTarget, sSpawn, sizeof(sSpawn)) == 1)
+		{
+			iCount++;
+		}
+	}
+
+	return iCount;
+}
+
+void ShowBankItems(int iClient)
+{
+	char sInfo[72], sLine[96], sName[64], sKey[64], sCat[32], sDesc[8], sType[16], sTarget[64], sSpawn[256];
+	int iPrice, iLeft;
+	bool bRepeat;
+
+	Menu mList = CreateMenuEx(GetMenuStyleHandle(MenuStyle_Valve), Menu_BankItem);
+
+	mList.SetTitle("|CelMod| Bank - CelItems");
+
+	// Finds put in the bank.
+	for (int k = 0; k < BankKinds(); k++)
+	{
+		int iCount = BankCount(iClient, k);
+
+		if (iCount < 1)
+		{
+			continue;
+		}
+
+		BankName(k, sName, sizeof(sName));
+		FormatEx(sInfo, sizeof(sInfo), "find:%d", k);
+		FormatEx(sLine, sizeof(sLine), "%s x%d", sName, iCount);
+		mList.AddItem(sInfo, sLine);
+	}
+
+	// Shop props you own (seasonal, event and discontinued props, Delaware, Hoopie...).
+	if (GetFeatureStatus(FeatureType_Native, "Cel_ShopGetItemCount") == FeatureStatus_Available)
+	{
+		for (int i = 0; i < Cel_ShopGetItemCount(); i++)
+		{
+			if (Cel_ShopGetItem(i, sKey, sizeof(sKey), sName, sizeof(sName), sCat, sizeof(sCat), sDesc, sizeof(sDesc), iPrice, iLeft, bRepeat)
+				&& Cel_ShopGetItemType(i, sType, sizeof(sType), sTarget, sizeof(sTarget)) && StrEqual(sType, "prop")
+				&& Cel_CheckShopProp(iClient, sTarget, sSpawn, sizeof(sSpawn)) == 1)
+			{
+				FormatEx(sInfo, sizeof(sInfo), "prop:%s", sTarget);
+				mList.AddItem(sInfo, sName);
+			}
+		}
+	}
+
+	if (mList.ItemCount < 1)
+	{
+		mList.AddItem("", "No CelItems yet: buy props on the website, or bank what you dig up.", ITEMDRAW_DISABLED);
+	}
+
+	mList.ExitBackButton = true;
+	mList.Display(iClient, MENU_TIME_FOREVER);
+}
+
+public int Menu_BankItem(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_End)
+	{
+		delete mMenu;
+	} else if (maAction == MenuAction_Cancel && iItem == MenuCancel_ExitBack)
+	{
+		ShowBankMain(iClient);
+	} else if (maAction == MenuAction_Select)
+	{
+		char sInfo[72];
+
+		mMenu.GetItem(iItem, sInfo, sizeof(sInfo));
+
+		if (StrContains(sInfo, "prop:") == 0)
+		{
+			// The same as typing !spawn <prop>: it's spawned where you aim.
+			FakeClientCommand(iClient, "v_spawn %s", sInfo[5]);
+		} else if (StrContains(sInfo, "find:") == 0) {
+			BankWithdraw(iClient, StringToInt(sInfo[5]));
+			ShowBankItems(iClient);
+		}
+	}
+
+	return 0;
+}
+
+//Takes one find of a kind out of the bank and puts it where the player aims.
+void BankWithdraw(int iClient, int iKind)
+{
+	char sName[32];
+	float fSpot[3];
+
+	if (BankCount(iClient, iKind) < 1)
+	{
+		return;
+	}
+
+	if (!IsPlayerAlive(iClient))
+	{
+		Cel_PrintToChat(iClient, "You need to be alive to take things out of your bank.");
+		return;
+	}
+
+	Cel_GetCrosshairHitOrigin(iClient, fSpot);
+	fSpot[2] += 8.0;
+
+	g_iDigger = GetClientUserId(iClient);
+	g_bDugNoExpiry = true;
+
+	bool bMade = true;
+
+	if (iKind == BANK_HOBO)
+	{
+		DigUpHobo(iClient, fSpot, true);
+	} else if (iKind == BANK_BEACON) {
+		SpawnVial(fSpot);
+	} else {
+		bMade = (SpawnRock(iKind - BANK_ROCK, fSpot) != -1);
+	}
+
+	g_bDugNoExpiry = false;
+
+	if (!bMade)
+	{
+		return;
+	}
+
+	BankAdd(iClient, iKind, -1);
+
+	BankName(iKind, sName, sizeof(sName));
+	Cel_PrintToChat(iClient, "Took a {green}%s{default} out of your bank.", sName);
+}
+
+//Puts the find the player is looking at in their bank: a hobo of theirs, an ore or turd they dug up, or a Beacon.
+void BankDeposit(int iClient)
+{
+	char sName[32], sProp[64];
+	int iKind = -1;
+
+	int iEntity = GetClientAimTarget(iClient, false);
+
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity))
+	{
+		Cel_PrintToChat(iClient, "Look at a hobo, ore, turd or Beacon you dug up, then pick Deposit.");
+		return;
+	}
+
+	if (g_bVial[iEntity])
+	{
+		iKind = BANK_BEACON;
+	} else if (g_bDugUp[iEntity] && g_iDugRock[iEntity] > 0) {
+		if (GetClientOfUserId(g_iDugBy[iEntity]) != iClient)
+		{
+			Cel_PrintToChat(iClient, "Only the player who dug that up can bank it.");
+			return;
+		}
+
+		iKind = BANK_ROCK + g_iDugRock[iEntity] - 1;
+	} else if (Cel_IsEntity(iEntity)) {
+		Cel_GetPropName(iEntity, sProp, sizeof(sProp));
+
+		if (StrEqual(sProp, "hobo", false))
+		{
+			if (!Cel_CheckOwner(iClient, iEntity))
+			{
+				Cel_PrintToChat(iClient, "That's not your hobo.");
+				return;
+			}
+
+			iKind = BANK_HOBO;
+		}
+	}
+
+	if (iKind == -1)
+	{
+		Cel_PrintToChat(iClient, "Only finds go in the bank: hobos, ores, turds and Beacons.");
+		return;
+	}
+
+	if (GetVectorDistanceToEntity(iClient, iEntity) > 250.0)
+	{
+		Cel_PrintToChat(iClient, "Get closer to it first.");
+		return;
+	}
+
+	g_bDugUp[iEntity] = false;
+	g_iDugRock[iEntity] = 0;
+	g_bVial[iEntity] = false;
+
+	AcceptEntityInput(iEntity, "kill");
+
+	BankAdd(iClient, iKind, 1);
+
+	BankName(iKind, sName, sizeof(sName));
+	EmitSoundToClient(iClient, SOUND_REWARD);
+	Cel_PrintToChat(iClient, "Put a {green}%s{default} in your bank. You have {green}%d{default}.", sName, BankCount(iClient, iKind));
+}
+
+float GetVectorDistanceToEntity(int iClient, int iEntity)
+{
+	float fEyes[3], fOrigin[3];
+
+	GetClientEyePosition(iClient, fEyes);
+	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+
+	return GetVectorDistance(fEyes, fOrigin);
 }

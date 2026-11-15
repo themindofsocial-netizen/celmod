@@ -1802,6 +1802,11 @@ public Action Command_Palette(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
+	if (Cel_RefuseSpecial(iClient, iProp))
+	{
+		return Plugin_Handled;
+	}
+	
 	if (!Cel_CanEdit(iClient, iProp))
 	{
 		Cel_NotYours(iClient, iProp);
