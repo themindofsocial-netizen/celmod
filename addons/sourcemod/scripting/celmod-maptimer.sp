@@ -53,6 +53,7 @@ public void OnPluginStart()
 
 	AutoExecConfig(true, "celmod.maptimer");
 
+	RegConsoleCmd("v_timeleft", Command_TimeLeft, "|CelMod| Shows how much time is left on the map.");
 	RegAdminCmd("cm_maptimer_test", Command_Test, ADMFLAG_ROOT, "|CelMod| Plays a map timer announcement now: cm_maptimer_test <60/30/15/5/1>.");
 
 	CreateTimer(1.0, Timer_Check, _, TIMER_REPEAT);
@@ -203,6 +204,32 @@ public Action Timer_StayAlert(Handle hTimer)
 	EmitSoundToAll(g_sStayAlert);
 
 	return Plugin_Stop;
+}
+
+//!timeleft: "|CelMod| Timeleft in map: 12:34", the time in green.
+public Action Command_TimeLeft(int iClient, int iArgs)
+{
+	int iLeft;
+
+	if (!GetMapTimeLeft(iLeft) || iLeft < 0)
+	{
+		Cel_ReplyToCommand(iClient, "Timeleft in map: {green}no time limit{default}");
+		return Plugin_Handled;
+	}
+
+	char sTime[32];
+	int iHours = iLeft / 3600, iMinutes = (iLeft % 3600) / 60, iSeconds = iLeft % 60;
+
+	if (iHours > 0)
+	{
+		FormatEx(sTime, sizeof(sTime), "%d:%02d:%02d", iHours, iMinutes, iSeconds);
+	} else {
+		FormatEx(sTime, sizeof(sTime), "%d:%02d", iMinutes, iSeconds);
+	}
+
+	Cel_ReplyToCommand(iClient, "Timeleft in map: {green}%s{default}", sTime);
+
+	return Plugin_Handled;
 }
 
 public Action Command_Test(int iClient, int iArgs)

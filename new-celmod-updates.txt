@@ -281,3 +281,5 @@
 		   and !setguess won't move the booth onto a player's land.
 		 - Saved configs with the old website's addresses (delaware.rockzehh.net/*.html) are switched to the celmod.net
 		   .php pages automatically when the server loads them.
+		 - !timeleft: "|CelMod| Timeleft in map: 12:34", the time in green.
+		 - Announcements from the website show in chat as |CM| instead of |CelMod|.

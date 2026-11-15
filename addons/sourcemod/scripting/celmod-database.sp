@@ -450,7 +450,8 @@ void Announce(int iIndex)
 	{
 		if (IsClientInGame(i) && !IsFakeClient(i))
 		{
-			Cel_PrintToChat(i, "%s", g_sAnnounce[iIndex]);
+			// Announcements from the website say |CM|, not |CelMod|.
+			CPrintToChat(i, "{blue}|CM|{default} %s", g_sAnnounce[iIndex]);
 		}
 	}
 }
@@ -478,7 +479,7 @@ public Action Timer_JoinAnnouncements(Handle hTimer, any iUserID)
 	{
 		if (g_bAnnounceOnJoin[i])
 		{
-			Cel_PrintToChat(iClient, "%s", g_sAnnounce[i]);
+			CPrintToChat(iClient, "{blue}|CM|{default} %s", g_sAnnounce[i]);
 		}
 	}
 
