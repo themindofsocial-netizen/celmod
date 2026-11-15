@@ -81,6 +81,7 @@ enum struct Item
 	int iWeight;
 	int iRarity;
 	char sExclusive[24];
+	int iDropOverride;
 	float fOffset[3];
 	float fAngles[3];
 	float fScale;
@@ -340,6 +341,9 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GiveCollectible", Native_GiveCollectible);
 	CreateNative("Cel_IsCollectible", Native_IsCollectible);
 	CreateNative("Cel_GetDropBoxEmblem", Native_GetDropBoxEmblem);
+	CreateNative("Cel_SetEmblemDroppable", Native_SetEmblemDroppable);
+	CreateNative("Cel_ResetEmblemDroppable", Native_ResetEmblemDroppable);
+	CreateNative("Cel_StartEmblemDrop", Native_StartEmblemDrop);
 	CreateNative("Cel_SpawnCollectible", Native_SpawnCollectible);
 	CreateNative("Cel_GetCollectibleCount", Native_GetCollectibleCount);
 	CreateNative("Cel_GetPlayerModelCount", Native_GetPlayerModelCount);
@@ -3211,6 +3215,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 
 	// Exclusive items (an event, the shovel, Christmas, the Power Booth...) never come from drops or random rewards.
 	kvItems.GetString("exclusive", g_Items[iItem].sExclusive, sizeof(Item::sExclusive), "");
+	g_Items[iItem].iDropOverride = -1;
 
 	kvItems.GetString("rarity", sRarity, sizeof(sRarity), "");
 	g_Items[iItem].iRarity = RarityFromName(sRarity);
@@ -9946,9 +9951,9 @@ int PickEmblemInTier(int iTier)
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
-		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier && g_Items[i].sExclusive[0] == '\0')
+		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iRarity == iTier && CanDrop(i))
 		{
-			iTotal += g_Items[i].iWeight;
+			iTotal += DropWeight(i);
 		}
 	}
 
@@ -9961,9 +9966,9 @@ int PickEmblemInTier(int iTier)
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
-		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier && g_Items[i].sExclusive[0] == '\0')
+		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iRarity == iTier && CanDrop(i))
 		{
-			iRoll -= g_Items[i].iWeight;
+			iRoll -= DropWeight(i);
 
 			if (iRoll <= 0)
 			{
@@ -9973,4 +9978,60 @@ int PickEmblemInTier(int iTier)
 	}
 
 	return -1;
+}
+
+//Which emblems can drop: by default the ones with a dropweight that aren't exclusive. Admins change this on the
+//website (Emblem Drops tab); celmod-database applies their choices here with Cel_SetEmblemDroppable.
+bool CanDrop(int iItem)
+{
+	if (g_Items[iItem].iDropOverride != -1)
+	{
+		return g_Items[iItem].iDropOverride == 1;
+	}
+
+	return g_Items[iItem].iWeight > 0 && g_Items[iItem].sExclusive[0] == '\0';
+}
+
+// An emblem an admin allowed that has no dropweight of its own drops as often as others of its rarity would at 1.
+int DropWeight(int iItem)
+{
+	return g_Items[iItem].iWeight > 0 ? g_Items[iItem].iWeight : 1;
+}
+
+public int Native_SetEmblemDroppable(Handle hPlugin, int iNumParams)
+{
+	char sId[64];
+
+	GetNativeString(1, sId, sizeof(sId));
+
+	int iItem = FindItem(KIND_EMBLEM, sId);
+
+	if (iItem == -1)
+	{
+		return false;
+	}
+
+	g_Items[iItem].iDropOverride = GetNativeCell(2) ? 1 : 0;
+
+	return true;
+}
+
+public int Native_ResetEmblemDroppable(Handle hPlugin, int iNumParams)
+{
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		g_Items[i].iDropOverride = -1;
+	}
+
+	return 0;
+}
+
+public int Native_StartEmblemDrop(Handle hPlugin, int iNumParams)
+{
+	int iCount = GetNativeCell(1);
+
+	if (iCount < 1) iCount = 1;
+	if (iCount > 30) iCount = 30;
+
+	return StartDrop(iCount);
 }

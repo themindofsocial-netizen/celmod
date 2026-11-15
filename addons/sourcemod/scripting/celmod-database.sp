@@ -21,7 +21,7 @@
  * created automatically.
  */
 
-#define SCHEMA_QUERIES 15
+#define SCHEMA_QUERIES 17
 #define MIGRATION_QUERIES 12
 
 Database g_dbCelMod;
@@ -88,6 +88,8 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_announcements (id INT UNSIGNED NOT NULL AUTO_INCREMENT, message VARCHAR(255) NOT NULL, server_id INT NULL, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, show_on_join TINYINT(1) NOT NULL DEFAULT 0, active TINYINT(1) NOT NULL DEFAULT 1, starts_at DATETIME NULL, ends_at DATETIME NULL, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_updates (id INT UNSIGNED NOT NULL AUTO_INCREMENT, posted_on DATE NOT NULL, body TEXT NOT NULL, published TINYINT(1) NOT NULL DEFAULT 1, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_posted (posted_on)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_drop_pool (emblem_id VARCHAR(64) NOT NULL, droppable TINYINT(1) NOT NULL DEFAULT 1, updated_by VARCHAR(20) NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (emblem_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_drop_schedule (id INT UNSIGNED NOT NULL AUTO_INCREMENT, run_at DATETIME NOT NULL, boxes INT NOT NULL DEFAULT 5, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, server_id INT NULL, active TINYINT(1) NOT NULL DEFAULT 1, last_run DATETIME NULL, note VARCHAR(128) NOT NULL DEFAULT '', created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_due (active, run_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_site_settings (name VARCHAR(64) NOT NULL, value VARCHAR(255) NOT NULL DEFAULT '', updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
 };
 
@@ -202,7 +204,79 @@ public Action Timer_PollAnnouncements(Handle hTimer)
 
 	g_dbCelMod.Query(SQL_OnAnnouncements, sQuery);
 
+	PollEmblemDrops();
+
 	return Plugin_Continue;
+}
+
+//Emblem drops from the website's admin panel (Emblem Drops tab): which emblems can drop, and scheduled drops.
+void PollEmblemDrops()
+{
+	char sQuery[512];
+
+	if (GetFeatureStatus(FeatureType_Native, "Cel_StartEmblemDrop") != FeatureStatus_Available)
+	{
+		return;
+	}
+
+	g_dbCelMod.Query(SQL_OnDropPool, "SELECT emblem_id, droppable FROM cm_drop_pool");
+
+	FormatEx(sQuery, sizeof(sQuery), "SELECT id, boxes FROM cm_drop_schedule WHERE active = 1 AND run_at <= NOW() AND (server_id IS NULL OR server_id = %d) ORDER BY run_at LIMIT 5", g_cvServerID.IntValue);
+	g_dbCelMod.Query(SQL_OnDueDrops, sQuery);
+}
+
+public void SQL_OnDropPool(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
+{
+	char sId[64];
+
+	if (rsResults == null)
+	{
+		return; // the table isn't there yet
+	}
+
+	// Back to collectibles.txt first, so an admin's choice that was taken away is undone too.
+	Cel_ResetEmblemDroppable();
+
+	while (rsResults.FetchRow())
+	{
+		rsResults.FetchString(0, sId, sizeof(sId));
+		Cel_SetEmblemDroppable(sId, rsResults.FetchInt(1) == 1);
+	}
+}
+
+public void SQL_OnDueDrops(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
+{
+	char sQuery[512];
+
+	if (rsResults == null)
+	{
+		return;
+	}
+
+	while (rsResults.FetchRow())
+	{
+		int iId = rsResults.FetchInt(0), iBoxes = rsResults.FetchInt(1);
+
+		// Claimed first (moved on to its next time, or finished), so two servers never both run the same drop.
+		FormatEx(sQuery, sizeof(sQuery), "UPDATE cm_drop_schedule SET last_run = NOW(), active = IF(repeat_minutes > 0, 1, 0), run_at = IF(repeat_minutes > 0, GREATEST(NOW(), run_at) + INTERVAL repeat_minutes MINUTE, run_at) WHERE id = %d AND active = 1 AND run_at <= NOW()", iId);
+
+		g_dbCelMod.Query(SQL_OnClaimDrop, sQuery, iBoxes);
+	}
+}
+
+public void SQL_OnClaimDrop(Database dbDatabase, DBResultSet rsResults, const char[] sError, any iBoxes)
+{
+	if (rsResults == null || rsResults.AffectedRows < 1)
+	{
+		return;
+	}
+
+	int iFell = Cel_StartEmblemDrop(iBoxes);
+
+	if (iFell < 1)
+	{
+		LogMessage("|CelMod| A scheduled emblem drop was due, but no boxes could fall (it needs a living player under open sky).");
+	}
 }
 
 public void SQL_OnAnnouncements(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
@@ -1052,6 +1126,9 @@ public void SQL_OnTxnError(Database dbDatabase, any aData, int iNumQueries, cons
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_AddPlayerStat", Native_AddPlayerStat);
+	MarkNativeAsOptional("Cel_SetEmblemDroppable");
+	MarkNativeAsOptional("Cel_ResetEmblemDroppable");
+	MarkNativeAsOptional("Cel_StartEmblemDrop");
 	CreateNative("Cel_SetPlayerStat", Native_SetPlayerStat);
 
 	RegPluginLibrary("celmod-database");

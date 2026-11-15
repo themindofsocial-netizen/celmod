@@ -549,6 +549,17 @@ native bool Cel_IsCollectible(int iEntity);
 native bool Cel_GetDropBoxEmblem(int iEntity, char[] sName, int iMaxLength);
 
 /**
+ * Lets an emblem drop in emblem drops (or stops it), overriding collectibles.txt. Set from the website's admin panel.
+ */
+native bool Cel_SetEmblemDroppable(const char[] sId, bool bDroppable);
+
+/** Every emblem goes back to collectibles.txt deciding whether it drops. */
+native void Cel_ResetEmblemDroppable();
+
+/** Starts an emblem drop of a number of boxes (1 to 30). Returns how many fell. */
+native int Cel_StartEmblemDrop(int iCount);
+
+/**
  * Text describing a reward pickup (an event emblem, or a reward placed with !reward), for the HUD.
  *
  * @return  False when the entity is not a reward pickup.
