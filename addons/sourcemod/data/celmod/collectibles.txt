@@ -112,7 +112,7 @@
 //   hitdamage   Damage of one hit (Custom Guns celweps). hitrange = reach, refire = seconds between swings.
 //   ignite, slow, freeze  Seconds a hit sets a player on fire, slows them, or freezes them solid.
 //   digs        Emblem ids a hit on the ground can dig up. Most digs find junk; see cm_dig_chance,
-//               cm_dig_emblem_chance, cm_dig_money_chance, cm_dig_money_min and cm_dig_money_max.
+//               cm_dig_emblem_chance, cm_dig_money_share, cm_dig_money_min and cm_dig_money_max.
 //
 // PlayerModels: name, model and price. A price of 0 is free for everyone.
 //   admin       Admin flags (e.g. "b"). Admins with them own the model; with price 0 nobody else can buy it.

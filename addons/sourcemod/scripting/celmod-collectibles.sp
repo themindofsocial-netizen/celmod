@@ -177,6 +177,7 @@ int g_iLastVial = INVALID_ENT_REFERENCE;
 float g_fNextVial[MAXENTITIES + 1];
 bool g_bMarkedCan[MAXENTITIES + 1];
 ArrayList g_alMarkedHammer;
+ArrayList g_alTrashSpots; // spots marked with !trashcan on a map's static props (not entities), [x, y, z]
 ConVar g_cvDigHoboChance;
 ConVar g_cvDigVialChance;
 ConVar g_cvDigRockChance;
@@ -190,9 +191,12 @@ static const int g_iRockColors[][3] =
 	{ 92, 58, 26 }, { 40, 40, 40 }, { 160, 140, 130 }, { 205, 120, 60 }, { 215, 220, 230 }, { 255, 200, 40 }, { 40, 200, 90 }, { 220, 30, 50 }, { 160, 240, 255 }
 };
 static const int g_iRockWeights[] = { 30, 22, 16, 12, 8, 5, 3, 3, 1 };
-static const int g_iRockPayMin[] = { 0, 2, 3, 4, 6, 10, 15, 15, 25 };
-static const int g_iRockPayMax[] = { 0, 3, 5, 6, 9, 15, 20, 20, 40 };
+static const int g_iRockPayMin[] = { 0, 4, 5, 6, 8, 12, 18, 18, 30 };
+static const int g_iRockPayMax[] = { 0, 6, 7, 9, 12, 18, 24, 24, 45 };
 ConVar g_cvVialFindChance;
+ConVar g_cvBeaconRange;
+ConVar g_cvBeaconCooldown;
+float g_fNextBeacon[MAXPLAYERS + 1];
 
 //Buried finds the Health Vial senses: a spot, and whether something is buried there (1) or not (0).
 #define MAX_BURIED 32
@@ -422,13 +426,16 @@ public void OnPluginStart()
 	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
 	g_cvDigChance = CreateConVar("cm_dig_chance", "0.35", "Chance a shovel hit on the ground digs something up.", _, true, 0.0, true, 1.0);
 	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.02", "Share of finds that are a Black or White emblem (0.02 = 2%).", _, true, 0.0, true, 1.0);
-	g_cvDigMoneyChance = CreateConVar("cm_dig_money_chance", "0.12", "Share of finds that are a money box. The rest is junk.", _, true, 0.0, true, 1.0);
+	// New names, so a saved config's old (more generous) values don't carry over.
+	g_cvDigMoneyChance = CreateConVar("cm_dig_money_share", "0.05", "Share of finds that are a money box (0.05 = 5%). The rest is junk.", _, true, 0.0, true, 1.0);
 	g_cvDigHoboChance = CreateConVar("cm_dig_hobo_chance", "0.02", "Share of finds that are a hobo (an idle, brown Eli).", _, true, 0.0, true, 1.0);
 	g_cvDigRockChance = CreateConVar("cm_dig_rock_chance", "0.3", "Share of junk finds that are a rock instead (a turd, coal, iron, copper, silver, gold, emerald, ruby or diamond), worth more in a trash can.", _, true, 0.0, true, 1.0);
-	g_cvDigVialChance = CreateConVar("cm_dig_vial_chance", "0.05", "Share of finds that are a Health Vial (it senses buried items).", _, true, 0.0, true, 1.0);
-	g_cvVialFindChance = CreateConVar("cm_vial_find_chance", "0.35", "Chance something is buried near a spot the Health Vial checks for the first time.", _, true, 0.0, true, 1.0);
-	g_cvTrashMin = CreateConVar("cm_trash_reward_min", "1", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
-	g_cvTrashMax = CreateConVar("cm_trash_reward_max", "1", "Most cleers for putting dug up junk in a trash can.", _, true, 0.0);
+	g_cvDigVialChance = CreateConVar("cm_dig_vial_chance", "0.05", "Share of finds that are a Beacon (it senses a buried emblem close by).", _, true, 0.0, true, 1.0);
+	g_cvVialFindChance = CreateConVar("cm_beacon_emblem_chance", "0.03", "Chance a diggable emblem (Black or White) is buried near a spot a Beacon checks for the first time. Very rare.", _, true, 0.0, true, 1.0);
+	g_cvBeaconRange = CreateConVar("cm_beacon_range", "64.0", "How far around itself a Beacon senses (and how close the buried emblem is).", _, true, 16.0, true, 512.0);
+	g_cvBeaconCooldown = CreateConVar("cm_beacon_cooldown", "20.0", "Seconds before the same player can use a Beacon again.", _, true, 0.0);
+	g_cvTrashMin = CreateConVar("cm_trash_pay_min", "1", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
+	g_cvTrashMax = CreateConVar("cm_trash_pay_max", "3", "Most cleers for putting dug up junk in a trash can.", _, true, 0.0);
 	g_cvDigMoneyMin = CreateConVar("cm_dig_money_min", "100", "Least cleers in a dug up money box.", _, true, 0.0);
 	g_cvDigMoneyMax = CreateConVar("cm_dig_money_max", "1500", "Most cleers in a dug up money box.", _, true, 0.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
@@ -8018,7 +8025,7 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 	fSpot = fHit;
 	fSpot[2] += 12.0;
 
-	// Something the Health Vial sensed here: it comes up for sure.
+	// An emblem a Beacon sensed here: it comes up for sure.
 	for (int b = 0; b < g_iBuriedCount; b++)
 	{
 		if (g_iBuried[b] == 1 && GetVectorDistance(fHit, g_fBuried[b]) <= 72.0)
@@ -8091,7 +8098,7 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 		SpawnVial(fSpot);
 		ThrowOutOfGround(EntRefToEntIndex(g_iLastVial));
 
-		Cel_PrintToChat(iClient, "You dug up a {green}Health Vial{default}! Press {green}E{default} on it to sense whether anything is buried nearby.");
+		Cel_PrintToChat(iClient, "You dug up a {green}Beacon{default}! Press {green}E{default} on it to sense whether a rare emblem is buried right around it.");
 		return;
 	}
 
@@ -8148,51 +8155,30 @@ void DigUpRock(int iClient, float fSpot[3])
 	}
 }
 
-// A buried find the Health Vial sensed: one of the shovel's emblems (Black or White), a fat cleers box, or a hobo.
+// A buried find a Beacon sensed: one of the shovel's emblems (Black or White).
 void DigUpTreasure(int iClient, int iItem, float fSpot[3])
 {
 	char sChoices[8][32];
 
-	switch (GetRandomInt(0, 2))
+	int iCount = ExplodeString(g_Items[iItem].sDigs, " ", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+	int iFound = iCount > 0 ? FindItem(KIND_EMBLEM, sChoices[GetRandomInt(0, iCount - 1)]) : -1;
+
+	if (iFound == -1)
 	{
-		case 0:
-		{
-			int iCount = ExplodeString(g_Items[iItem].sDigs, " ", sChoices, sizeof(sChoices), sizeof(sChoices[]));
-			int iFound = iCount > 0 ? FindItem(KIND_EMBLEM, sChoices[GetRandomInt(0, iCount - 1)]) : -1;
-
-			if (iFound != -1)
-			{
-				int iEntity = SpawnItemEntity(iClient, iFound, fSpot, g_fZero);
-
-				SetOwned(iClient, iFound, GetOwned(iClient, iFound) + 1);
-
-				if (iEntity != -1)
-				{
-					ThrowOutOfGround(iEntity);
-				}
-
-				EmitSoundToAll(SOUND_REWARD, iClient);
-				Cel_PrintToChat(iClient, "The Health Vial was right: you dug up a {green}%s{default} emblem!", g_Items[iFound].sName);
-				return;
-			}
-		}
-		case 1:
-		{
-			DigUpHobo(iClient, fSpot);
-			return;
-		}
+		return;
 	}
 
-	int iMoney = GetRandomInt(g_cvDigMoneyMax.IntValue, g_cvDigMoneyMax.IntValue * 3);
-	int iBox = Cel_CreateCleerBox(iClient, iMoney, fSpot);
+	int iEntity = SpawnItemEntity(iClient, iFound, fSpot, g_fZero);
 
-	if (iBox != -1)
+	SetOwned(iClient, iFound, GetOwned(iClient, iFound) + 1);
+
+	if (iEntity != -1)
 	{
-		ThrowOutOfGround(iBox);
+		ThrowOutOfGround(iEntity);
 	}
 
 	EmitSoundToAll(SOUND_REWARD, iClient);
-	Cel_PrintToChat(iClient, "The Health Vial was right: you dug up a {green}cleers box{default} with {green}%d CL{default}!", iMoney);
+	Cel_PrintToChat(iClient, "The Beacon was right: you dug up a {green}%s{default} emblem!", g_Items[iFound].sName);
 }
 
 // A hobo: an idle Eli, coloured brown, who belongs to whoever dug him up.
@@ -8217,7 +8203,7 @@ void DigUpHobo(int iClient, float fSpot[3])
 	Cel_PrintToChat(iClient, "You dug up... a {green}hobo{default}! He's yours now.");
 }
 
-// The Health Vial: deep green, and pressing E on it senses whether anything is buried nearby.
+// The Beacon (a deep green health vial): pressing E on it senses whether a rare emblem is buried right around it.
 
 void SpawnVial(float fSpot[3])
 {
@@ -8256,7 +8242,18 @@ public void Hook_VialUse(int iVial, int iActivator, int iCaller, UseType utType,
 		return;
 	}
 
+	// Each player waits cm_beacon_cooldown between uses, whichever Beacon they use.
+	if (GetGameTime() < g_fNextBeacon[iActivator])
+	{
+		Cel_PrintToChat(iActivator, "The Beacon is recharging: {green}%d{default} seconds left.", RoundToCeil(g_fNextBeacon[iActivator] - GetGameTime()));
+		g_fNextVial[iVial] = GetGameTime() + 1.0;
+		return;
+	}
+
 	g_fNextVial[iVial] = GetGameTime() + 2.0;
+	g_fNextBeacon[iActivator] = GetGameTime() + g_cvBeaconCooldown.FloatValue;
+
+	float fRange = g_cvBeaconRange.FloatValue;
 
 	GetEntPropVector(iVial, Prop_Data, "m_vecAbsOrigin", fCenter);
 
@@ -8265,7 +8262,7 @@ public void Hook_VialUse(int iVial, int iActivator, int iCaller, UseType utType,
 
 	for (int b = 0; b < g_iBuriedCount; b++)
 	{
-		if (GetVectorDistance(fCenter, g_fBuried[b]) <= 250.0)
+		if (GetVectorDistance(fCenter, g_fBuried[b]) <= fRange)
 		{
 			iNear = b;
 
@@ -8291,11 +8288,11 @@ public void Hook_VialUse(int iVial, int iActivator, int iCaller, UseType utType,
 
 	fCenter[2] += 4.0;
 
-	Fx_Ring(fCenter, 16.0, 500.0, g_iBmLaser, 6.0, 0.8, 0.0, iColor);
+	Fx_Ring(fCenter, 8.0, fRange * 2.0, g_iBmLaser, 4.0, 0.8, 0.0, iColor);
 
 	EmitSoundToAll(bFound ? "buttons/blip1.wav" : "buttons/button10.wav", iVial);
 
-	Cel_PrintToChat(iActivator, bFound ? "The Health Vial glows {green}green{default}: something is buried nearby. Dig around here!" : "The Health Vial glows red: nothing is buried around here.");
+	Cel_PrintToChat(iActivator, bFound ? "The Beacon glows {green}green{default}: a rare emblem is buried right here. Dig inside the ring!" : "The Beacon glows red: no emblem is buried here.");
 }
 
 // Decides what's buried near a spot: a find (on the ground somewhere close) or nothing.
@@ -8323,12 +8320,12 @@ int BuryNear(const float fCenter[3])
 		return b;
 	}
 
-	// Somewhere on the ground within about 150 units.
+	// Somewhere on the ground inside the Beacon's range.
 	float fStart[3], fEnd[3];
 
 	for (int i = 0; i < 6; i++)
 	{
-		float fAngle = GetRandomFloat(0.0, 6.2832), fDist = GetRandomFloat(30.0, 150.0);
+		float fAngle = GetRandomFloat(0.0, 6.2832), fDist = GetRandomFloat(0.0, g_cvBeaconRange.FloatValue * 0.75);
 
 		fStart[0] = fCenter[0] + Cosine(fAngle) * fDist;
 		fStart[1] = fCenter[1] + Sine(fAngle) * fDist;
@@ -8371,7 +8368,7 @@ void TrashCanFile(char[] sPath, int iMaxLength)
 
 void LoadMarkedTrashCans()
 {
-	char sPath[PLATFORM_MAX_PATH], sLine[32];
+	char sPath[PLATFORM_MAX_PATH], sLine[96];
 
 	if (g_alMarkedHammer == null)
 	{
@@ -8379,6 +8376,13 @@ void LoadMarkedTrashCans()
 	}
 
 	g_alMarkedHammer.Clear();
+
+	if (g_alTrashSpots == null)
+	{
+		g_alTrashSpots = new ArrayList(3);
+	}
+
+	g_alTrashSpots.Clear();
 
 	TrashCanFile(sPath, sizeof(sPath));
 
@@ -8392,6 +8396,25 @@ void LoadMarkedTrashCans()
 	while (fList.ReadLine(sLine, sizeof(sLine)))
 	{
 		TrimString(sLine);
+
+		// "spot x y z": a static prop's spot. Anything else is a Hammer id.
+		if (StrContains(sLine, "spot ", false) == 0)
+		{
+			char sParts[4][16];
+			float fSpot[3];
+
+			if (ExplodeString(sLine, " ", sParts, sizeof(sParts), sizeof(sParts[])) == 4)
+			{
+				for (int k = 0; k < 3; k++)
+				{
+					fSpot[k] = StringToFloat(sParts[k + 1]);
+				}
+
+				g_alTrashSpots.PushArray(fSpot);
+			}
+
+			continue;
+		}
 
 		int iId = StringToInt(sLine);
 
@@ -8423,7 +8446,33 @@ void SaveMarkedTrashCans()
 		fList.WriteLine("%d", g_alMarkedHammer.Get(i));
 	}
 
+	for (int i = 0; i < g_alTrashSpots.Length; i++)
+	{
+		float fSpot[3];
+
+		g_alTrashSpots.GetArray(i, fSpot);
+		fList.WriteLine("spot %.1f %.1f %.1f", fSpot[0], fSpot[1], fSpot[2]);
+	}
+
 	delete fList;
+}
+
+//A marked spot within reach of a point (to unmark it), or -1.
+int TrashSpotNear(const float fPoint[3])
+{
+	float fSpot[3];
+
+	for (int i = 0; g_alTrashSpots != null && i < g_alTrashSpots.Length; i++)
+	{
+		g_alTrashSpots.GetArray(i, fSpot);
+
+		if (GetVectorDistance(fSpot, fPoint) < 48.0)
+		{
+			return i;
+		}
+	}
+
+	return -1;
 }
 
 bool IsMarkedTrashCan(int iEntity)
@@ -8452,9 +8501,41 @@ public Action Command_TrashCan(int iClient, int iArgs)
 
 	int iTarget = GetClientAimTarget(iClient, false);
 
+	// Most map garbage cans and dumpsters are static props, which aren't entities: the spot aimed at is marked instead.
 	if (iTarget <= MaxClients || iTarget > MAXENTITIES || !IsValidEntity(iTarget))
 	{
-		Cel_ReplyToCommand(iClient, "Look at the garbage can or dumpster you want to mark.");
+		float fEyes[3], fAngles[3], fHit[3];
+
+		GetClientEyePosition(iClient, fEyes);
+		GetClientEyeAngles(iClient, fAngles);
+
+		Handle hTrace = TR_TraceRayFilterEx(fEyes, fAngles, MASK_SOLID, RayType_Infinite, Filter_NotSelf, iClient);
+		bool bHit = TR_DidHit(hTrace);
+
+		TR_GetEndPosition(fHit, hTrace);
+		delete hTrace;
+
+		if (!bHit || GetVectorDistance(fEyes, fHit) > 500.0)
+		{
+			Cel_ReplyToCommand(iClient, "Look at the garbage can or dumpster you want to mark (its opening, from close by).");
+			return Plugin_Handled;
+		}
+
+		int iSpot = TrashSpotNear(fHit);
+
+		if (iSpot != -1)
+		{
+			g_alTrashSpots.Erase(iSpot);
+			SaveMarkedTrashCans();
+
+			Cel_ReplyToCommand(iClient, "That spot is no longer a trash can.");
+		} else {
+			g_alTrashSpots.PushArray(fHit);
+			SaveMarkedTrashCans();
+
+			Cel_ReplyToCommand(iClient, "Marked this spot as a trash can on this map (it's part of the map itself). Junk dropped into it is collected. Type {green}[tag]trashcan{default} here again to unmark it.");
+		}
+
 		return Plugin_Handled;
 	}
 
@@ -8481,7 +8562,7 @@ public Action Command_TrashCan(int iClient, int iArgs)
 
 	FindTrashCans();
 
-	Cel_ReplyToCommand(iClient, bMarked ? "That's no longer a trash can." : (iId > 0 ? "Marked as a trash can on this map: throw dug up junk into it for {green}1 CL{default} a piece." : "Marked as a trash can until it's removed."));
+	Cel_ReplyToCommand(iClient, bMarked ? "That's no longer a trash can." : (iId > 0 ? "Marked as a trash can on this map: throw dug up junk into it to get rid of it for cleers." : "Marked as a trash can until it's removed."));
 
 	return Plugin_Handled;
 }
@@ -9159,7 +9240,7 @@ void FindTrashCans()
 
 void ThinkTrash()
 {
-	float fJunk[3], fCan[3], fMaxs[3], fMins[3];
+	float fJunk[3], fCan[3], fMaxs[3], fMins[3], fSpot[3];
 
 	// The list of cans is refreshed every few seconds, as players spawn and remove them.
 	if (g_iTick % 15 == 0)
@@ -9175,6 +9256,8 @@ void ThinkTrash()
 		}
 
 		GetEntPropVector(iJunk, Prop_Data, "m_vecAbsOrigin", fJunk);
+
+		bool bBinned = false;
 
 		for (int c = 0; c < g_iTrashCanCount; c++)
 		{
@@ -9196,53 +9279,76 @@ void ThinkTrash()
 				continue;
 			}
 
-			// Whoever threw it in with the gravity gun gets the money, otherwise whoever dug it up.
-			int iClient = -1;
-
-			if (HasEntProp(iJunk, Prop_Data, "m_hPhysicsAttacker"))
-			{
-				iClient = GetEntPropEnt(iJunk, Prop_Data, "m_hPhysicsAttacker");
-			}
-
-			if (!IsRealClient(iClient))
-			{
-				iClient = GetClientOfUserId(g_iDugBy[iJunk]);
-			}
-
-			int iRock = g_iDugRock[iJunk] - 1;
-
-			g_bDugUp[iJunk] = false;
-			g_iDugRock[iJunk] = 0;
-
-			AcceptEntityInput(iJunk, "kill");
-
-			EmitSoundToAll(SOUND_TRASH, iCan);
-
-			if (IsRealClient(iClient))
-			{
-				if (iRock >= 0)
-				{
-					int iReward = GetRandomInt(g_iRockPayMin[iRock], g_iRockPayMax[iRock]);
-
-					Cel_AddToClientBalance(iClient, iReward);
-
-					if (iRock == 0)
-					{
-						Cel_PrintToChat(iClient, "Someone had to get rid of that turd. Nobody pays for those, though.");
-					} else {
-						Cel_PrintToChat(iClient, "Sold your %s. {green}+%d CL{default}", g_sRockNames[iRock], iReward);
-					}
-				} else {
-					int iReward = GetRandomInt(g_cvTrashMin.IntValue, g_cvTrashMax.IntValue);
-
-					Cel_AddToClientBalance(iClient, iReward);
-
-					Cel_PrintToChat(iClient, "Thanks for keeping the place clean! {green}+%d CL{default}", iReward);
-				}
-			}
-
+			GetEntPropVector(iCan, Prop_Data, "m_vecAbsOrigin", fCan);
+			BinJunk(iJunk, fCan);
+			bBinned = true;
 			break;
 		}
+
+		// A marked spot on a static garbage can or dumpster: around it, and below it (inside), or just above.
+		for (int t = 0; !bBinned && g_alTrashSpots != null && t < g_alTrashSpots.Length; t++)
+		{
+			g_alTrashSpots.GetArray(t, fSpot);
+
+			float fDX = fJunk[0] - fSpot[0], fDY = fJunk[1] - fSpot[1], fDZ = fJunk[2] - fSpot[2];
+
+			if (fDX * fDX + fDY * fDY <= 48.0 * 48.0 && fDZ > -72.0 && fDZ < 16.0)
+			{
+				BinJunk(iJunk, fSpot);
+				bBinned = true;
+			}
+		}
+	}
+}
+
+//Junk in a trash can: gone, and paid for (ores and junk; turds pay nothing). Whoever threw it in with the gravity gun
+//gets the money, otherwise whoever dug it up.
+void BinJunk(int iJunk, const float fWhere[3])
+{
+	int iClient = -1;
+
+	if (HasEntProp(iJunk, Prop_Data, "m_hPhysicsAttacker"))
+	{
+		iClient = GetEntPropEnt(iJunk, Prop_Data, "m_hPhysicsAttacker");
+	}
+
+	if (!IsRealClient(iClient))
+	{
+		iClient = GetClientOfUserId(g_iDugBy[iJunk]);
+	}
+
+	int iRock = g_iDugRock[iJunk] - 1;
+
+	g_bDugUp[iJunk] = false;
+	g_iDugRock[iJunk] = 0;
+
+	AcceptEntityInput(iJunk, "kill");
+
+	EmitAmbientSound(SOUND_TRASH, fWhere);
+
+	if (!IsRealClient(iClient))
+	{
+		return;
+	}
+
+	if (iRock >= 0)
+	{
+		int iReward = GetRandomInt(g_iRockPayMin[iRock], g_iRockPayMax[iRock]);
+
+		Cel_AddToClientBalance(iClient, iReward);
+
+		if (iRock == 0)
+		{
+			Cel_PrintToChat(iClient, "Someone had to get rid of that turd. Nobody pays for those, though.");
+		} else {
+			Cel_PrintToChat(iClient, "Sold your %s. {green}+%d CL{default}", g_sRockNames[iRock], iReward);
+		}
+	} else {
+		int iReward = GetRandomInt(g_cvTrashMin.IntValue, g_cvTrashMax.IntValue);
+
+		Cel_AddToClientBalance(iClient, iReward);
+
+		Cel_PrintToChat(iClient, "Thanks for keeping the place clean! {green}+%d CL{default}", iReward);
 	}
 }
 

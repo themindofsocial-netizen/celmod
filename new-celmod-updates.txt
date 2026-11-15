@@ -345,3 +345,11 @@
 		   still exists.
 		 - !text lies flat on the surface you aim at (walls, floors, ceilings and slopes), facing out of it, centred on your
 		   crosshair and reading upright and left to right from where you stand.
+		 - Dungeon monsters can hurt players again: players only pass through each other while another player is close by,
+		   and are normally solid to monsters (cm_noblock).
+		 - !trashcan works on a map's built-in garbage cans and dumpsters (static props): it marks the spot you aim at.
+		 - Digging: money boxes are rarer (cm_dig_money_share, 5%), junk pays 1-3 CL in a trash can (cm_trash_pay_min/max),
+		   and ores pay a bit more (coal 4-6 CL up to diamond 30-45 CL).
+		 - The Health Vial is now the Beacon: a 20 second cooldown per player (cm_beacon_cooldown), a small range
+		   (cm_beacon_range, 64), and it only alerts when one of the rare diggable emblems is buried right there
+		   (cm_beacon_emblem_chance, 3%).

@@ -118,6 +118,7 @@ public void OnPluginStart()
 	BuildPath(Path_SM, g_sSoundDB, sizeof(g_sSoundDB), "data/celmod/sounds.txt");
 	
 	CreateTimer(0.5, Timer_LandBans, _, TIMER_REPEAT);
+	CreateTimer(0.1, Timer_NoBlock, _, TIMER_REPEAT);
 	
 	RegConsoleCmd("v_model", Command_Model, "|CelMod| Replaces the model on the entity you are looking at.");
 	RegConsoleCmd("v_palette", Command_Palette, "|CelMod| Colors the prop you are looking at with your own red, green and blue values.");
@@ -2364,14 +2365,55 @@ public Action Timer_BuildMessages(Handle hTimer)
 }
 
 //Spawn health: every player starts with cm_spawn_health (225), which is also their full health for healing.
-//No player-to-player collision: players are put in the "debris trigger" collision group, which other players pass
-//through, while the world, props, bullets and triggers still treat them as normal.
+//No player-to-player collision. The "debris trigger" collision group lets players pass through each other, but the
+//engine's rules make NPCs pass through it too (leaping enemies couldn't reach anyone, so dungeon monsters stopped
+//hurting players). So a player is only in it while another player is close by, and back in the normal player group,
+//where NPCs collide with them and hurt them as usual, once nobody is. The group is networked, so movement prediction
+//on players' screens agrees with the server.
 #define COLLISION_GROUP_PLAYER_DEFAULT 5
 #define COLLISION_GROUP_PLAYER_NOBLOCK 2
 
 void SetNoBlock(int iClient)
 {
-	SetEntProp(iClient, Prop_Send, "m_CollisionGroup", g_cvNoBlock.BoolValue ? COLLISION_GROUP_PLAYER_NOBLOCK : COLLISION_GROUP_PLAYER_DEFAULT);
+	SetEntProp(iClient, Prop_Send, "m_CollisionGroup", (g_cvNoBlock.BoolValue && PlayerNearby(iClient)) ? COLLISION_GROUP_PLAYER_NOBLOCK : COLLISION_GROUP_PLAYER_DEFAULT);
+}
+
+//Another living player close enough to touch soon (a little more than two player widths, and overlapping in height).
+bool PlayerNearby(int iClient)
+{
+	float fMine[3], fOther[3];
+	
+	GetClientAbsOrigin(iClient, fMine);
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			continue;
+		}
+		
+		GetClientAbsOrigin(i, fOther);
+		
+		if (FloatAbs(fMine[0] - fOther[0]) < 80.0 && FloatAbs(fMine[1] - fOther[1]) < 80.0 && FloatAbs(fMine[2] - fOther[2]) < 100.0)
+		{
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+public Action Timer_NoBlock(Handle hTimer)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && IsPlayerAlive(i))
+		{
+			SetNoBlock(i);
+		}
+	}
+	
+	return Plugin_Continue;
 }
 
 public void CMExtras_OnNoBlockChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
