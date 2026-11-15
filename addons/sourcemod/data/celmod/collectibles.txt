@@ -102,6 +102,9 @@
 //   model       Shown as the cel, and in the holder's hand to other players (handscale, handoffset, handangles).
 //   The holder's own first person view stays the stock weapon.
 //   customgun   With the Custom Guns plugin installed: the Custom Guns weapon this celwep is, e.g. weapon_cm_axe
+//               How it's held comes from that weapon's script ("anim_prefix"): "missile launcher" like the RPG,
+//               "bow" like the crossbow, "crowbar" like the crowbar, "gauss" like the gravity gun.
+//               tools/fix_customgun_poses.sh (celmod repo) sets CelMod's celweps to the right ones.
 //               (scripts/weapon_cm_axe.txt). It is then a separate weapon with its own view model, several can be
 //               carried at once, and base/damage/hand keys are not used. Without Custom Guns, base is used instead.
 //   attack      melee (default): a swing. ranged: a shot at whatever is aimed at, looking like its "fx" (range,
