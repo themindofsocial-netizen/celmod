@@ -367,3 +367,6 @@
 		   with one change instead of a change every frame.
 		 - On each map start the server console says how many held-item and hat tunings it loaded from
 		   data/celmod/tuning.txt, or that the file is missing.
+		 - Emblems are held exactly like the gravity gun: attached to the hidden gun's own centre, so they sit where the
+		   gun would through every animation, aim and stance. !tune and !nudge now adjust from there (0 0 0 = exactly the
+		   gun's position); older hand-based tunings no longer apply.

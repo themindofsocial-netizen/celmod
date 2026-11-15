@@ -102,6 +102,8 @@ enum struct Item
 	int iSkin;
 	float fHandOffset[3];
 	float fHandAngles[3];
+	float fGunOffset[3]; // held on the gravity gun: from its "core" point (0 0 0 = exactly where the gun is)
+	float fGunAngles[3];
 	float fHandScale;
 	int iModelIndex;
 	int iBig;
@@ -160,6 +162,7 @@ char g_sBoothModel[PLATFORM_MAX_PATH];
 char g_sDropModel[PLATFORM_MAX_PATH];
 
 int g_iHeldBox[MAXPLAYERS + 1];
+bool g_bHeldOnGun[MAXPLAYERS + 1]; // the held emblem is attached to the (hidden) gravity gun, not the hand
 int g_iPuntHeldRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the gravity gun whose punt is held back for an emblem
 //Emblem boxes that have been held, by box: who held it last, when, and which emblem it holds. Kept outside the entity,
 //because when the map ends the box itself may already be gone. [userid, item, time]
@@ -1171,7 +1174,20 @@ void ApplyTuning()
 			continue;
 		}
 
+		// Placement on the gravity gun ("gun <model>"), then the older hand placement (used when a gun has no core).
+		char sGunKey[PLATFORM_MAX_PATH];
+
 		HeldModel(i, sKey, sizeof(sKey));
+		FormatEx(sGunKey, sizeof(sGunKey), "gun %s", sKey);
+
+		if (kvTuning.JumpToKey(sGunKey, false))
+		{
+			kvTuning.GetVector("offset", g_Items[i].fGunOffset, g_Items[i].fGunOffset);
+			kvTuning.GetVector("angles", g_Items[i].fGunAngles, g_Items[i].fGunAngles);
+			g_Items[i].fHandScale = kvTuning.GetFloat("scale", g_Items[i].fHandScale);
+			kvTuning.Rewind();
+			iHeld++;
+		}
 
 		if (kvTuning.JumpToKey(sKey, false))
 		{
@@ -1225,8 +1241,15 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3], float
 
 			if (StrEqual(sOther, sModel, false))
 			{
-				g_Items[i].fHandOffset = fOffset;
-				g_Items[i].fHandAngles = fAngles;
+				if (g_bHeldOnGun[iClient])
+				{
+					g_Items[i].fGunOffset = fOffset;
+					g_Items[i].fGunAngles = fAngles;
+				} else {
+					g_Items[i].fHandOffset = fOffset;
+					g_Items[i].fHandAngles = fAngles;
+				}
+
 				g_Items[i].fHandScale = fScale;
 
 				// Tuned by hand: placed from the hand attachment with these values, not bone-merged (a model
@@ -1235,7 +1258,8 @@ void SetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3], float
 			}
 		}
 
-		strcopy(sKey, sizeof(sKey), sModel);
+		// Placed on the gravity gun, or on the hand (a gun without a core point).
+		FormatEx(sKey, sizeof(sKey), "%s%s", g_bHeldOnGun[iClient] ? "gun " : "", sModel);
 	}
 
 	TuningPath(sPath, sizeof(sPath));
@@ -1306,8 +1330,15 @@ bool GetTuning(int iClient, bool bHat, float fOffset[3], float fAngles[3], float
 		return false;
 	}
 
-	fOffset = g_Items[g_iHandItem[iClient]].fHandOffset;
-	fAngles = g_Items[g_iHandItem[iClient]].fHandAngles;
+	if (g_bHeldOnGun[iClient])
+	{
+		fOffset = g_Items[g_iHandItem[iClient]].fGunOffset;
+		fAngles = g_Items[g_iHandItem[iClient]].fGunAngles;
+	} else {
+		fOffset = g_Items[g_iHandItem[iClient]].fHandOffset;
+		fAngles = g_Items[g_iHandItem[iClient]].fHandAngles;
+	}
+
 	fScale = g_Items[g_iHandItem[iClient]].fHandScale;
 
 	return true;
@@ -3396,6 +3427,10 @@ void ReadItem(KeyValues kvItems, int iKind)
 	kvItems.GetVector("handoffset", g_Items[iItem].fHandOffset);
 	kvItems.GetVector("handangles", g_Items[iItem].fHandAngles);
 
+	// Held on the gravity gun: exactly where the gun is, unless tuned in game (!tune / !nudge).
+	g_Items[iItem].fGunOffset = g_fZero;
+	g_Items[iItem].fGunAngles = g_fZero;
+
 	kvItems.GetVector("offset", g_Items[iItem].fOffset);
 	kvItems.GetVector("angles", g_Items[iItem].fAngles);
 
@@ -3798,6 +3833,7 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 	g_bHeldShown[iClient] = true;
 	g_iHandItem[iClient] = iItem;
+	g_bHeldOnGun[iClient] = false;
 	g_iModdedWeaponRef[iClient] = EntIndexToEntRef(iWeapon);
 
 	// Player models without the hand attachment keep the gravity gun, tinted in the emblem's color.
@@ -3848,6 +3884,18 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 		SetLocalOffset(iHand, fZero, fZero);
 		SetEntProp(iHand, Prop_Send, "m_fEffects", GetEntProp(iHand, Prop_Send, "m_fEffects") | EF_BONEMERGE_FLAGS);
+	} else if (LookupEntityAttachment(iWeapon, "core") > 0) {
+		// Held exactly like the gravity gun: attached to the (hidden) gun's own centre, which the game keeps in the
+		// player's hand through every animation, aim and stance.
+		AcceptEntityInput(iHand, "ClearParent");
+		SetVariantString("!activator");
+		AcceptEntityInput(iHand, "SetParent", iWeapon, iHand);
+		SetVariantString("core");
+		AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
+
+		SetLocalOffset(iHand, g_Items[iItem].fGunOffset, g_Items[iItem].fGunAngles);
+
+		g_bHeldOnGun[iClient] = true;
 	} else {
 		SetVariantString("anim_attachment_RH");
 		AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
