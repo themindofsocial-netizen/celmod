@@ -236,3 +236,4 @@
 		   green if something is buried nearby, red if not; dig there to find it), the Black and White emblems, and trash.
 		 - Trash pays 1 CL a piece in any trash can. !dumpster spawns one, and admins can mark any prop (a map's own garbage
 		   cans too, saved per map) as a trash can with !trashcan.
+		 - Fixed: an error in the server log when a player left before fully joining ("Entity -1 is invalid" in Cel_SetNoKill).

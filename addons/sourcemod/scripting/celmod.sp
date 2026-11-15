@@ -264,7 +264,10 @@ public void OnClientDisconnect(int iClient)
 	
 	g_bIsFlying[iClient] = false;
 	
-	ClientCommand(iClient, "r_screenoverlay 0", g_sOverlayPath);
+	if (IsClientInGame(iClient) && !IsFakeClient(iClient))
+	{
+		ClientCommand(iClient, "r_screenoverlay 0");
+	}
 	
 	CPrintToChatAll("{red}[-]{default} %t", "Disconnecting", sClient);
 	for (int i = 1; i < MaxClients; i++)
@@ -1248,7 +1251,11 @@ public int Native_SetNoKill(Handle hPlugin, int iNumParams)
 	int iClient = GetNativeCell(1);
 	bool bNoKill = view_as<bool>(GetNativeCell(2));
 	
-	bNoKill ? SetEntProp(iClient, Prop_Data, "m_takedamage", 0, 1) : SetEntProp(iClient, Prop_Data, "m_takedamage", 2, 1);
+	//A player who is leaving (or never fully joined) may have no entity any more: only the setting is kept then.
+	if (iClient > 0 && iClient <= MaxClients && IsClientInGame(iClient) && IsValidEntity(iClient))
+	{
+		SetEntProp(iClient, Prop_Data, "m_takedamage", bNoKill ? 0 : 2, 1);
+	}
 	
 	g_bNoKill[iClient] = bNoKill;
 	
