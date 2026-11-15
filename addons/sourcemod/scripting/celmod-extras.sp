@@ -1190,10 +1190,10 @@ Action SetLandBan(int iClient, int iArgs, bool bBan)
 	
 	if (bBan)
 	{
-		Cel_PrintToChat(iTarget, "{green}%N{default} has banned you from their land.", iClient);
+		Cel_PrintToChat(iTarget, "Player {green}%N{default} has banned you from their land.", iClient);
 		Cel_ReplyToCommand(iClient, "{green}%N{default} is banned from your land until they or you leave the server.", iTarget);
 	} else {
-		Cel_PrintToChat(iTarget, "{green}%N{default} has let you back into their land.", iClient);
+		Cel_PrintToChat(iTarget, "Player {green}%N{default} has unbanned you from their land.", iClient);
 		Cel_ReplyToCommand(iClient, "{green}%N{default} can enter your land again.", iTarget);
 	}
 	
