@@ -305,3 +305,4 @@
 		   (dispute_<date>_<map>.dem, 3 minutes, cm_dispute_demo_seconds) with the reported player's name, SteamID, IP,
 		   country, the time and the map printed in it. Needs SourceTV (tv_enable 1). The reporter sees the same line
 		   without the IP. The Disputes tab on the website shows which demo goes with each dispute.
+		 - !news: see what's new. Shows the latest updates posted on the website in a panel, with the full list a press away.

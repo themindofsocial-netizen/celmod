@@ -132,6 +132,7 @@
 			<li><span class="c">!fly</span> - fly around (not in event areas)</li>
 			<li><span class="c">!thirdperson</span> - see your emblem and hat</li>
 			<li><span class="c">!switch</span> - move the HUD to the other side</li>
+			<li><span class="c">!news</span> - see what's new</li>
 			<li><span class="c">!motd</span> - see this page again</li>
 		</ul>
 	</td>

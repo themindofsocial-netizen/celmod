@@ -182,6 +182,7 @@ public void OnPluginStart()
 
 	g_cvDisputeDemo = CreateConVar("cm_dispute_demo", "1", "1: !dispute records a SourceTV demo on the server (needs tv_enable 1), with the reported player's details in it.", _, true, 0.0, true, 1.0);
 	g_cvDisputeDemoSeconds = CreateConVar("cm_dispute_demo_seconds", "180", "How long a dispute demo records, in seconds. Another dispute while recording makes it longer.", _, true, 30.0, true, 1800.0);
+	RegConsoleCmd("v_news", Command_News, "|CelMod| Shows what's new: the latest updates posted on the website.");
 	RegConsoleCmd("v_dispute", Command_Dispute, "|CelMod| Reports a player who is causing you problems to the admins.");
 	AddCommandListener(Listener_DisputeChat, "say");
 	AddCommandListener(Listener_DisputeChat, "say_team");
@@ -1868,4 +1869,104 @@ public Action Timer_StopDisputeDemo(Handle hTimer)
 	}
 
 	return Plugin_Stop;
+}
+
+//!news: the latest updates from the website's admin panel (Updates tab), in a panel. "Full list" opens the updates
+//page (!updates). Without the database it goes straight to that page.
+public Action Command_News(int iClient, int iArgs)
+{
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (g_dbCelMod == null)
+	{
+		FakeClientCommand(iClient, "v_updates");
+		return Plugin_Handled;
+	}
+
+	g_dbCelMod.Query(SQL_OnNews, "SELECT DATE_FORMAT(posted_on, '%c/%e/%Y'), body FROM cm_updates WHERE published = 1 ORDER BY posted_on DESC, id DESC LIMIT 3", GetClientUserId(iClient));
+
+	return Plugin_Handled;
+}
+
+public void SQL_OnNews(Database dbDatabase, DBResultSet rsResults, const char[] sError, any iUserId)
+{
+	char sDate[16], sBody[2048], sLines[24][128], sLine[160];
+	int iClient = GetClientOfUserId(iUserId);
+
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return;
+	}
+
+	if (rsResults == null || rsResults.RowCount < 1)
+	{
+		FakeClientCommand(iClient, "v_updates");
+		return;
+	}
+
+	Panel pNews = new Panel();
+
+	pNews.SetTitle("|CelMod| What's new\n ");
+
+	int iShown = 0;
+
+	while (rsResults.FetchRow() && iShown < 14)
+	{
+		rsResults.FetchString(0, sDate, sizeof(sDate));
+		rsResults.FetchString(1, sBody, sizeof(sBody));
+
+		// The website's formatting marks aren't shown in game.
+		ReplaceString(sBody, sizeof(sBody), "**", "");
+		ReplaceString(sBody, sizeof(sBody), "__", "");
+		ReplaceString(sBody, sizeof(sBody), "`", "");
+		ReplaceString(sBody, sizeof(sBody), "\r", "");
+
+		FormatEx(sLine, sizeof(sLine), "-=- %s", sDate);
+		pNews.DrawText(sLine);
+		iShown++;
+
+		int iCount = ExplodeString(sBody, "\n", sLines, sizeof(sLines), sizeof(sLines[]));
+
+		for (int i = 0; i < iCount && iShown < 14; i++)
+		{
+			TrimString(sLines[i]);
+
+			if (sLines[i][0] == '\0')
+			{
+				continue;
+			}
+
+			// Long lines are cut so the panel stays readable; the full text is on the website.
+			if (strlen(sLines[i]) > 70)
+			{
+				strcopy(sLines[i][67], 4, "...");
+			}
+
+			FormatEx(sLine, sizeof(sLine), "   %s", sLines[i]);
+			pNews.DrawText(sLine);
+			iShown++;
+		}
+
+		pNews.DrawText(" ");
+	}
+
+	pNews.DrawItem("Full list of updates");
+	pNews.DrawItem("Close");
+
+	pNews.Send(iClient, Panel_News, 30);
+
+	delete pNews;
+}
+
+public int Panel_News(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_Select && iItem == 1)
+	{
+		FakeClientCommand(iClient, "v_updates");
+	}
+
+	return 0;
 }
