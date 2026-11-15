@@ -43,7 +43,6 @@ float g_fCenter[3];
 //back, and the three props run left to right in front of him. 90 (north) is the old fixed layout.
 float g_fBoothYaw = 90.0;
 
-int g_iAnswer;
 int g_iAuctionRef = INVALID_ENT_REFERENCE;
 int g_iBeam = -1;
 int g_iKleinerRef = INVALID_ENT_REFERENCE;
@@ -57,6 +56,7 @@ int g_iTopBidder;
 
 //Steam ids of everyone who has used their guess on this map.
 StringMap g_smGuessed;
+StringMap g_smAnswer; //each player's own winning prop (0-2) for this map, by Steam ID
 
 public Plugin myinfo =
 {
@@ -84,6 +84,7 @@ public void OnPluginStart()
 	BuildPath(Path_SM, g_sBoothDB, sizeof(g_sBoothDB), "data/celmod/guessbooth.txt");
 	
 	g_smGuessed = new StringMap();
+	g_smAnswer = new StringMap();
 	
 	g_cvXPGuess = CreateConVar("cm_tactics_xp_guess", "15", "Tactics experience for a correct guess at the Guess Booth.", _, true, 0.0);
 	g_cvReward = CreateConVar("cm_guess_reward", "5000", "Cleers paid for a correct guess at the Guess Booth.", _, true, 0.0);
@@ -130,6 +131,7 @@ public void OnMapStart()
 	}
 	
 	g_smGuessed.Clear();
+	g_smAnswer.Clear();
 	
 	//Placed before the Power Booth, which then keeps out of its sight.
 	CreateTimer(3.0, Timer_PlaceBooth, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -540,7 +542,8 @@ void PlaceBooth(float fOrigin[3])
 			LogError("|CelMod| The Guess Booth could only show %d of its three props. Check that the models in '%s' are on the server.", iShown, g_sSpawnDB);
 		}
 		
-		g_iAnswer = GetRandomInt(0, 2);
+		//New props: everyone gets a new winning prop of their own the next time they guess.
+		g_smAnswer.Clear();
 	} else {
 		LogError("|CelMod| The Guess Booth needs at least three props in '%s'.", g_sSpawnDB);
 	}
@@ -965,7 +968,7 @@ public Action Timer_Booth(Handle hTimer)
 			
 			EmitSoundToClient(i, KLEINER_HELLO, iKleiner);
 			
-			Cel_PrintToChat(i, "{green}Dr. Kleiner:{default} Ah, hello! Welcome to the Guess Booth. One of these three props is the winner. Pick it with {green}!guess 1{default}, {green}2{default} or {green}3{default}.");
+			Cel_PrintToChat(i, "{green}Dr. Kleiner:{default} Ah, hello! Welcome to the Guess Booth. One of these three props is your winner, and it's not the same for everyone. Pick it with {green}!guess 1{default}, {green}2{default} or {green}3{default}.");
 		}
 		
 		if (g_bAuction)
@@ -977,7 +980,7 @@ public Action Timer_Booth(Handle hTimer)
 				Format(sText, sizeof(sText), "Auction: %s\nStarting bid: %d CL\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_iTopBid, iLeft / 60, iLeft % 60);
 			}
 		} else {
-			Format(sText, sizeof(sText), "Guess Booth\nOne of the three props is the winner.\nStand in the square and type !guess 1, 2 or 3");
+			Format(sText, sizeof(sText), "Guess Booth\nOne of the three props is your winner.\nStand in the square and type !guess 1, 2 or 3");
 		}
 		
 		//A quiet message at the top of the screen; hint text beeps every time it is shown.
@@ -1091,18 +1094,28 @@ public Action Command_Guess(int iClient, int iArgs)
 	
 	g_smGuessed.SetValue(sAuthID, 1);
 	
-	if (iGuess == g_iAnswer)
+	//Every player has their own winning prop, so one player's answer is no help to anyone else.
+	int iAnswer;
+	
+	if (!g_smAnswer.GetValue(sAuthID, iAnswer))
+	{
+		iAnswer = GetRandomInt(0, 2);
+		g_smAnswer.SetValue(sAuthID, iAnswer);
+	}
+	
+	if (iGuess == iAnswer)
 	{
 		Cel_AddToClientBalance(iClient, g_cvReward.IntValue);
 		Cel_AddXP(iClient, g_cvXPGuess.IntValue);
 		
 		EmitSoundToClient(iClient, "buttons/button9.wav");
 		
-		Cel_PrintToChatAll("{green}%N{default} guessed the right prop at the Guess Booth ({green}%s{default}) and won {green}%d CL{default}!", iClient, g_sPropAlias[g_iAnswer], g_cvReward.IntValue);
+		//Which prop it was isn't said.
+		Cel_PrintToChatAll("{green}%N{default} guessed right at the Guess Booth and won {green}%d CL{default}!", iClient, g_cvReward.IntValue);
 	} else {
 		EmitSoundToClient(iClient, "buttons/button8.wav");
 		
-		Cel_ReplyToCommand(iClient, "Wrong, it was not {green}%s{default}. Better luck on the next map.", g_sPropAlias[iGuess]);
+		Cel_ReplyToCommand(iClient, "Wrong, that wasn't your winning prop. Better luck on the next map.");
 	}
 	
 	return Plugin_Handled;

@@ -309,3 +309,5 @@
 		 - Fixed money, tactics level and settings sometimes not loading until you reconnected (when Steam confirms a
 		   player after they've joined, which is common on a freshly started server). Player data now loads once Steam has
 		   confirmed you, and is never read from or saved to the wrong file while you're joining.
+		 - Guess Booth: every player has their own winning prop (kept for the map, by Steam ID), and a right guess no
+		   longer says which prop it was.
