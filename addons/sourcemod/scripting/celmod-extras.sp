@@ -1843,10 +1843,23 @@ public void Hook_TeleportTouch(int iEntity, int iOther)
 	fCheck = fOrigin;
 	fCheck[2] += 32.0;
 	
-	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && Cel_GetZoneType(fCheck) != CEL_ZONE_NONE && !Cel_ZoneExempt(iOther))
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && !Cel_ZoneExempt(iOther))
 	{
-		Cel_PrintToChat(iOther, "This teleport pad leads into an event area, so it does not work.");
-		return;
+		int iDestZone = Cel_GetZoneType(fCheck);
+		
+		//A pad from inside a build area to somewhere else in one is fine (both ends were built in there).
+		float fFrom[3];
+		
+		GetClientAbsOrigin(iOther, fFrom);
+		fFrom[2] += 32.0;
+		
+		bool bInsideBuild = (iDestZone == CEL_ZONE_BUILD && Cel_GetZoneType(fFrom) == CEL_ZONE_BUILD);
+		
+		if (iDestZone != CEL_ZONE_NONE && !bInsideBuild)
+		{
+			Cel_PrintToChat(iOther, "This teleport pad leads into an event, restricted or build area, so it does not work.");
+			return;
+		}
 	}
 	
 	TeleportEntity(iOther, fOrigin, NULL_VECTOR, NULL_VECTOR);

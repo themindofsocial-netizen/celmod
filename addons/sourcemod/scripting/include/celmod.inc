@@ -558,11 +558,12 @@ native bool Cel_GetRewardLabel(int iEntity, char[] sLabel, int iMaxLength);
 #define CEL_ZONE_NONE -1
 #define CEL_ZONE_RESTRICTED 0
 #define CEL_ZONE_EVENT 1
+#define CEL_ZONE_BUILD 2
 
 /**
  * Which kind of admin made area a point is in (from the zones plugin, which may not be loaded: mark it optional).
  *
- * @return  CEL_ZONE_NONE, CEL_ZONE_RESTRICTED or CEL_ZONE_EVENT.
+ * @return  CEL_ZONE_NONE, CEL_ZONE_RESTRICTED, CEL_ZONE_EVENT or CEL_ZONE_BUILD.
  */
 native int Cel_GetZoneType(const float fPos[3]);
 

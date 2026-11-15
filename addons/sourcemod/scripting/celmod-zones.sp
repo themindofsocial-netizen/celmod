@@ -20,6 +20,10 @@
  * becomes an area when the map loads, e.g. "celmod_event_parkour". These come with the map, so they aren't saved to
  * the zone file and can't be deleted in game.
  *
+ * Build area     - building and every build command (!land too) work, but nobody flies in: flying into one puts the
+ *				   player back where they were. For hidden parts of a map that are only reached through the map's own
+ *				   teleporters. No phasing, blinking, portals or teleport pads in either.
+ *
  * Admins are held to the same rules, so they see events the way players do. !zonebypass (slay flag) turns the
  * rules off for that admin until they use it again or leave.
  */
@@ -28,6 +32,7 @@
 
 #define ZONE_RESTRICTED 0
 #define ZONE_EVENT 1
+#define ZONE_BUILD 2
 
 bool g_bCornerSet[MAXPLAYERS + 1];
 bool g_bBypass[MAXPLAYERS + 1];
@@ -46,6 +51,22 @@ int g_iPendingType[MAXPLAYERS + 1];
 int g_iZoneCount;
 int g_iZoneType[MAX_ZONES];
 bool g_bZoneFromMap[MAX_ZONES];
+float g_fLastOutside[MAXPLAYERS + 1][3];
+bool g_bHasOutside[MAXPLAYERS + 1];
+
+//"event", "restricted" or "build" (nofly works too) to a type, or -1.
+int ZoneTypeFromName(const char[] sType)
+{
+	if (StrEqual(sType, "event", false)) return ZONE_EVENT;
+	if (StrEqual(sType, "restricted", false)) return ZONE_RESTRICTED;
+	if (StrEqual(sType, "build", false) || StrEqual(sType, "nofly", false)) return ZONE_BUILD;
+	return -1;
+}
+
+void ZoneTypeName(int iType, char[] sName, int iMaxLength)
+{
+	strcopy(sName, iMaxLength, iType == ZONE_EVENT ? "event" : (iType == ZONE_BUILD ? "build" : "restricted"));
+}
 
 //Commands that spawn something (an emblem, hat or celwep, or a cleers box): inside an event area they only work to
 //list what you own or check your balance (no arguments), or to put an item away ("off").
@@ -151,7 +172,7 @@ void LoadMapZones()
 	float fOrigin[3], fMins[3], fMaxs[3];
 	int iFound = 0;
 	
-	static const char sPrefixes[][] = { "celmod_event", "celmod_restricted", "cm_event", "cm_restricted" };
+	static const char sPrefixes[][] = { "celmod_event", "celmod_restricted", "cm_event", "cm_restricted", "celmod_build", "cm_build", "celmod_nofly", "cm_nofly" };
 	
 	for (int iEntity = MaxClients + 1; iEntity < GetMaxEntities(); iEntity++)
 	{
@@ -203,7 +224,7 @@ void LoadMapZones()
 			g_fZoneMax[iZone][k] = fOrigin[k] + fMaxs[k];
 		}
 		
-		g_iZoneType[iZone] = (iPrefix == 0 || iPrefix == 2) ? ZONE_EVENT : ZONE_RESTRICTED;
+		g_iZoneType[iZone] = (iPrefix == 0 || iPrefix == 2) ? ZONE_EVENT : (iPrefix >= 4 ? ZONE_BUILD : ZONE_RESTRICTED);
 		g_bZoneFromMap[iZone] = true;
 		
 		//The rest of the name ("_parkour") is the area's name.
@@ -218,7 +239,7 @@ void LoadMapZones()
 		{
 			strcopy(g_sZoneName[iZone], sizeof(g_sZoneName[]), sName[iStart]);
 		} else {
-			strcopy(g_sZoneName[iZone], sizeof(g_sZoneName[]), g_iZoneType[iZone] == ZONE_EVENT ? "Event area" : "Restricted area");
+			strcopy(g_sZoneName[iZone], sizeof(g_sZoneName[]), g_iZoneType[iZone] == ZONE_EVENT ? "Event area" : (g_iZoneType[iZone] == ZONE_BUILD ? "Build area" : "Restricted area"));
 		}
 		
 		iFound++;
@@ -234,6 +255,7 @@ public void OnClientPutInServer(int iClient)
 {
 	g_bCornerSet[iClient] = false;
 	g_bBypass[iClient] = false;
+	g_bHasOutside[iClient] = false;
 	g_fNextNotice[iClient] = 0.0;
 }
 
@@ -278,7 +300,7 @@ void LoadZones()
 			kvZones.GetVector("min", g_fZoneMin[g_iZoneCount]);
 			kvZones.GetVector("max", g_fZoneMax[g_iZoneCount]);
 			
-			g_iZoneType[g_iZoneCount] = StrEqual(sType, "event", false) ? ZONE_EVENT : ZONE_RESTRICTED;
+			g_iZoneType[g_iZoneCount] = ZoneTypeFromName(sType) == -1 ? ZONE_RESTRICTED : ZoneTypeFromName(sType);
 			g_bZoneFromMap[g_iZoneCount] = false;
 			
 			g_iZoneCount++;
@@ -309,7 +331,10 @@ void SaveZones()
 		
 		kvZones.JumpToKey(sKey, true);
 		kvZones.SetString("name", g_sZoneName[i]);
-		kvZones.SetString("type", g_iZoneType[i] == ZONE_EVENT ? "event" : "restricted");
+		char sTypeName[16];
+		
+		ZoneTypeName(g_iZoneType[i], sTypeName, sizeof(sTypeName));
+		kvZones.SetString("type", sTypeName);
 		kvZones.SetVector("min", g_fZoneMin[i]);
 		kvZones.SetVector("max", g_fZoneMax[i]);
 		kvZones.Rewind();
@@ -429,7 +454,7 @@ public Action Listener_AnyCommand(int iClient, const char[] sCommand, int iArgs)
 		return Plugin_Continue;
 	}
 	
-	if (bFly || StrEqual(sLower, "v_land"))
+	if (bFly || (StrEqual(sLower, "v_land") && g_iZoneType[iZone] != ZONE_BUILD))
 	{
 		Format(sMessage, sizeof(sMessage), "You cannot use that inside {green}%s{default}.", g_sZoneName[iZone]);
 		Notice(iClient, sMessage);
@@ -493,15 +518,37 @@ public Action Timer_Enforce(Handle hTimer)
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (!IsClientInGame(i) || !IsPlayerAlive(i) || GetEntityMoveType(i) != MOVETYPE_NOCLIP || IsExempt(i))
+		if (!IsClientInGame(i) || !IsPlayerAlive(i))
 		{
 			continue;
 		}
 		
 		int iZone = ZoneOfClient(i);
 		
+		//Where the player last was outside every area: a flyer is put back there from a build area.
 		if (iZone == -1)
 		{
+			GetClientAbsOrigin(i, g_fLastOutside[i]);
+			g_bHasOutside[i] = true;
+			continue;
+		}
+		
+		if (GetEntityMoveType(i) != MOVETYPE_NOCLIP || IsExempt(i))
+		{
+			continue;
+		}
+		
+		if (g_iZoneType[iZone] == ZONE_BUILD && g_bHasOutside[i])
+		{
+			float fStop[3] = { 0.0, 0.0, 0.0 };
+			
+			TeleportEntity(i, g_fLastOutside[i], NULL_VECTOR, fStop);
+			
+			Format(sMessage, sizeof(sMessage), "You can't fly into {green}%s{default}. Find the way in.", g_sZoneName[iZone]);
+			
+			g_fNextNotice[i] = 0.0;
+			Notice(i, sMessage);
+			
 			continue;
 		}
 		
@@ -550,6 +597,12 @@ public Action Timer_Draw(Handle hTimer)
 		{
 			iColor[1] = 220;
 		}
+		else if (g_iZoneType[i] == ZONE_BUILD)
+		{
+			iColor[0] = 60;
+			iColor[1] = 220;
+			iColor[2] = 60;
+		}
 		
 		//The four edges of the floor.
 		for (int iEdge = 0; iEdge < 4; iEdge++)
@@ -588,20 +641,20 @@ public Action Command_Zone(int iClient, int iArgs)
 	{
 		if (iArgs < 1)
 		{
-			Cel_ReplyToCommand(iClient, "Usage: {green}[tag]zone{default} <event/restricted> [name], standing at one corner. Then {green}[tag]zone{default} again at the opposite corner.");
+			Cel_ReplyToCommand(iClient, "Usage: {green}[tag]zone{default} <event/restricted/build> [name], standing at one corner. Then {green}[tag]zone{default} again at the opposite corner.");
 			return Plugin_Handled;
 		}
 		
 		GetCmdArg(1, sType, sizeof(sType));
 		
-		if (!StrEqual(sType, "event", false) && !StrEqual(sType, "restricted", false))
+		if (ZoneTypeFromName(sType) == -1)
 		{
-			Cel_ReplyToCommand(iClient, "The area type must be {green}event{default} or {green}restricted{default}.");
+			Cel_ReplyToCommand(iClient, "The area type must be {green}event{default}, {green}restricted{default} or {green}build{default} (buildable, but no flying in).");
 			return Plugin_Handled;
 		}
 		
 		g_bCornerSet[iClient] = true;
-		g_iPendingType[iClient] = StrEqual(sType, "event", false) ? ZONE_EVENT : ZONE_RESTRICTED;
+		g_iPendingType[iClient] = ZoneTypeFromName(sType);
 		g_fCorner[iClient] = fOrigin;
 		
 		Cel_ReplyToCommand(iClient, "First corner set. Go to the opposite corner (fly up for the height you want) and type {green}[tag]zone{default} again, with a name if you like.");
@@ -650,14 +703,18 @@ public Action Command_Zone(int iClient, int iArgs)
 	
 	if (sName[0] == '\0' || StrEqual(sName, "event", false) || StrEqual(sName, "restricted", false))
 	{
-		Format(sName, sizeof(sName), "%s area %d", g_iZoneType[iZone] == ZONE_EVENT ? "Event" : "Restricted", iZone + 1);
+		Format(sName, sizeof(sName), "%s area %d", g_iZoneType[iZone] == ZONE_EVENT ? "Event" : (g_iZoneType[iZone] == ZONE_BUILD ? "Build" : "Restricted"), iZone + 1);
 	}
 	
 	strcopy(g_sZoneName[iZone], sizeof(g_sZoneName[]), sName);
 	
 	SaveZones();
 	
-	Cel_ReplyToCommand(iClient, "Created the %s area {green}%s{default}. Admins see its outline on the floor.", g_iZoneType[iZone] == ZONE_EVENT ? "event" : "restricted", sName);
+	char sTypeName[16];
+	
+	ZoneTypeName(g_iZoneType[iZone], sTypeName, sizeof(sTypeName));
+	
+	Cel_ReplyToCommand(iClient, "Created the %s area {green}%s{default}. Admins see its outline on the floor.", sTypeName, sName);
 	
 	return Plugin_Handled;
 }
@@ -716,7 +773,7 @@ public Action Command_Zones(int iClient, int iArgs)
 	
 	for (int i = 0; i < g_iZoneCount; i++)
 	{
-		Cel_ReplyToCommand(iClient, "{green}%s{default} (%s)%s", g_sZoneName[i], g_iZoneType[i] == ZONE_EVENT ? "event: no flying, no land, no building commands" : "restricted: no flying, no land", g_bZoneFromMap[i] ? " - part of the map" : "");
+		Cel_ReplyToCommand(iClient, "{green}%s{default} (%s)%s", g_sZoneName[i], g_iZoneType[i] == ZONE_EVENT ? "event: no flying, no land, no building commands" : (g_iZoneType[i] == ZONE_BUILD ? "build: build freely, but no flying in" : "restricted: no flying, no land"), g_bZoneFromMap[i] ? " - part of the map" : "");
 	}
 	
 	return Plugin_Handled;

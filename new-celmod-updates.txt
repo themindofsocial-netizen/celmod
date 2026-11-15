@@ -250,3 +250,6 @@
 		 - Players spawn with 225 health (cm_spawn_health), which is also their full health for medkits, chargers, healing
 		   emblems and candy canes.
 		 - Double jump: press jump again in the air for one more jump (cm_double_jump). Not inside event areas.
+		 - A third kind of area: build areas (!zone build, or celmod_build_<name> in Hammer). Building and every build command
+		   work inside, !land too, but nobody can fly in: flying into one puts you back outside. Made for hidden parts of a map
+		   that are only reached through the map's teleporters. Admins see them outlined in green.
