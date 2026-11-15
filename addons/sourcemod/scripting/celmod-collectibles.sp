@@ -73,6 +73,7 @@ enum struct Item
 	float fValue;
 	int iNearAlpha;
 	int iUseHealth;
+	bool bXmasGift;
 	float fNearDistance;
 	float fCooldown;
 	float fDuration;
@@ -165,6 +166,20 @@ int g_iMoneyBox[MAXENTITIES + 1];
 bool g_bDugUp[MAXENTITIES + 1];
 int g_iDugBy[MAXENTITIES + 1];
 int g_iDigger;
+bool g_bVial[MAXENTITIES + 1];
+int g_iLastVial = INVALID_ENT_REFERENCE;
+float g_fNextVial[MAXENTITIES + 1];
+bool g_bMarkedCan[MAXENTITIES + 1];
+ArrayList g_alMarkedHammer;
+ConVar g_cvDigHoboChance;
+ConVar g_cvDigVialChance;
+ConVar g_cvVialFindChance;
+
+//Buried finds the Health Vial senses: a spot, and whether something is buried there (1) or not (0).
+#define MAX_BURIED 32
+float g_fBuried[MAX_BURIED][3];
+int g_iBuried[MAX_BURIED];
+int g_iBuriedCount;
 int g_iTrashCans[64];
 int g_iTrashCanCount;
 
@@ -378,8 +393,11 @@ public void OnPluginStart()
 	g_cvDigChance = CreateConVar("cm_dig_chance", "0.35", "Chance a shovel hit on the ground digs something up.", _, true, 0.0, true, 1.0);
 	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.04", "Share of finds that are a Black or White emblem.", _, true, 0.0, true, 1.0);
 	g_cvDigMoneyChance = CreateConVar("cm_dig_money_chance", "0.12", "Share of finds that are a money box. The rest is junk.", _, true, 0.0, true, 1.0);
-	g_cvTrashMin = CreateConVar("cm_trash_reward_min", "10", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
-	g_cvTrashMax = CreateConVar("cm_trash_reward_max", "60", "Most cleers for putting dug up junk in a trash can.", _, true, 0.0);
+	g_cvDigHoboChance = CreateConVar("cm_dig_hobo_chance", "0.02", "Share of finds that are a hobo (an idle, brown Eli).", _, true, 0.0, true, 1.0);
+	g_cvDigVialChance = CreateConVar("cm_dig_vial_chance", "0.05", "Share of finds that are a Health Vial (it senses buried items).", _, true, 0.0, true, 1.0);
+	g_cvVialFindChance = CreateConVar("cm_vial_find_chance", "0.35", "Chance something is buried near a spot the Health Vial checks for the first time.", _, true, 0.0, true, 1.0);
+	g_cvTrashMin = CreateConVar("cm_trash_reward_min", "1", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
+	g_cvTrashMax = CreateConVar("cm_trash_reward_max", "1", "Most cleers for putting dug up junk in a trash can.", _, true, 0.0);
 	g_cvDigMoneyMin = CreateConVar("cm_dig_money_min", "100", "Least cleers in a dug up money box.", _, true, 0.0);
 	g_cvDigMoneyMax = CreateConVar("cm_dig_money_max", "1500", "Most cleers in a dug up money box.", _, true, 0.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
@@ -392,7 +410,7 @@ public void OnPluginStart()
 	g_cvXPUpgrade = CreateConVar("cm_tactics_xp_upgrade", "15", "Tactics experience for upgrading emblems at the Power Booth.", _, true, 0.0);
 	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
 	g_cvXmasForce = CreateConVar("cm_xmas_gift_force", "0", "Testing: 1 hands out the Christmas gift on any day, not just December 25th.", _, true, 0.0, true, 1.0);
-	g_cvXmasItems = CreateConVar("cm_xmas_gift_items", "emblem:xmasred,emblem:xmasgreen,emblem:caneorange,emblem:canegreen,emblem:canered,hat:santahat,hat:santahat_green", "The festive items the Christmas gift is picked from (kind:id, comma separated).");
+	g_cvXmasItems = CreateConVar("cm_xmas_gift_items", "", "The festive items the Christmas gift is picked from (kind:id, comma separated). Empty uses every item marked \"xmasgift\" \"1\" in collectibles.txt.");
 	g_cvCaneMaxHealth = CreateConVar("cm_candycane_max_health", "100", "Candy canes heal up to this much health.", _, true, 1.0);
 	g_cvGiftList = CreateConVar("cm_emblem_gift_list", "fire,water,speed,orange,grey,peach,pink,crimson,lime,cyan", "The emblems the one time free emblem is picked from (ids, comma separated): the basic solid colour ones.");
 	g_cvGiftDays = CreateConVar("cm_emblem_gift_days", "3", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
@@ -424,6 +442,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_emblems", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
 	RegConsoleCmd("v_hat", Command_Hat, "|CelMod| Spawns a hat you own, or takes off your hat.");
 	RegConsoleCmd("v_hats", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
+	RegAdminCmd("v_trashcan", Command_TrashCan, ADMFLAG_SLAY, "|CelMod| Marks the prop you are looking at (a map's own garbage can or dumpster, too) as a trash can for dug up junk, or unmarks it.");
 	RegConsoleCmd("v_wrap", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
 	RegConsoleCmd("v_gift", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
 	RegConsoleCmd("v_presents", Command_Presents, "|CelMod| Lists the presents waiting for you and brings back any that are not out.");
@@ -511,6 +530,11 @@ public void OnMapStart()
 	Fx_Precache();
 
 	GetCurrentMap(g_sMap, sizeof(g_sMap));
+
+	g_iBuriedCount = 0;
+	LoadMarkedTrashCans();
+	PrecacheModel("models/healthvial.mdl", true);
+	PrecacheModel("models/eli.mdl", true);
 
 	PrecacheModel(GRAVGUN_WORLDMODEL, true);
 	// The emblem box, with the emblem's own skin; a plain crate if the server does not have it.
@@ -648,6 +672,8 @@ public void OnEntityDestroyed(int iEntity)
 	{
 		g_iFireballOwner[iEntity] = 0;
 		g_bDugUp[iEntity] = false;
+		g_bVial[iEntity] = false;
+		g_bMarkedCan[iEntity] = false;
 		g_iMoneyBox[iEntity] = 0;
 		g_bDropBox[iEntity] = false;
 		g_iEntItem[iEntity] = -1;
@@ -3129,6 +3155,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fFallDamage = kvItems.GetFloat("falldamage", 1.0);
 	g_Items[iItem].bGlow = view_as<bool>(kvItems.GetNum("glow", 0));
 	g_Items[iItem].iUseHealth = kvItems.GetNum("usehealth", 0);
+	g_Items[iItem].bXmasGift = (kvItems.GetNum("xmasgift", 0) == 1);
 	g_Items[iItem].iNearAlpha = kvItems.GetNum("nearalpha", 0);
 	g_Items[iItem].fNearDistance = kvItems.GetFloat("neardistance", 96.0);
 	g_Items[iItem].fHitDamage = kvItems.GetFloat("hitdamage", 25.0);
@@ -7913,6 +7940,19 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 	fSpot = fHit;
 	fSpot[2] += 12.0;
 
+	// Something the Health Vial sensed here: it comes up for sure.
+	for (int b = 0; b < g_iBuriedCount; b++)
+	{
+		if (g_iBuried[b] == 1 && GetVectorDistance(fHit, g_fBuried[b]) <= 72.0)
+		{
+			g_iBuried[b] = 0;
+
+			DigUpTreasure(iClient, iItem, fSpot);
+
+			return;
+		}
+	}
+
 	float fRoll = GetRandomFloat(0.0, 1.0);
 
 	if (fRoll < g_cvDigEmblemChance.FloatValue)
@@ -7960,7 +8000,362 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 		return;
 	}
 
+	fRoll -= g_cvDigEmblemChance.FloatValue + g_cvDigMoneyChance.FloatValue;
+
+	if (fRoll >= 0.0 && fRoll < g_cvDigHoboChance.FloatValue)
+	{
+		DigUpHobo(iClient, fSpot);
+		return;
+	}
+
+	if (fRoll >= 0.0 && fRoll < g_cvDigHoboChance.FloatValue + g_cvDigVialChance.FloatValue)
+	{
+		SpawnVial(fSpot);
+		ThrowOutOfGround(EntRefToEntIndex(g_iLastVial));
+
+		Cel_PrintToChat(iClient, "You dug up a {green}Health Vial{default}! Press {green}E{default} on it to sense whether anything is buried nearby.");
+		return;
+	}
+
 	SpawnDugUp(g_sJunkModels[GetRandomInt(0, sizeof(g_sJunkModels) - 1)], fSpot, 0);
+}
+
+// A buried find the Health Vial sensed: one of the shovel's emblems (Black or White), a fat cleers box, or a hobo.
+void DigUpTreasure(int iClient, int iItem, float fSpot[3])
+{
+	char sChoices[8][32];
+
+	switch (GetRandomInt(0, 2))
+	{
+		case 0:
+		{
+			int iCount = ExplodeString(g_Items[iItem].sDigs, " ", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+			int iFound = iCount > 0 ? FindItem(KIND_EMBLEM, sChoices[GetRandomInt(0, iCount - 1)]) : -1;
+
+			if (iFound != -1)
+			{
+				int iEntity = SpawnItemEntity(iClient, iFound, fSpot, g_fZero);
+
+				SetOwned(iClient, iFound, GetOwned(iClient, iFound) + 1);
+
+				if (iEntity != -1)
+				{
+					ThrowOutOfGround(iEntity);
+				}
+
+				EmitSoundToAll(SOUND_REWARD, iClient);
+				Cel_PrintToChat(iClient, "The Health Vial was right: you dug up a {green}%s{default} emblem!", g_Items[iFound].sName);
+				return;
+			}
+		}
+		case 1:
+		{
+			DigUpHobo(iClient, fSpot);
+			return;
+		}
+	}
+
+	int iMoney = GetRandomInt(g_cvDigMoneyMax.IntValue, g_cvDigMoneyMax.IntValue * 3);
+	int iBox = Cel_CreateCleerBox(iClient, iMoney, fSpot);
+
+	if (iBox != -1)
+	{
+		ThrowOutOfGround(iBox);
+	}
+
+	EmitSoundToAll(SOUND_REWARD, iClient);
+	Cel_PrintToChat(iClient, "The Health Vial was right: you dug up a {green}cleers box{default} with {green}%d CL{default}!", iMoney);
+}
+
+// A hobo: an idle Eli, coloured brown, who belongs to whoever dug him up.
+void DigUpHobo(int iClient, float fSpot[3])
+{
+	float fAngles[3];
+
+	GetClientAbsAngles(iClient, fAngles);
+	fAngles[0] = 0.0;
+	fAngles[1] += 180.0;
+
+	int iHobo = Cel_SpawnProp(iClient, "hobo", "cycler", "models/eli.mdl", fAngles, fSpot, 120, 80, 40, 255);
+
+	if (iHobo == -1)
+	{
+		return;
+	}
+
+	Cel_DropEntityToFloor(iHobo);
+
+	EmitSoundToAll(SOUND_REWARD, iClient);
+	Cel_PrintToChat(iClient, "You dug up... a {green}hobo{default}! He's yours now.");
+}
+
+// The Health Vial: deep green, and pressing E on it senses whether anything is buried nearby.
+
+void SpawnVial(float fSpot[3])
+{
+	int iVial = CreateEntityByName("prop_physics_override");
+
+	if (iVial == -1 || iVial > MAXENTITIES)
+	{
+		return;
+	}
+
+	DispatchKeyValue(iVial, "model", "models/healthvial.mdl");
+	DispatchKeyValue(iVial, "spawnflags", "1048832");
+
+	DispatchSpawn(iVial);
+	DispatchKeyValue(iVial, "classname", "cel_dug_vial");
+
+	TeleportEntity(iVial, fSpot, NULL_VECTOR, NULL_VECTOR);
+
+	SetEntityRenderColor(iVial, 0, 100, 0, 255);
+	SetEntProp(iVial, Prop_Data, "m_takedamage", 0, 1);
+
+	g_bVial[iVial] = true;
+	g_iLastVial = EntIndexToEntRef(iVial);
+
+	SDKHook(iVial, SDKHook_UsePost, Hook_VialUse);
+
+	KillAfter(iVial, 900.0);
+}
+
+public void Hook_VialUse(int iVial, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	float fCenter[3];
+
+	if (!IsRealClient(iActivator) || iVial > MAXENTITIES || !g_bVial[iVial] || GetGameTime() < g_fNextVial[iVial])
+	{
+		return;
+	}
+
+	g_fNextVial[iVial] = GetGameTime() + 2.0;
+
+	GetEntPropVector(iVial, Prop_Data, "m_vecAbsOrigin", fCenter);
+
+	// What's under this area is decided the first time it's checked, and stays the same after.
+	int iNear = -1;
+
+	for (int b = 0; b < g_iBuriedCount; b++)
+	{
+		if (GetVectorDistance(fCenter, g_fBuried[b]) <= 250.0)
+		{
+			iNear = b;
+
+			if (g_iBuried[b] == 1)
+			{
+				break;
+			}
+		}
+	}
+
+	if (iNear == -1)
+	{
+		iNear = BuryNear(fCenter);
+	}
+
+	bool bFound = (iNear != -1 && g_iBuried[iNear] == 1);
+	int iColor[4];
+
+	iColor[0] = bFound ? 40 : 255;
+	iColor[1] = bFound ? 255 : 40;
+	iColor[2] = 40;
+	iColor[3] = 255;
+
+	fCenter[2] += 4.0;
+
+	Fx_Ring(fCenter, 16.0, 500.0, g_iBmLaser, 6.0, 0.8, 0.0, iColor);
+
+	EmitSoundToAll(bFound ? "buttons/blip1.wav" : "buttons/button10.wav", iVial);
+
+	Cel_PrintToChat(iActivator, bFound ? "The Health Vial glows {green}green{default}: something is buried nearby. Dig around here!" : "The Health Vial glows red: nothing is buried around here.");
+}
+
+// Decides what's buried near a spot: a find (on the ground somewhere close) or nothing.
+int BuryNear(const float fCenter[3])
+{
+	if (g_iBuriedCount >= MAX_BURIED)
+	{
+		// The oldest record makes way.
+		for (int b = 1; b < MAX_BURIED; b++)
+		{
+			g_fBuried[b - 1] = g_fBuried[b];
+			g_iBuried[b - 1] = g_iBuried[b];
+		}
+
+		g_iBuriedCount--;
+	}
+
+	int b = g_iBuriedCount++;
+
+	g_fBuried[b] = fCenter;
+	g_iBuried[b] = 0;
+
+	if (GetRandomFloat(0.0, 1.0) > g_cvVialFindChance.FloatValue)
+	{
+		return b;
+	}
+
+	// Somewhere on the ground within about 150 units.
+	float fStart[3], fEnd[3];
+
+	for (int i = 0; i < 6; i++)
+	{
+		float fAngle = GetRandomFloat(0.0, 6.2832), fDist = GetRandomFloat(30.0, 150.0);
+
+		fStart[0] = fCenter[0] + Cosine(fAngle) * fDist;
+		fStart[1] = fCenter[1] + Sine(fAngle) * fDist;
+		fStart[2] = fCenter[2] + 48.0;
+
+		fEnd = fStart;
+		fEnd[2] -= 300.0;
+
+		Handle hTrace = TR_TraceRayEx(fStart, fEnd, MASK_SOLID_BRUSHONLY, RayType_EndPoint);
+
+		if (TR_DidHit(hTrace))
+		{
+			TR_GetEndPosition(g_fBuried[b], hTrace);
+			g_iBuried[b] = 1;
+
+			delete hTrace;
+			break;
+		}
+
+		delete hTrace;
+	}
+
+	return b;
+}
+
+// Trash cans an admin marked with !trashcan: a map's own props are remembered per map by their Hammer id.
+void TrashCanFile(char[] sPath, int iMaxLength)
+{
+	char sDir[PLATFORM_MAX_PATH];
+
+	BuildPath(Path_SM, sDir, sizeof(sDir), "data/celmod/trashcans");
+
+	if (!DirExists(sDir))
+	{
+		CreateDirectory(sDir, 511);
+	}
+
+	BuildPath(Path_SM, sPath, iMaxLength, "data/celmod/trashcans/%s.txt", g_sMap);
+}
+
+void LoadMarkedTrashCans()
+{
+	char sPath[PLATFORM_MAX_PATH], sLine[32];
+
+	if (g_alMarkedHammer == null)
+	{
+		g_alMarkedHammer = new ArrayList();
+	}
+
+	g_alMarkedHammer.Clear();
+
+	TrashCanFile(sPath, sizeof(sPath));
+
+	File fList = OpenFile(sPath, "r");
+
+	if (fList == null)
+	{
+		return;
+	}
+
+	while (fList.ReadLine(sLine, sizeof(sLine)))
+	{
+		TrimString(sLine);
+
+		int iId = StringToInt(sLine);
+
+		if (iId > 0)
+		{
+			g_alMarkedHammer.Push(iId);
+		}
+	}
+
+	delete fList;
+}
+
+void SaveMarkedTrashCans()
+{
+	char sPath[PLATFORM_MAX_PATH];
+
+	TrashCanFile(sPath, sizeof(sPath));
+
+	File fList = OpenFile(sPath, "w");
+
+	if (fList == null)
+	{
+		LogError("|CelMod| Could not write '%s'.", sPath);
+		return;
+	}
+
+	for (int i = 0; i < g_alMarkedHammer.Length; i++)
+	{
+		fList.WriteLine("%d", g_alMarkedHammer.Get(i));
+	}
+
+	delete fList;
+}
+
+bool IsMarkedTrashCan(int iEntity)
+{
+	if (g_bMarkedCan[iEntity])
+	{
+		return true;
+	}
+
+	if (g_alMarkedHammer != null && g_alMarkedHammer.Length > 0 && HasEntProp(iEntity, Prop_Data, "m_iHammerID"))
+	{
+		int iId = GetEntProp(iEntity, Prop_Data, "m_iHammerID");
+
+		return iId > 0 && g_alMarkedHammer.FindValue(iId) != -1;
+	}
+
+	return false;
+}
+
+public Action Command_TrashCan(int iClient, int iArgs)
+{
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	int iTarget = GetClientAimTarget(iClient, false);
+
+	if (iTarget <= MaxClients || iTarget > MAXENTITIES || !IsValidEntity(iTarget))
+	{
+		Cel_ReplyToCommand(iClient, "Look at the garbage can or dumpster you want to mark.");
+		return Plugin_Handled;
+	}
+
+	int iId = HasEntProp(iTarget, Prop_Data, "m_iHammerID") ? GetEntProp(iTarget, Prop_Data, "m_iHammerID") : 0;
+	bool bMarked = IsMarkedTrashCan(iTarget);
+
+	if (iId > 0)
+	{
+		// Part of the map: saved, so it stays a trash can every time the map loads.
+		int iIndex = g_alMarkedHammer.FindValue(iId);
+
+		if (bMarked && iIndex != -1)
+		{
+			g_alMarkedHammer.Erase(iIndex);
+		} else if (!bMarked) {
+			g_alMarkedHammer.Push(iId);
+		}
+
+		SaveMarkedTrashCans();
+	} else {
+		// A spawned prop: a trash can until it's removed.
+		g_bMarkedCan[iTarget] = !bMarked;
+	}
+
+	FindTrashCans();
+
+	Cel_ReplyToCommand(iClient, bMarked ? "That's no longer a trash can." : (iId > 0 ? "Marked as a trash can on this map: throw dug up junk into it for {green}1 CL{default} a piece." : "Marked as a trash can until it's removed."));
+
+	return Plugin_Handled;
 }
 
 // Something dug up: it pops out of the ground and is gone again after a while. Money boxes hold cleers.
@@ -8610,6 +9005,12 @@ void FindTrashCans()
 			continue;
 		}
 
+		if (IsMarkedTrashCan(i))
+		{
+			g_iTrashCans[g_iTrashCanCount++] = EntIndexToEntRef(i);
+			continue;
+		}
+
 		GetEntPropString(i, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
 
 		for (int m = 0; m < sizeof(g_sTrashModels); m++)
@@ -9239,11 +9640,24 @@ void GiveChristmasGift(int iClient)
 
 	// A random festive item.
 	char sList[512], sChoices[16][48], sParts[2][32];
-	int iChoices[16], iCount = 0;
+	int iChoices[64], iCount = 0;
 
 	g_cvXmasItems.GetString(sList, sizeof(sList));
 
-	int iItems = ExplodeString(sList, ",", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+	int iItems = sList[0] == '\0' ? 0 : ExplodeString(sList, ",", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+
+	// No list set: everything marked "xmasgift" in collectibles.txt (the Red and Green emblems, the candy canes and
+	// every colour of Santa hat).
+	if (iItems == 0)
+	{
+		for (int i = 0; i < g_iItemCount && iCount < sizeof(iChoices); i++)
+		{
+			if (g_Items[i].bXmasGift)
+			{
+				iChoices[iCount++] = i;
+			}
+		}
+	}
 
 	for (int i = 0; i < iItems; i++)
 	{

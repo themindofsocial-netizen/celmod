@@ -229,3 +229,10 @@
 		 - CelMod's own songs are back for !music: airbag, chip, chip2, chip3, chip4, friends, nosup, arctic and storm.
 		 - Event and restricted areas can be built into maps in Hammer: name a brush entity (e.g. a trigger_multiple)
 		   celmod_event_<name> or celmod_restricted_<name> and it becomes that area when the map loads.
+		 - Christmas gift: on December 25th, the first saved build you load brings a present from Santa in the corner of your
+		   build with one festive item: the Red or Green emblem, an Orange, Green or Red candy cane, or a Santa hat in any of its
+		   25 colours. Candy canes give 25 health each time anyone presses E on them.
+		 - Digging with the shovel: hobos (an idle, brown Eli that's yours), Health Vials (deep green; press E and a ring shows
+		   green if something is buried nearby, red if not; dig there to find it), the Black and White emblems, and trash.
+		 - Trash pays 1 CL a piece in any trash can. !dumpster spawns one, and admins can mark any prop (a map's own garbage
+		   cans too, saved per map) as a trash can with !trashcan.

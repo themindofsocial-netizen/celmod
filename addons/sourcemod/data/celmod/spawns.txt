@@ -249,6 +249,7 @@
 		"driftwoodclump2"	"prop_physics_override|models/props_foliage/driftwood_clump_02a.mdl"
 		"driftwoodclump3"	"prop_physics_override|models/props_foliage/driftwood_clump_03a.mdl"
 		"dryer"	"prop_physics_override|models/props_wasteland/laundry_dryer002.mdl"
+		"dumpster"	"prop_physics_override|models/props_junk/trashdumpster01a.mdl"
 		"dumpster1"	"prop_physics_override|models/props_junk/trashdumpster01a.mdl"
 		"dumpster2"	"prop_physics_override|models/props_junk/trashdumpster02.mdl"
 		"dumpster3"	"prop_physics_override|models/props_lab/scrapyarddumpster.mdl"

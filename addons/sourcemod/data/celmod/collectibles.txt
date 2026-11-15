@@ -896,6 +896,7 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"0"
+			"xmasgift"		"1"
 		}
 		"xmasgreen"
 		{
@@ -908,6 +909,7 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"0"
+			"xmasgift"		"1"
 		}
 		// Candy canes: anyone pressing E on one gets 25 health ("usehealth"), as often as they like.
 		// Skins of candycane.mdl: 0 red and orange, 1 green, 2 red.
@@ -920,6 +922,7 @@
 			"power"			"none"
 			"usehealth"		"25"
 			"dropweight"	"0"
+			"xmasgift"		"1"
 		}
 		"canegreen"
 		{
@@ -930,6 +933,7 @@
 			"power"			"none"
 			"usehealth"		"25"
 			"dropweight"	"0"
+			"xmasgift"		"1"
 		}
 		"canered"
 		{
@@ -940,6 +944,7 @@
 			"power"			"none"
 			"usehealth"		"25"
 			"dropweight"	"0"
+			"xmasgift"		"1"
 		}
 		// The shimmering core skin. It shoots small coreballs.
 		"core"
@@ -1321,7 +1326,7 @@
 		}
 		"santahat"
 		{
-			"name"			"Red Santa Hat"
+			"name"			"Santa Hat"
 			"model"			"models/celmod/santahat.mdl"
 			"skin"			"0"
 			"color"			"255 255 255 255"
@@ -1329,6 +1334,284 @@
 			"angles"		"0 0 0"
 			"scale"			"1"
 			"dropweight"	"2"
+			"xmasgift"		"1"
+		}
+		// Every colour of Santa hat (the 25 skins of santahat.mdl). The Christmas gift can hold any of them.
+		"santahat_1"
+		{
+			"name"			"Red & Orange Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"1"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_2"
+		{
+			"name"			"Red & Blue Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"2"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_3"
+		{
+			"name"			"Red & Yellow Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"3"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_4"
+		{
+			"name"			"Red Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"4"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_6"
+		{
+			"name"			"Green & Orange Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"6"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_7"
+		{
+			"name"			"Green & Blue Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"7"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_8"
+		{
+			"name"			"Green & Yellow Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"8"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_9"
+		{
+			"name"			"Green & Red Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"9"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_10"
+		{
+			"name"			"Blue & Green Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"10"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_11"
+		{
+			"name"			"Blue & Orange Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"11"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_12"
+		{
+			"name"			"Blue Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"12"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_13"
+		{
+			"name"			"Blue & Yellow Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"13"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_14"
+		{
+			"name"			"Blue & Red Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"14"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_15"
+		{
+			"name"			"Yellow & Green Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"15"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_16"
+		{
+			"name"			"Yellow & Orange Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"16"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_17"
+		{
+			"name"			"Yellow & Blue Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"17"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_18"
+		{
+			"name"			"Yellow Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"18"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_19"
+		{
+			"name"			"Yellow & Red Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"19"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_20"
+		{
+			"name"			"Orange & Green Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"20"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_21"
+		{
+			"name"			"Orange Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"21"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_22"
+		{
+			"name"			"Orange & Blue Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"22"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_23"
+		{
+			"name"			"Orange & Yellow Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"23"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
+		}
+		"santahat_24"
+		{
+			"name"			"Orange & Red Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"24"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
+			"xmasgift"		"1"
 		}
 		// The same hat in green (skin 5 of santahat.mdl). From the Christmas gift.
 		"santahat_green"
@@ -1341,6 +1624,7 @@
 			"angles"		"0 0 0"
 			"scale"			"1"
 			"dropweight"	"0"
+			"xmasgift"		"1"
 		}
 		"cone"
 		{
