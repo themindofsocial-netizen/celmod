@@ -145,7 +145,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_lock", Command_Lock, "|CelMod| Locks the cel you are looking at.");
 	RegConsoleCmd("v_paint", Command_Color, "|CelMod| Colors the prop you are looking at.");
 	RegConsoleCmd("v_paste", Command_PasteProp, "|CelMod| Pastes the prop in your copy buffer where you are looking at.");
-	RegConsoleCmd("v_pmove", Command_SMove, "|CelMod| Moves the prop you are looking at on it's origin.");
+	RegConsoleCmd("v_pmove", Command_SMove, "|CelMod| Moves the prop you are looking at along its own axes.");
 	RegConsoleCmd("v_r", Command_HookRotate, "|CelMod| Rotates the prop you are looking at.");
 	RegConsoleCmd("v_remove", Command_Delete, "|CelMod| Removes the prop you are looking at.");
 	RegConsoleCmd("v_removeall", Command_DeleteAll, "|CelMod| Removes all the entities that you own.");
@@ -154,8 +154,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_roll", Command_HookRoll, "|CelMod| Rolls the prop you are looking at.");
 	RegConsoleCmd("v_rotate", Command_Rotate, "|CelMod| Flips, rotates and rolls the prop you are looking at.");
 	RegConsoleCmd("v_skin", Command_Skin, "|CelMod| Changes the skin on the prop you are looking at.");
-	RegConsoleCmd("v_smove", Command_SMove, "|CelMod| Moves the prop you are looking at on it's origin.");
-	RegConsoleCmd("v_solid", Command_Solid, "|CelMod| Enables/disables solidicity on the prop you are looking at.");
+	RegConsoleCmd("v_smove", Command_SMove, "|CelMod| Moves the prop you are looking at along its own axes.");
+	RegConsoleCmd("v_solid", Command_Solid, "|CelMod| Makes the prop you are looking at solid or not solid.");
 	RegConsoleCmd("v_stack", Command_Stack, "|CelMod| Stacks one prop on the x, y and z axis.");
 	RegConsoleCmd("v_stackinfo", Command_StackInfo, "|CelMod| Gets the origin difference between props for help stacking.");
 	RegConsoleCmd("v_stand", Command_Stand, "|CelMod| Resets the angles on the prop you are looking at.");

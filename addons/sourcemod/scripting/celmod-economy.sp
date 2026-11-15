@@ -117,10 +117,10 @@ public void OnPluginStart()
 	RegConsoleCmd("v_tacticlvl", Command_TacticsLevel, "|CelMod| Shows your tactics level.");
 	RegConsoleCmd("v_tacticxp", Command_TacticsLevel, "|CelMod| Shows your tactics experience towards the next level.");
 	
-	RegAdminCmd("v_setbalance", Command_SetBalance, ADMFLAG_SLAY, "|CelMod| Sets the balance of the client you are specifing.");
+	RegAdminCmd("v_setbalance", Command_SetBalance, ADMFLAG_SLAY, "|CelMod| Sets a player's balance: v_setbalance <player> <amount>.");
 	RegAdminCmd("v_givemoney", Command_GiveMoney, ADMFLAG_SLAY, "|CelMod| Adds cleers to a player's balance: v_givemoney <player> <amount>.");
 	RegAdminCmd("v_takemoney", Command_TakeMoney, ADMFLAG_SLAY, "|CelMod| Takes cleers from a player's balance: v_takemoney <player> <amount>.");
-	RegConsoleCmd("v_balance", Command_Balance, "|CelMod| Gets the players current balance.");
+	RegConsoleCmd("v_balance", Command_Balance, "|CelMod| Shows your balance.");
 	RegConsoleCmd("v_buy", Command_Buy, "|CelMod| Purchases the current entity you are looking at or command you specified.");
 	RegConsoleCmd("v_give", Command_Give, "|CelMod| Gives the entity you are looking at to another player.");
 	RegConsoleCmd("v_sell", Command_Sell, "|CelMod| Sells the entity you are looking at.");

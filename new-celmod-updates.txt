@@ -311,3 +311,5 @@
 		   confirmed you, and is never read from or saved to the wrong file while you're joining.
 		 - Guess Booth: every player has their own winning prop (kept for the map, by Steam ID), and a right guess no
 		   longer says which prop it was.
+		 - The website's commands page lists every command again (160, with aliases, usage and what each does), made from
+		   the plugins by tools/export_commands.py, with a search box.

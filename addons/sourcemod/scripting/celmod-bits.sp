@@ -79,8 +79,8 @@ public void OnPluginStart()
 		}
 	}
 	
-	RegConsoleCmd("v_ammo", Command_SpawnAmmoBit, "|CelMod| Creates a ammo bit that will give ammo when the player touches it.");
-	RegConsoleCmd("v_ammocrate", Command_SpawnAmmoCrateBit, "|CelMod| Creates a ammo crate bit that will give ammo to the player.");
+	RegConsoleCmd("v_ammo", Command_SpawnAmmoBit, "|CelMod| Creates an ammo bit that will give ammo when the player touches it.");
+	RegConsoleCmd("v_ammocrate", Command_SpawnAmmoCrateBit, "|CelMod| Creates an ammo crate bit that will give ammo to the player.");
 	RegConsoleCmd("v_button", Command_SpawnButton, "|CelMod| Spawns a button trigger bit.");
 	RegConsoleCmd("v_charger", Command_SpawnChargerBit, "|CelMod| Creates a health/suit charger bit that will give health/suit to the player.");
 	RegConsoleCmd("v_link", Command_Link, "|CelMod| Creates a link between a trigger bit and an entity.");
