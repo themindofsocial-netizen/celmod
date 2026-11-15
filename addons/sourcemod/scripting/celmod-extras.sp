@@ -1233,7 +1233,8 @@ public Action Command_Sound(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	int iProp = SpawnUsableProp(iClient, "sound", "models/props_lab/citizenradio.mdl");
+	//A soda can: press E on it to play its sound.
+	int iProp = SpawnUsableProp(iClient, "sound", "models/props_junk/popcan01a.mdl");
 	
 	if (iProp == -1)
 	{
@@ -1338,7 +1339,8 @@ public Action Command_Music(int iClient, int iArgs)
 		if (iPitch > 200) iPitch = 200;
 	}
 	
-	int iProp = SpawnUsableProp(iClient, "music", "models/props_lab/reciever01b.mdl");
+	//A radio: press E on it to play its song, and again to stop it.
+	int iProp = SpawnUsableProp(iClient, "music", "models/props_lab/citizenradio.mdl");
 	
 	if (iProp == -1)
 	{

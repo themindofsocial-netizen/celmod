@@ -225,3 +225,5 @@
 		 - !setguessbooth (and !guessbooth) turn the Guess Booth to face the way you're facing: Dr. Kleiner stands ahead of
 		   you, the three props run left to right in front of him, and the square turns with it. The facing is saved per map.
 		 - Dr. Kleiner at the Guess Booth stands in his idle animation and wears the Delaware hat instead of a traffic cone.
+		 - !sound cels are soda cans now, and !music cels are the radios.
+		 - CelMod's own songs are back for !music: airbag, chip, chip2, chip3, chip4, friends, nosup, arctic and storm.
