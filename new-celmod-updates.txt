@@ -253,3 +253,6 @@
 		 - A third kind of area: build areas (!zone build, or celmod_build_<name> in Hammer). Building and every build command
 		   work inside, !land too, but nobody can fly in: flying into one puts you back outside. Made for hidden parts of a map
 		   that are only reached through the map's teleporters. Admins see them outlined in green.
+		 - Emblem boxes: they really can be picked up with the gravity gun now (the model was far too heavy; it's now exactly as
+		   heavy as the gravity gun can lift), and holding one when the map changes is the only way to claim it. Boxes
+		   left in a land are no longer claimed.

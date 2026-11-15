@@ -2466,9 +2466,9 @@ public Action Timer_Think(Handle hTimer)
 		iWeapon = GetEntPropEnt(i, Prop_Send, "m_hActiveWeapon");
 
 		// Emblem boxes: the one held with the gravity gun is remembered for the map change.
-		if (iWeapon > MaxClients && IsValidEntity(iWeapon) && HasEntProp(iWeapon, Prop_Send, "m_hAttachedObject"))
+		if (iWeapon > MaxClients && IsValidEntity(iWeapon) && (HasEntProp(iWeapon, Prop_Send, "m_hAttachedObject") || HasEntProp(iWeapon, Prop_Send, "m_bActive")))
 		{
-			int iHeld = GetEntPropEnt(iWeapon, Prop_Send, "m_hAttachedObject");
+			int iHeld = HeldByGravityGun(i, iWeapon);
 
 			if (iHeld > MaxClients && iHeld <= MAXENTITIES && g_bDropBox[iHeld])
 			{
@@ -2477,7 +2477,7 @@ public Action Timer_Think(Handle hTimer)
 				{
 					int iBoxItem = g_iEntItem[iHeld];
 
-					Cel_PrintToChat(i, "You've got a {green}%s{default} emblem box! Keep holding it when the map changes, or get it into your land, and the emblem is yours.", (iBoxItem >= 0 && iBoxItem < g_iItemCount) ? g_Items[iBoxItem].sName : "mystery");
+					Cel_PrintToChat(i, "You've got a {green}%s{default} emblem box! Keep holding it with your gravity gun when the map changes and the emblem is yours.", (iBoxItem >= 0 && iBoxItem < g_iItemCount) ? g_Items[iBoxItem].sName : "mystery");
 				}
 
 				g_iHeldBox[i] = EntIndexToEntRef(iHeld);
@@ -6260,7 +6260,7 @@ int StartDrop(int iCount)
 		CreateTimer(0.1 + i * g_cvDropDelay.FloatValue, Timer_DropOne, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
 
-	Cel_PrintToChatAll("{green}Emblem drop!{default} %d emblem box%s about to fall from the sky. Hold one with your gravity gun when the map changes, or get it into your land, to keep the emblem inside.", iCount, iCount == 1 ? " is" : "es are");
+	Cel_PrintToChatAll("{green}Emblem drop!{default} %d emblem box%s about to fall from the sky. Grab one with your gravity gun and hold it when the map changes to keep the emblem inside.", iCount, iCount == 1 ? " is" : "es are");
 
 	return iCount;
 }
@@ -6297,8 +6297,19 @@ int SpawnDropBox()
 	}
 
 	DispatchKeyValue(iBox, "model", g_sDropModel);
-	// "Always pick up": the gravity gun can always lift it, whatever the model weighs.
+	// The box model weighs 900, far past what the gravity gun can lift: it's made exactly as heavy as the gravity
+	// gun can carry (physcannon_maxmass, 250 in HL2DM), so it's a heavy haul. "Always pick up" is set too, for games
+	// whose gravity gun reads it.
 	DispatchKeyValue(iBox, "spawnflags", "1048576");
+
+	if (StrEqual(g_sDropModel, DROPBOX_MODEL))
+	{
+		ConVar cvMaxMass = FindConVar("physcannon_maxmass");
+		float fMaxMass = (cvMaxMass != null) ? cvMaxMass.FloatValue : 250.0;
+
+		// A hair under the limit, so it's always liftable.
+		DispatchKeyValueFloat(iBox, "massScale", (fMaxMass * 0.98) / 900.0);
+	}
 
 	DispatchSpawn(iBox);
 	// Named after spawning: renamed before, the prop_physics_override loses its override (the same as hats), and the
@@ -6340,17 +6351,12 @@ public void Hook_DropBoxUse(int iEntity, int iActivator, int iCaller, UseType ut
 		return;
 	}
 
-	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+	// The only way to claim one is to be holding it with the gravity gun when the map changes.
+	int iItem = g_iEntItem[iEntity];
 
-	if (Cel_GetLandOwnerFromPosition(fOrigin) != iActivator)
-	{
-		Cel_PrintToChat(iActivator, "Get this emblem box into {green}your land{default} and press {green}E{default} on it to open it, or hold it with your gravity gun when the map changes.");
-		return;
-	}
+	Cel_PrintToChat(iActivator, "This emblem box holds a {green}%s{default} emblem. Pick it up with your {green}gravity gun{default} and keep holding it when the map changes to make it yours.", (iItem >= 0 && iItem < g_iItemCount) ? g_Items[iItem].sName : "mystery");
 
-	ClaimDropBox(iActivator, iEntity, "You opened the emblem box");
-
-	Cel_DissolveEntity(iEntity);
+	fOrigin[0] = 0.0;
 }
 
 void ClaimDropBox(int iClient, int iBox, const char[] sHow)
@@ -9124,25 +9130,7 @@ public void OnMapEnd()
 		ClaimDropBox(i, iBox, "You kept your emblem box");
 	}
 
-	// Boxes left lying in someone's land belong to that land's owner.
-	float fOrigin[3];
-
-	for (int iBox = MaxClients + 1; iBox <= MAXENTITIES && iBox < GetMaxEntities(); iBox++)
-	{
-		if (!g_bDropBox[iBox] || !IsValidEntity(iBox))
-		{
-			continue;
-		}
-
-		GetEntPropVector(iBox, Prop_Data, "m_vecAbsOrigin", fOrigin);
-
-		int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
-
-		if (iOwner > 0 && IsRealClient(iOwner))
-		{
-			ClaimDropBox(iOwner, iBox, "An emblem box was left in your land");
-		}
-	}
+	// Boxes left lying around (in a land or not) are lost: only the ones being held are kept.
 }
 
 //Presents (Christmas only): an emblem, hat or celwep wrapped up for another player.
@@ -9761,4 +9749,44 @@ int ClientMaxHealth(int iClient)
 	int iMax = HasEntProp(iClient, Prop_Data, "m_iMaxHealth") ? GetEntProp(iClient, Prop_Data, "m_iMaxHealth") : 100;
 
 	return iMax < 100 ? 100 : iMax;
+}
+
+// What a player's gravity gun is holding: its attached object where the game shares it, otherwise (with the gravity
+// gun holding something) the nearest emblem box this player last handled with it.
+int HeldByGravityGun(int iClient, int iWeapon)
+{
+	if (HasEntProp(iWeapon, Prop_Send, "m_hAttachedObject"))
+	{
+		return GetEntPropEnt(iWeapon, Prop_Send, "m_hAttachedObject");
+	}
+
+	if (!GetEntProp(iWeapon, Prop_Send, "m_bActive"))
+	{
+		return -1;
+	}
+
+	float fEyes[3], fBox[3], fBest = 160.0;
+	int iBest = -1;
+
+	GetClientEyePosition(iClient, fEyes);
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (!g_bDropBox[i] || !IsValidEntity(i) || !HasEntProp(i, Prop_Data, "m_hPhysicsAttacker") || GetEntPropEnt(i, Prop_Data, "m_hPhysicsAttacker") != iClient)
+		{
+			continue;
+		}
+
+		GetEntPropVector(i, Prop_Data, "m_vecAbsOrigin", fBox);
+
+		float fDist = GetVectorDistance(fEyes, fBox);
+
+		if (fDist < fBest)
+		{
+			fBest = fDist;
+			iBest = i;
+		}
+	}
+
+	return iBest;
 }
