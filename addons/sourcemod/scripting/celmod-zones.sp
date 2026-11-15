@@ -15,6 +15,11 @@
  *				   (speed, sprint, gravity, jump, feather), and nobody can phase, blink, open portals or take a
  *				   teleport pad into either kind of area. Put event emblems (!eventemblem) at the end of the course.
  *
+ * Areas can also be built into a map in Hammer: any brush entity (a trigger_multiple with the "trigger" tool texture
+ * is the usual choice) named celmod_event_<name> or celmod_restricted_<name> (cm_event_ / cm_restricted_ work too)
+ * becomes an area when the map loads, e.g. "celmod_event_parkour". These come with the map, so they aren't saved to
+ * the zone file and can't be deleted in game.
+ *
  * Admins are held to the same rules, so they see events the way players do. !zonebypass (slay flag) turns the
  * rules off for that admin until they use it again or leave.
  */
@@ -40,6 +45,7 @@ int g_iBeam = -1;
 int g_iPendingType[MAXPLAYERS + 1];
 int g_iZoneCount;
 int g_iZoneType[MAX_ZONES];
+bool g_bZoneFromMap[MAX_ZONES];
 
 //Commands that spawn something (an emblem, hat or celwep, or a cleers box): inside an event area they only work to
 //list what you own or check your balance (no arguments), or to put an item away ("off").
@@ -126,6 +132,102 @@ public void OnMapStart()
 	BuildPath(Path_SM, g_sZoneDB, sizeof(g_sZoneDB), "data/celmod/zones/%s.txt", g_sMap);
 	
 	LoadZones();
+	
+	//Areas built into the map in Hammer, once its entities have all spawned.
+	CreateTimer(1.0, Timer_LoadMapZones, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_LoadMapZones(Handle hTimer)
+{
+	LoadMapZones();
+	
+	return Plugin_Stop;
+}
+
+//Brush entities named celmod_event_<name> / celmod_restricted_<name> (or cm_event_ / cm_restricted_) become areas.
+void LoadMapZones()
+{
+	char sName[64];
+	float fOrigin[3], fMins[3], fMaxs[3];
+	int iFound = 0;
+	
+	static const char sPrefixes[][] = { "celmod_event", "celmod_restricted", "cm_event", "cm_restricted" };
+	
+	for (int iEntity = MaxClients + 1; iEntity < GetMaxEntities(); iEntity++)
+	{
+		if (!IsValidEntity(iEntity) || !HasEntProp(iEntity, Prop_Data, "m_iName") || !HasEntProp(iEntity, Prop_Send, "m_vecMins"))
+		{
+			continue;
+		}
+		
+		GetEntPropString(iEntity, Prop_Data, "m_iName", sName, sizeof(sName));
+		
+		int iPrefix = -1;
+		
+		for (int i = 0; i < sizeof(sPrefixes); i++)
+		{
+			if (StrContains(sName, sPrefixes[i], false) == 0)
+			{
+				iPrefix = i;
+				break;
+			}
+		}
+		
+		if (iPrefix == -1)
+		{
+			continue;
+		}
+		
+		if (g_iZoneCount >= MAX_ZONES)
+		{
+			LogError("|CelMod| The map has more areas than the %d CelMod can track; some of its celmod_event / celmod_restricted entities were skipped.", MAX_ZONES);
+			break;
+		}
+		
+		GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+		GetEntPropVector(iEntity, Prop_Send, "m_vecMins", fMins);
+		GetEntPropVector(iEntity, Prop_Send, "m_vecMaxs", fMaxs);
+		
+		//A point entity has no size to make an area from.
+		if (fMaxs[0] - fMins[0] < 1.0 || fMaxs[1] - fMins[1] < 1.0 || fMaxs[2] - fMins[2] < 1.0)
+		{
+			LogError("|CelMod| The map entity '%s' has no size; use a brush entity (like trigger_multiple) for an area.", sName);
+			continue;
+		}
+		
+		int iZone = g_iZoneCount++;
+		
+		for (int k = 0; k < 3; k++)
+		{
+			g_fZoneMin[iZone][k] = fOrigin[k] + fMins[k];
+			g_fZoneMax[iZone][k] = fOrigin[k] + fMaxs[k];
+		}
+		
+		g_iZoneType[iZone] = (iPrefix == 0 || iPrefix == 2) ? ZONE_EVENT : ZONE_RESTRICTED;
+		g_bZoneFromMap[iZone] = true;
+		
+		//The rest of the name ("_parkour") is the area's name.
+		int iStart = strlen(sPrefixes[iPrefix]);
+		
+		while (sName[iStart] == '_' || sName[iStart] == '-' || sName[iStart] == ' ')
+		{
+			iStart++;
+		}
+		
+		if (sName[iStart] != '\0')
+		{
+			strcopy(g_sZoneName[iZone], sizeof(g_sZoneName[]), sName[iStart]);
+		} else {
+			strcopy(g_sZoneName[iZone], sizeof(g_sZoneName[]), g_iZoneType[iZone] == ZONE_EVENT ? "Event area" : "Restricted area");
+		}
+		
+		iFound++;
+	}
+	
+	if (iFound > 0)
+	{
+		LogMessage("|CelMod| Loaded %d event/restricted area%s built into the map.", iFound, iFound == 1 ? "" : "s");
+	}
 }
 
 public void OnClientPutInServer(int iClient)
@@ -177,6 +279,7 @@ void LoadZones()
 			kvZones.GetVector("max", g_fZoneMax[g_iZoneCount]);
 			
 			g_iZoneType[g_iZoneCount] = StrEqual(sType, "event", false) ? ZONE_EVENT : ZONE_RESTRICTED;
+			g_bZoneFromMap[g_iZoneCount] = false;
 			
 			g_iZoneCount++;
 		}
@@ -192,9 +295,17 @@ void SaveZones()
 	
 	KeyValues kvZones = new KeyValues("Zones");
 	
+	int iSaved = 0;
+	
 	for (int i = 0; i < g_iZoneCount; i++)
 	{
-		IntToString(i + 1, sKey, sizeof(sKey));
+		//Areas built into the map come back with the map.
+		if (g_bZoneFromMap[i])
+		{
+			continue;
+		}
+		
+		IntToString(++iSaved, sKey, sizeof(sKey));
 		
 		kvZones.JumpToKey(sKey, true);
 		kvZones.SetString("name", g_sZoneName[i]);
@@ -508,6 +619,8 @@ public Action Command_Zone(int iClient, int iArgs)
 	
 	int iZone = g_iZoneCount++;
 	
+	g_bZoneFromMap[iZone] = false;
+	
 	for (int i = 0; i < 3; i++)
 	{
 		g_fZoneMin[iZone][i] = (g_fCorner[iClient][i] < fOrigin[i]) ? g_fCorner[iClient][i] : fOrigin[i];
@@ -564,10 +677,17 @@ public Action Command_DelZone(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
+	if (g_bZoneFromMap[iZone])
+	{
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is built into the map (made in Hammer), so it can't be deleted in game.", g_sZoneName[iZone]);
+		return Plugin_Handled;
+	}
+	
 	Cel_ReplyToCommand(iClient, "Deleted the area {green}%s{default}.", g_sZoneName[iZone]);
 	
 	for (int i = iZone; i < g_iZoneCount - 1; i++)
 	{
+		g_bZoneFromMap[i] = g_bZoneFromMap[i + 1];
 		g_sZoneName[i] = g_sZoneName[i + 1];
 		g_fZoneMin[i] = g_fZoneMin[i + 1];
 		g_fZoneMax[i] = g_fZoneMax[i + 1];
@@ -596,7 +716,7 @@ public Action Command_Zones(int iClient, int iArgs)
 	
 	for (int i = 0; i < g_iZoneCount; i++)
 	{
-		Cel_ReplyToCommand(iClient, "{green}%s{default} (%s)", g_sZoneName[i], g_iZoneType[i] == ZONE_EVENT ? "event: no flying, no land, no building commands" : "restricted: no flying, no land");
+		Cel_ReplyToCommand(iClient, "{green}%s{default} (%s)%s", g_sZoneName[i], g_iZoneType[i] == ZONE_EVENT ? "event: no flying, no land, no building commands" : "restricted: no flying, no land", g_bZoneFromMap[i] ? " - part of the map" : "");
 	}
 	
 	return Plugin_Handled;

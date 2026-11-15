@@ -227,3 +227,5 @@
 		 - Dr. Kleiner at the Guess Booth stands in his idle animation and wears the Delaware hat instead of a traffic cone.
 		 - !sound cels are soda cans now, and !music cels are the radios.
 		 - CelMod's own songs are back for !music: airbag, chip, chip2, chip3, chip4, friends, nosup, arctic and storm.
+		 - Event and restricted areas can be built into maps in Hammer: name a brush entity (e.g. a trigger_multiple)
+		   celmod_event_<name> or celmod_restricted_<name> and it becomes that area when the map loads.
