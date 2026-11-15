@@ -1,6 +1,7 @@
 #pragma semicolon 1
 
 #include <celmod>
+#include <geoip>
 
 #pragma newdecls required
 #pragma dynamic 262144 // collectibles.txt is sent to the website whole
@@ -23,7 +24,7 @@
  */
 
 #define SCHEMA_QUERIES 20
-#define MIGRATION_QUERIES 12
+#define MIGRATION_QUERIES 13
 
 Database g_dbCelMod;
 
@@ -91,6 +92,13 @@ static const char g_sDisputeReasons[][] =
 float g_fLastDispute[MAXPLAYERS + 1];
 int g_iDisputeTarget[MAXPLAYERS + 1]; // userid of the player picked
 bool g_bDisputeTyping[MAXPLAYERS + 1]; // waiting for the "Other" text in chat
+
+//Dispute demos: a SourceTV recording on the server from the moment of the dispute (needs tv_enable 1).
+ConVar g_cvDisputeDemo;
+ConVar g_cvDisputeDemoSeconds;
+bool g_bDisputeRecording;
+char g_sDisputeDemo[128];
+Handle g_hDisputeDemoStop;
 StringMap g_smAnnounceShown;
 ConVar g_cvAnnouncePoll;
 Handle g_hAnnounceTimer;
@@ -110,7 +118,7 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_announcements (id INT UNSIGNED NOT NULL AUTO_INCREMENT, message VARCHAR(255) NOT NULL, server_id INT NULL, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, show_on_join TINYINT(1) NOT NULL DEFAULT 0, active TINYINT(1) NOT NULL DEFAULT 1, starts_at DATETIME NULL, ends_at DATETIME NULL, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_updates (id INT UNSIGNED NOT NULL AUTO_INCREMENT, posted_on DATE NOT NULL, body TEXT NOT NULL, published TINYINT(1) NOT NULL DEFAULT 1, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_posted (posted_on)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
-	"CREATE TABLE IF NOT EXISTS cm_disputes (id INT UNSIGNED NOT NULL AUTO_INCREMENT, server_id INT NULL, steamid64 VARCHAR(20) NOT NULL, name VARCHAR(64) NOT NULL DEFAULT '', target_steamid64 VARCHAR(20) NOT NULL DEFAULT '', target_name VARCHAR(64) NOT NULL DEFAULT '', map VARCHAR(64) NOT NULL DEFAULT '', reason VARCHAR(64) NOT NULL DEFAULT '', message VARCHAR(255) NOT NULL DEFAULT '', status ENUM('open','resolved','closed') NOT NULL DEFAULT 'open', admin_note VARCHAR(255) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_disputes (id INT UNSIGNED NOT NULL AUTO_INCREMENT, server_id INT NULL, steamid64 VARCHAR(20) NOT NULL, name VARCHAR(64) NOT NULL DEFAULT '', target_steamid64 VARCHAR(20) NOT NULL DEFAULT '', target_name VARCHAR(64) NOT NULL DEFAULT '', map VARCHAR(64) NOT NULL DEFAULT '', reason VARCHAR(64) NOT NULL DEFAULT '', message VARCHAR(255) NOT NULL DEFAULT '', demo VARCHAR(128) NOT NULL DEFAULT '', status ENUM('open','resolved','closed') NOT NULL DEFAULT 'open', admin_note VARCHAR(255) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_bug_reports (id INT UNSIGNED NOT NULL AUTO_INCREMENT, server_id INT NULL, steamid64 VARCHAR(20) NOT NULL, name VARCHAR(64) NOT NULL DEFAULT '', map VARCHAR(64) NOT NULL DEFAULT '', pos_x FLOAT NOT NULL DEFAULT 0, pos_y FLOAT NOT NULL DEFAULT 0, pos_z FLOAT NOT NULL DEFAULT 0, message VARCHAR(255) NOT NULL, status ENUM('open','fixed','closed') NOT NULL DEFAULT 'open', admin_note VARCHAR(255) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_collectibles (server_id INT NOT NULL, content MEDIUMTEXT NOT NULL, file_hash INT NOT NULL DEFAULT 0, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (server_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_drop_pool (emblem_id VARCHAR(64) NOT NULL, droppable TINYINT(1) NOT NULL DEFAULT 1, updated_by VARCHAR(20) NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (emblem_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
@@ -120,6 +128,7 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 
 // Columns added after the first release. Run one by one; "duplicate column" (1060) means already done.
 char g_sMigrations[MIGRATION_QUERIES][] = {
+	"ALTER TABLE cm_disputes ADD COLUMN demo VARCHAR(128) NOT NULL DEFAULT '' AFTER message",
 	"ALTER TABLE cm_shop_items ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'command' AFTER category",
 	"ALTER TABLE cm_shop_items ADD COLUMN target VARCHAR(64) NOT NULL DEFAULT '' AFTER kind",
 	"ALTER TABLE cm_shop_items ADD COLUMN description VARCHAR(255) NOT NULL DEFAULT '' AFTER target",
@@ -171,6 +180,8 @@ public void OnPluginStart()
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
 	HookEvent("player_death", Event_StatsPlayerDeath);
 
+	g_cvDisputeDemo = CreateConVar("cm_dispute_demo", "1", "1: !dispute records a SourceTV demo on the server (needs tv_enable 1), with the reported player's details in it.", _, true, 0.0, true, 1.0);
+	g_cvDisputeDemoSeconds = CreateConVar("cm_dispute_demo_seconds", "180", "How long a dispute demo records, in seconds. Another dispute while recording makes it longer.", _, true, 30.0, true, 1800.0);
 	RegConsoleCmd("v_dispute", Command_Dispute, "|CelMod| Reports a player who is causing you problems to the admins.");
 	AddCommandListener(Listener_DisputeChat, "say");
 	AddCommandListener(Listener_DisputeChat, "say_team");
@@ -281,6 +292,10 @@ public void SQL_OnCollectiblesSynced(Database dbDatabase, DBResultSet rsResults,
 public void OnMapEnd()
 {
 	FlushDailyStats(0);
+
+	// The map change ends a SourceTV recording on its own.
+	delete g_hDisputeDemoStop;
+	g_bDisputeRecording = false;
 }
 
 void RestartTimers()
@@ -1708,12 +1723,15 @@ void SendDispute(int iClient, int iReason, const char[] sMessage)
 	GetClientName(iTarget, sTargetName, sizeof(sTargetName));
 	GetClientAuthId(iTarget, AuthId_SteamID64, sTargetSteam, sizeof(sTargetSteam));
 
+	bool bDemo = StartDisputeDemo(iClient, iTarget);
+
 	if (g_dbCelMod != null && g_sSteamID[iClient][0] != '\0'
 		&& g_dbCelMod.Escape(sName, sEscName, sizeof(sEscName)) && g_dbCelMod.Escape(sTargetName, sEscTarget, sizeof(sEscTarget))
 		&& g_dbCelMod.Escape(g_sMap, sEscMap, sizeof(sEscMap)) && g_dbCelMod.Escape(sReason, sEscReason, sizeof(sEscReason))
 		&& g_dbCelMod.Escape(sMessage, sEscMessage, sizeof(sEscMessage)))
 	{
-		FormatEx(sQuery, sizeof(sQuery), "INSERT INTO cm_disputes (server_id, steamid64, name, target_steamid64, target_name, map, reason, message) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', '%s')", g_cvServerID.IntValue, g_sSteamID[iClient], sEscName, sTargetSteam, sEscTarget, sEscMap, sEscReason, sEscMessage);
+		FormatEx(sQuery, sizeof(sQuery), "INSERT INTO cm_disputes (server_id, steamid64, name, target_steamid64, target_name, map, reason, message, demo) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s.dem')", g_cvServerID.IntValue, g_sSteamID[iClient], sEscName, sTargetSteam, sEscTarget, sEscMap, sEscReason, sEscMessage, bDemo ? g_sDisputeDemo : "");
+		ReplaceString(sQuery, sizeof(sQuery), "'.dem')", "'')");
 
 		g_dbCelMod.Query(SQL_Generic, sQuery);
 	}
@@ -1721,7 +1739,7 @@ void SendDispute(int iClient, int iReason, const char[] sMessage)
 	char sPath[PLATFORM_MAX_PATH];
 
 	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/disputes.txt");
-	LogToFileEx(sPath, "%N against %N (%s) on %s: %s%s%s", iClient, iTarget, sTargetSteam, g_sMap, sReason, sMessage[0] != '\0' ? ": " : "", sMessage);
+	LogToFileEx(sPath, "%N against %N (%s) on %s: %s%s%s%s%s", iClient, iTarget, sTargetSteam, g_sMap, sReason, sMessage[0] != '\0' ? ": " : "", sMessage, bDemo ? " | demo: " : "", bDemo ? g_sDisputeDemo : "");
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -1732,4 +1750,122 @@ void SendDispute(int iClient, int iReason, const char[] sMessage)
 	}
 
 	Cel_PrintToChat(iClient, "Thanks! Your dispute about {green}%N{default} was sent to the admins. Use {green}!landban{default} to keep them off your land meanwhile.", iTarget);
+}
+
+//The SourceTV bot, or 0 when SourceTV is off.
+int GetSourceTV()
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && IsClientSourceTV(i))
+		{
+			return i;
+		}
+	}
+
+	return 0;
+}
+
+//Starts (or lengthens) a dispute demo, like the original server's "Recording Dispute demo...". The details of the
+//reported player are printed into it, so whoever watches it knows who it's about. Returns false when no demo is made.
+bool StartDisputeDemo(int iClient, int iTarget)
+{
+	int iTV = GetSourceTV();
+
+	if (!g_cvDisputeDemo.BoolValue || iTV == 0)
+	{
+		return false;
+	}
+
+	// A demo SourceTV records on its own (tv_autorecord) can't run alongside ours.
+	ConVar cvAuto = FindConVar("tv_autorecord");
+
+	if (!g_bDisputeRecording && cvAuto != null && cvAuto.BoolValue)
+	{
+		return false;
+	}
+
+	if (!g_bDisputeRecording)
+	{
+		char sTime[32];
+
+		FormatTime(sTime, sizeof(sTime), "%Y%m%d-%H%M%S");
+		FormatEx(g_sDisputeDemo, sizeof(g_sDisputeDemo), "dispute_%s_%s", sTime, g_sMap);
+
+		ServerCommand("tv_record \"%s\"", g_sDisputeDemo);
+
+		g_bDisputeRecording = true;
+	}
+
+	delete g_hDisputeDemoStop;
+	g_hDisputeDemoStop = CreateTimer(g_cvDisputeDemoSeconds.FloatValue, Timer_StopDisputeDemo);
+
+	Cel_PrintToChat(iClient, "Recording Dispute demo...");
+
+	// A moment later, once the recording has begun, so the lines are in it.
+	DataPack dpInfo;
+
+	CreateDataTimer(1.0, Timer_DisputeDemoInfo, dpInfo);
+	dpInfo.WriteCell(GetClientUserId(iClient));
+	dpInfo.WriteCell(GetClientUserId(iTarget));
+
+	return true;
+}
+
+public Action Timer_DisputeDemoInfo(Handle hTimer, DataPack dpInfo)
+{
+	char sName[MAX_NAME_LENGTH], sSteam[32], sIP[32], sCountry[64], sTime[32];
+
+	dpInfo.Reset();
+
+	int iClient = GetClientOfUserId(dpInfo.ReadCell()), iTarget = GetClientOfUserId(dpInfo.ReadCell()), iTV = GetSourceTV();
+
+	if (iTarget < 1 || iTV == 0)
+	{
+		return Plugin_Stop;
+	}
+
+	GetClientName(iTarget, sName, sizeof(sName));
+
+	if (!GetClientAuthId(iTarget, AuthId_Steam2, sSteam, sizeof(sSteam)))
+	{
+		strcopy(sSteam, sizeof(sSteam), "unknown");
+	}
+
+	GetClientIP(iTarget, sIP, sizeof(sIP));
+
+	if (!GeoipCountry(sIP, sCountry, sizeof(sCountry)))
+	{
+		strcopy(sCountry, sizeof(sCountry), "Unknown");
+	}
+
+	FormatTime(sTime, sizeof(sTime), "%m/%d/%Y %H:%M:%S");
+
+	// The full details, IP included, only go into the demo (it's recorded by SourceTV on the server, for admins).
+	Cel_PrintToChat(iTV, "Recording Dispute demo...");
+	Cel_PrintToChat(iTV, "Name: %s, SteamID: %s, IP: %s, Country: %s, Time: %s, Map: %s", sName, sSteam, sIP, sCountry, sTime, g_sMap);
+
+	if (iClient > 0 && IsClientInGame(iClient))
+	{
+		Cel_PrintToChat(iTV, "Reported by: %N", iClient);
+
+		// The player who reported sees the same line without the other player's IP address.
+		Cel_PrintToChat(iClient, "Name: {green}%s{default}, SteamID: {green}%s{default}, Country: {green}%s{default}, Time: {green}%s{default}, Map: {green}%s{default}", sName, sSteam, sCountry, sTime, g_sMap);
+	}
+
+	return Plugin_Stop;
+}
+
+public Action Timer_StopDisputeDemo(Handle hTimer)
+{
+	g_hDisputeDemoStop = null;
+
+	if (g_bDisputeRecording)
+	{
+		ServerCommand("tv_stoprecord");
+
+		g_bDisputeRecording = false;
+	}
+
+	return Plugin_Stop;
 }

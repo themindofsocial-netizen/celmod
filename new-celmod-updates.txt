@@ -301,3 +301,7 @@
 		 - !weps now turns outside weapons off (or back on) in your land: other players can't fire their weapons inside it
 		   (the gravity gun still works). Remembered between visits.
 		 - The old !weps (every weapon) is now !arsenal, sold in the shop for 75,000 CL (!buy arsenal).
+		 - !dispute records a dispute demo again: "Recording Dispute demo..." and a SourceTV demo on the server
+		   (dispute_<date>_<map>.dem, 3 minutes, cm_dispute_demo_seconds) with the reported player's name, SteamID, IP,
+		   country, the time and the map printed in it. Needs SourceTV (tv_enable 1). The reporter sees the same line
+		   without the IP. The Disputes tab on the website shows which demo goes with each dispute.
