@@ -393,7 +393,7 @@ public void OnPluginStart()
 	g_cvNukeWrecks = CreateConVar("cm_nuke_wrecks_builds", "1", "1: the Nuke emblem unfreezes and scatters props where it lands, as on the original server. 0: builds are safe.", _, true, 0.0, true, 1.0);
 	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
 	g_cvDigChance = CreateConVar("cm_dig_chance", "0.35", "Chance a shovel hit on the ground digs something up.", _, true, 0.0, true, 1.0);
-	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.04", "Share of finds that are a Black or White emblem.", _, true, 0.0, true, 1.0);
+	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.02", "Share of finds that are a Black or White emblem (0.02 = 2%).", _, true, 0.0, true, 1.0);
 	g_cvDigMoneyChance = CreateConVar("cm_dig_money_chance", "0.12", "Share of finds that are a money box. The rest is junk.", _, true, 0.0, true, 1.0);
 	g_cvDigHoboChance = CreateConVar("cm_dig_hobo_chance", "0.02", "Share of finds that are a hobo (an idle, brown Eli).", _, true, 0.0, true, 1.0);
 	g_cvDigVialChance = CreateConVar("cm_dig_vial_chance", "0.05", "Share of finds that are a Health Vial (it senses buried items).", _, true, 0.0, true, 1.0);

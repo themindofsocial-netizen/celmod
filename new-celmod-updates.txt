@@ -238,3 +238,4 @@
 		   cans too, saved per map) as a trash can with !trashcan.
 		 - Fixed: an error in the server log when a player left before fully joining ("Entity -1 is invalid" in Cel_SetNoKill).
 		 - The Power Booth only appears on about one map in three now (cm_powerbooth_chance).
+		 - Black and White emblems are rarer from digging: 0.02 of finds (cm_dig_emblem_chance).
