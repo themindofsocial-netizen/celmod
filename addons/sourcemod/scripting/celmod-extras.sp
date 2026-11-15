@@ -23,6 +23,9 @@ StringMap g_smLoadIds[MAXPLAYERS + 1];
 bool g_bHide[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bHideHooked[MAXENTITIES + 1];
 bool g_bLandBan[MAXPLAYERS + 1][MAXPLAYERS + 1];
+bool g_bNoWeps[MAXPLAYERS + 1]; //!weps: other players' weapons don't work in this player's land
+int g_iNoWepsOwner[MAXPLAYERS + 1]; //the owner of the no-weapons land a player is standing in (0 = none)
+float g_fNextNoWepsNotice[MAXPLAYERS + 1];
 bool g_bBlockLand[MAXPLAYERS + 1][MAXPLAYERS + 1];
 char g_sBlockIds[MAXPLAYERS + 1][1024];
 char g_sBuildMessage[MAXPLAYERS + 1][128];
@@ -142,13 +145,16 @@ public void OnPluginStart()
 	RegConsoleCmd("v_noclip", Command_NoClip, "|CelMod| Enables/disables noclip on the player.");
 	RegConsoleCmd("v_stuck", Command_Stuck, "|CelMod| Respawns you.");
 	RegConsoleCmd("v_turn", Command_Turn, "|CelMod| Rotates the prop you are looking at.");
-	RegConsoleCmd("v_weps", Command_Weps, "|CelMod| Gives you every weapon.");
+	RegConsoleCmd("v_weps", Command_LandWeps, "|CelMod| Turns other players' weapons off (or back on) inside your land.");
+	RegConsoleCmd("v_arsenal", Command_Arsenal, "|CelMod| Gives you every weapon (bought in the shop: !buy arsenal).");
 }
 
 public void OnClientPutInServer(int iClient)
 {
 	g_sBuildMessage[iClient][0] = '\0';
 	g_iLastLandIn[iClient] = 0;
+	g_iNoWepsOwner[iClient] = 0;
+	g_bNoWeps[iClient] = (Cel_GetClientSettingInt(iClient, "land-noweps") == 1);
 	g_iMoveToRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
@@ -176,6 +182,14 @@ public void OnClientPutInServer(int iClient)
 		g_bLandBan[i][iClient] = false;
 		g_fLandKickUntil[iClient][i] = 0.0;
 		g_fLandKickUntil[i][iClient] = 0.0;
+	}
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_iNoWepsOwner[i] == iClient)
+		{
+			g_iNoWepsOwner[i] = 0;
+		}
 	}
 }
 
@@ -560,6 +574,8 @@ public Action Timer_LandBans(Handle hTimer)
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
+		g_iNoWepsOwner[i] = 0;
+		
 		if (!IsClientInGame(i) || !IsPlayerAlive(i))
 		{
 			continue;
@@ -574,6 +590,12 @@ public Action Timer_LandBans(Handle hTimer)
 		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
 		{
 			continue;
+		}
+		
+		//Remembered here (twice a second) so the weapon block below doesn't look up lands every frame.
+		if (g_bNoWeps[iOwner])
+		{
+			g_iNoWepsOwner[i] = iOwner;
 		}
 		
 		if (g_bLandBan[iOwner][i] || GetGameTime() < g_fLandKickUntil[iOwner][i])
@@ -833,7 +855,30 @@ public Action Command_Stuck(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
-public Action Command_Weps(int iClient, int iArgs)
+//!weps: other players' weapons stop working inside your land (they can still use the gravity gun). Remembered.
+public Action Command_LandWeps(int iClient, int iArgs)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	g_bNoWeps[iClient] = !g_bNoWeps[iClient];
+	
+	Cel_SetClientSettingInt(iClient, "land-noweps", g_bNoWeps[iClient] ? 1 : 0);
+	
+	if (g_bNoWeps[iClient])
+	{
+		Cel_ReplyToCommand(iClient, "Outside weapons are now {green}off{default} in your land: other players can't fire their weapons inside it. Type {green}[tag]weps{default} to turn them back on.");
+	} else {
+		Cel_ReplyToCommand(iClient, "Outside weapons are now {green}on{default} in your land again.");
+	}
+	
+	return Plugin_Handled;
+}
+
+//!arsenal (the old !weps): every weapon, bought once in the shop when the shop sells it.
+public Action Command_Arsenal(int iClient, int iArgs)
 {
 	static const char sWeapons[][] = 
 	{
@@ -847,6 +892,15 @@ public Action Command_Weps(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
+	char sDisplay[64];
+	int iPrice;
+	
+	if (Cel_CheckShopDB("arsenal", iPrice, sDisplay, sizeof(sDisplay)) && !Cel_CheckClientPurchase(iClient, "arsenal"))
+	{
+		Cel_ReplyToCommand(iClient, "{green}[tag]arsenal{default} gives you every weapon. Buy it for {green}%d CL{default} with {green}[tag]buy arsenal{default}.", iPrice);
+		return Plugin_Handled;
+	}
+	
 	GetClientAbsOrigin(iClient, fOrigin);
 	
 	fOrigin[2] += 16.0;
@@ -856,7 +910,7 @@ public Action Command_Weps(int iClient, int iArgs)
 	//Weapons are for outside of lands, a land owner decides what happens inside theirs.
 	if (iLandOwner > 0 && iLandOwner != iClient && Cel_IsPlayer(iLandOwner) && Cel_IsLandCreated(iLandOwner))
 	{
-		Cel_ReplyToCommand(iClient, "You cannot use {green}[tag]weps{default} inside another player's land.");
+		Cel_ReplyToCommand(iClient, "You cannot use {green}[tag]arsenal{default} inside another player's land.");
 		return Plugin_Handled;
 	}
 	
@@ -2142,6 +2196,25 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fV
 	int iLast = g_iLastButtons[iClient];
 	
 	g_iLastButtons[iClient] = iButtons;
+	
+	//!weps: in a land with weapons off, a visitor's weapons don't fire. The gravity gun still works, for building.
+	if (g_iNoWepsOwner[iClient] > 0 && (iButtons & (IN_ATTACK | IN_ATTACK2)) && IsPlayerAlive(iClient))
+	{
+		char sWeapon[32];
+		int iActive = GetEntPropEnt(iClient, Prop_Send, "m_hActiveWeapon");
+		
+		if (iActive > MaxClients && IsValidEntity(iActive) && GetEntityClassname(iActive, sWeapon, sizeof(sWeapon)) && !StrEqual(sWeapon, "weapon_physcannon"))
+		{
+			iButtons &= ~(IN_ATTACK | IN_ATTACK2);
+			
+			if (GetGameTime() >= g_fNextNoWepsNotice[iClient] && IsClientInGame(g_iNoWepsOwner[iClient]))
+			{
+				g_fNextNoWepsNotice[iClient] = GetGameTime() + 4.0;
+				
+				Cel_PrintToChat(iClient, "Weapons are turned off in {green}%N{default}'s land.", g_iNoWepsOwner[iClient]);
+			}
+		}
+	}
 	
 	if (g_cvDoubleJump.FloatValue <= 0.0 || !IsPlayerAlive(iClient) || IsFakeClient(iClient))
 	{

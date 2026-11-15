@@ -19,6 +19,7 @@ Command | Description | Aliases | Type | Extra
 +copy/-copy|Starts copying and moving the prop you are looking at.|None|Client|
 +move/-move|Starts moving the prop you are looking at.|None|Client|
 v_addteam|Adds a player to your build team: they can build in your land and edit the props in it. Remembered between visits.|<player>|Client|
+v_arsenal|Gives you every weapon (bought in the shop).|None|Client|
 v_delteam|Removes a player from your build team; with no name, lists your team.|[player]|Client|
 v_alpha|Changes the transparency on the prop you are looking at.|v_amt|Client|
 v_ammo|Creates a ammo bit that will give ammo when the player touches it.|None|Client|
@@ -135,7 +136,7 @@ v_weapon|Spawns a weapon cel you own, or puts your celwep away (off).|None|Clien
 v_weapons|Lists the emblems, hats and weapons you own.|None|Client|
 v_weld|Welds one of your entities to another so they move together.|None|Client|
 v_wep|Creates a weapon bit that will give a weapon when the player touches it.|None|Client|
-v_weps|Gives you every weapon.|None|Client|
+v_weps|Turns other players' weapons off (or back on) inside your land.|None|Client|
 v_zone|Creates an event or restricted area. Use it at one corner, then at the opposite corner.|None|Admin|
 v_zones|Lists the event and restricted areas on this map.|None|Client|
 

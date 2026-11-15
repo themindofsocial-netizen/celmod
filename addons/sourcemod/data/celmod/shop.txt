@@ -38,6 +38,7 @@
 		"landcolor"	"200000|!landcolor"
 		"internet"	"200000|!internet"
 		"seturl"	"500000|!seturl"
+		"arsenal"	"75000|!arsenal (every weapon)"
 	}
 
 	"Props"

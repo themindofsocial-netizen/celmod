@@ -298,3 +298,6 @@
 		 - Typing a command that doesn't exist says "Invalid command. Type !cmds for a command list."
 		 - Land ban messages: "Player <name> has banned you from their land." and "Player <name> has unbanned you from
 		   their land."
+		 - !weps now turns outside weapons off (or back on) in your land: other players can't fire their weapons inside it
+		   (the gravity gun still works). Remembered between visits.
+		 - The old !weps (every weapon) is now !arsenal, sold in the shop for 75,000 CL (!buy arsenal).
