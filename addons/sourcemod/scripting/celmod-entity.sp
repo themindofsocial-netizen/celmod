@@ -626,11 +626,35 @@ public Action Command_Delete(int iClient, int iArgs)
 public Action Command_DeleteAll(int iClient, int iArgs)
 {
 	char sRemoveCount[64];
-	int iRemoveCount = 0;
+	int iRemoveCount = 0, iTeamRemoved[MAXPLAYERS + 1];
+	
+	//A land owner's !delall also clears their build team's props inside their land: saving the build makes them
+	//the owner's anyway, so the land is left empty either way.
+	bool bLand = (iClient > 0 && Cel_IsLandCreated(iClient));
 	
 	for (int i = 0; i < GetMaxEntities(); i++)
 	{
-		if (Cel_CheckOwner(iClient, i) && Cel_IsEntity(i) && IsValidEntity(i))
+		if (!Cel_IsEntity(i) || !IsValidEntity(i))
+		{
+			continue;
+		}
+		
+		bool bMine = Cel_CheckOwner(iClient, i), bTeam = false;
+		
+		if (!bMine && bLand)
+		{
+			int iOwner = Cel_GetOwner(i);
+			
+			bTeam = (iOwner > 0 && iOwner <= MaxClients && iOwner != iClient && IsClientInGame(iOwner)
+				&& Cel_IsOnBuildTeam(iClient, iOwner) && Cel_GetLandOwnerFromEntity(i) == iClient);
+			
+			if (bTeam)
+			{
+				iTeamRemoved[iOwner]++;
+			}
+		}
+		
+		if (bMine || bTeam)
 		{
 			if (Cel_CheckEntityType(i, "effect"))
 			{
@@ -650,6 +674,14 @@ public Action Command_DeleteAll(int iClient, int iArgs)
 	Format(sRemoveCount, sizeof(sRemoveCount), "{green}%i{default} %s", iRemoveCount, iRemoveCount == 1 ? "entity" : "entities");
 	
 	Cel_ReplyToCommand(iClient, "%t", "RemoveAll", sRemoveCount);
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (iTeamRemoved[i] > 0 && IsClientInGame(i))
+		{
+			Cel_PrintToChat(i, "{green}%N{default} cleared their land, removing {green}%d{default} of your props in it.", iClient, iTeamRemoved[i]);
+		}
+	}
 	
 	iRemoveCount = 0;
 	

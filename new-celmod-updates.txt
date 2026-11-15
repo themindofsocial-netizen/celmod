@@ -327,3 +327,5 @@
 		   centred where you aim and facing you (^ in front for small text). Letters, numbers and ! ? : - ( ) are
 		   available. Each screen is a normal prop of yours. Spawn codes !text1 to !text4 are back too. Sold in the shop.
 		 - Fixed "Invalid command" showing when you spawn a prop by typing its name.
+		 - A land owner's !delall also clears their build team's props inside their land (teammates are told how many).
+		 - Fixed land lookups missing the player in the last server slot.

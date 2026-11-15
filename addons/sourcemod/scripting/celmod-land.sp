@@ -124,7 +124,7 @@ public void OnPluginStart()
 	
 	if (g_bLate)
 	{
-		for (int i = 1; i < MaxClients; i++)
+		for (int i = 1; i <= MaxClients; i++)
 		{
 			if (IsClientAuthorized(i))
 			{
@@ -1078,7 +1078,7 @@ public int Native_GetLandEntity(Handle hPlugin, int iNumParams)
 	GetNativeArray(1, fLandPosBottom, 3);
 	GetNativeArray(2, fLandPosTop, 3);
 	
-	for (int i = 1; i < MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientAuthorized(i))
 		{
@@ -1099,7 +1099,7 @@ public int Native_GetLandOwner(Handle hPlugin, int iNumParams)
 	GetNativeArray(1, fLandPosBottom, 3);
 	GetNativeArray(2, fLandPosTop, 3);
 	
-	for (int i = 1; i < MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientAuthorized(i))
 		{
@@ -1118,7 +1118,7 @@ public int Native_GetLandOwnerFromEntity(Handle hPlugin, int iNumParams)
 	float fOrigin[3], fMax[3], fMin[3];
 	int iEntity = GetNativeCell(1);
 	
-	for (int i = 1; i < MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientAuthorized(i))
 		{
@@ -1150,7 +1150,7 @@ public int Native_GetLandOwnerFromPosition(Handle hPlugin, int iNumParams)
 	
 	GetNativeArray(1, fOrigin, 3);
 	
-	for (int i = 1; i < MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientAuthorized(i))
 		{
@@ -1223,7 +1223,7 @@ public int Native_IsClientInLand(Handle hPlugin, int iNumParams)
 	float fOrigin[3];
 	int iClient = GetNativeCell(1);
 	
-	for (int i = 1; i < MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientAuthorized(i))
 		{
@@ -1244,7 +1244,7 @@ public int Native_IsClientCrosshairInLand(Handle hPlugin, int iNumParams)
 	float fOrigin[3];
 	int iClient = GetNativeCell(1);
 	
-	for (int i = 1; i < MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientAuthorized(i))
 		{
@@ -1269,7 +1269,7 @@ public int Native_IsEntityInLand(Handle hPlugin, int iNumParams)
 	float fMax[3], fMin[3], fOrigin[3];
 	int iEntity = GetNativeCell(1);
 	
-	for (int i = 1; i < MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientAuthorized(i))
 		{
