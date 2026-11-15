@@ -24,6 +24,10 @@ char g_sPropName[MAXENTITIES + 1][64];
 
 float g_fCopyOrigin[MAXPLAYERS + 1][3];
 float g_fCopyMoveOrigin[MAXPLAYERS + 1][3];
+//+move and +copy hold the prop out in front of the player, like the gravity gun: the spot grabbed stays under the
+//crosshair, this far from the eyes. g_fCopyOrigin / g_fCopyMoveOrigin are the prop's origin from that spot.
+float g_fCopyDist[MAXPLAYERS + 1];
+float g_fMoveDist[MAXPLAYERS + 1];
 float g_fFadeTime[MAXENTITIES + 1];
 float g_fRainbowTime[MAXENTITIES + 1];
 
@@ -1495,11 +1499,8 @@ public Action Command_StartCopy(int iClient, int iArgs)
 		
 		Cel_GetEntityAngles(iProp, fAngles);
 		Cel_GetEntityOrigin(iProp, fOrigin[0]);
-		GetClientAbsOrigin(iClient, fOrigin[1]);
 		
-		g_fCopyOrigin[iClient][0] = fOrigin[0][0] - fOrigin[1][0];
-		g_fCopyOrigin[iClient][1] = fOrigin[0][1] - fOrigin[1][1];
-		g_fCopyOrigin[iClient][2] = fOrigin[0][2] - fOrigin[1][2];
+		g_fCopyDist[iClient] = StartHold(iClient, fOrigin[0], g_fCopyOrigin[iClient]);
 		
 		g_bCopyFading[iClient] = g_bIsFading[iProp];
 		g_bCopyRainbow[iClient] = g_bRainbow[iProp];
@@ -1543,11 +1544,8 @@ public Action Command_StartGrab(int iClient, int iArgs)
 	if (Cel_CanEdit(iClient, iProp))
 	{
 		Cel_GetEntityOrigin(iProp, fOrigin[0]);
-		GetClientAbsOrigin(iClient, fOrigin[1]);
 		
-		g_fCopyMoveOrigin[iClient][0] = fOrigin[0][0] - fOrigin[1][0];
-		g_fCopyMoveOrigin[iClient][1] = fOrigin[0][1] - fOrigin[1][1];
-		g_fCopyMoveOrigin[iClient][2] = fOrigin[0][2] - fOrigin[1][2];
+		g_fMoveDist[iClient] = StartHold(iClient, fOrigin[0], g_fCopyMoveOrigin[iClient]);
 		
 		g_bCopyFading[iClient] = g_bIsFading[iProp];
 		g_bCopyRainbow[iClient] = g_bRainbow[iProp];
@@ -1669,18 +1667,52 @@ public Action Command_Unlock(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+//Where the player's crosshair is, fDist units out from their eyes.
+void HoldPoint(int iClient, float fDist, float fOut[3])
+{
+	float fEyes[3], fAngles[3], fForward[3];
+	
+	GetClientEyePosition(iClient, fEyes);
+	GetClientEyeAngles(iClient, fAngles);
+	GetAngleVectors(fAngles, fForward, NULL_VECTOR, NULL_VECTOR);
+	
+	ScaleVector(fForward, fDist);
+	AddVectors(fEyes, fForward, fOut);
+}
+
+//Grabbing a prop: how far away the spot under the crosshair is (returned), and the prop's origin from that spot, so
+//the prop doesn't jump when it's picked up.
+float StartHold(int iClient, const float fPropOrigin[3], float fOffset[3])
+{
+	float fEyes[3], fHit[3];
+	
+	GetClientEyePosition(iClient, fEyes);
+	Cel_GetCrosshairHitOrigin(iClient, fHit);
+	
+	float fDist = GetVectorDistance(fEyes, fHit);
+	
+	//Very close (or a missed trace): held a little way out instead.
+	if (fDist < 32.0)
+	{
+		fDist = 64.0;
+		HoldPoint(iClient, fDist, fHit);
+	}
+	
+	SubtractVectors(fPropOrigin, fHit, fOffset);
+	
+	return fDist;
+}
+
 //Frames:
 public void Frame_CopyProp(any iClient)
 {
 	float fOrigin[2][3];
 	
-	if(g_iMoveCopyEntity[iClient] != -1 && Cel_IsEntity(g_iMoveCopyEntity[iClient]) && IsValidEntity(g_iMoveCopyEntity[iClient]))
+	if(g_iMoveCopyEntity[iClient] != -1 && Cel_IsEntity(g_iMoveCopyEntity[iClient]) && IsValidEntity(g_iMoveCopyEntity[iClient]) && IsClientInGame(iClient))
 	{
-		GetClientAbsOrigin(iClient, fOrigin[0]);
+		HoldPoint(iClient, g_fCopyDist[iClient], fOrigin[0]);
 		
-		fOrigin[1][0] = fOrigin[0][0] + g_fCopyOrigin[iClient][0];
-		fOrigin[1][1] = fOrigin[0][1] + g_fCopyOrigin[iClient][1];
-		fOrigin[1][2] = fOrigin[0][2] + g_fCopyOrigin[iClient][2];
+		AddVectors(fOrigin[0], g_fCopyOrigin[iClient], fOrigin[1]);
 		
 		TeleportEntity(g_iMoveCopyEntity[iClient], fOrigin[1], NULL_VECTOR, NULL_VECTOR);
 		
@@ -1721,13 +1753,11 @@ public void Frame_MoveProp(any iClient)
 {
 	float fOrigin[2][3];
 	
-	if(g_iMoveEntity[iClient] != -1 && Cel_IsEntity(g_iMoveEntity[iClient]) && IsValidEntity(g_iMoveEntity[iClient]))
+	if(g_iMoveEntity[iClient] != -1 && Cel_IsEntity(g_iMoveEntity[iClient]) && IsValidEntity(g_iMoveEntity[iClient]) && IsClientInGame(iClient))
 	{
-		GetClientAbsOrigin(iClient, fOrigin[0]);
+		HoldPoint(iClient, g_fMoveDist[iClient], fOrigin[0]);
 		
-		fOrigin[1][0] = fOrigin[0][0] + g_fCopyMoveOrigin[iClient][0];
-		fOrigin[1][1] = fOrigin[0][1] + g_fCopyMoveOrigin[iClient][1];
-		fOrigin[1][2] = fOrigin[0][2] + g_fCopyMoveOrigin[iClient][2];
+		AddVectors(fOrigin[0], g_fCopyMoveOrigin[iClient], fOrigin[1]);
 		
 		TeleportEntity(g_iMoveEntity[iClient], fOrigin[1], NULL_VECTOR, NULL_VECTOR);
 		

@@ -313,3 +313,5 @@
 		   longer says which prop it was.
 		 - The website's commands page lists every command again (160, with aliases, usage and what each does), made from
 		   the plugins by tools/export_commands.py, with a search box.
+		 - +move and +copy follow your crosshair: the prop is held out in front of you like the gravity gun (the spot you
+		   grabbed stays under your crosshair, at the same distance), instead of only moving with your movement keys.
