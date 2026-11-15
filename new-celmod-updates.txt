@@ -259,3 +259,6 @@
 		 - Emblem drops have rarity tiers: Common, Uncommon, Rare, Epic and Legendary. A box rolls its tier first
 		   (60/25/10/4/1 by default, cm_drop_tier_chances), then an emblem in that tier, and at most 3 Epic and 1 Legendary
 		   box can drop server-wide each day (cm_drop_tier_daily_caps). Looking at a box shows its rarity.
+		 - Exclusive emblems: an "exclusive" key (event, dig, christmas, upgrade...) keeps an emblem out of emblem drops and
+		   random rewards. Nuke, Gold and Phazon are event exclusive; Black and White dig only; Inferno, Glacier and Tsunami
+		   Power Booth only; the Christmas items Christmas only.

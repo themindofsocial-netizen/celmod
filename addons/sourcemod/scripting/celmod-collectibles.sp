@@ -80,6 +80,7 @@ enum struct Item
 	float fRange;
 	int iWeight;
 	int iRarity;
+	char sExclusive[24];
 	float fOffset[3];
 	float fAngles[3];
 	float fScale;
@@ -3208,6 +3209,9 @@ void ReadItem(KeyValues kvItems, int iKind)
 	// dropweight (10+ common, 6-9 uncommon, 3-5 rare, 2 epic, 1 legendary).
 	char sRarity[16];
 
+	// Exclusive items (an event, the shovel, Christmas, the Power Booth...) never come from drops or random rewards.
+	kvItems.GetString("exclusive", g_Items[iItem].sExclusive, sizeof(Item::sExclusive), "");
+
 	kvItems.GetString("rarity", sRarity, sizeof(sRarity), "");
 	g_Items[iItem].iRarity = RarityFromName(sRarity);
 
@@ -3311,7 +3315,7 @@ int PickRandomItem(int iKind)
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
-		if (iKind == -1 || g_Items[i].iKind == iKind)
+		if ((iKind == -1 || g_Items[i].iKind == iKind) && g_Items[i].sExclusive[0] == '\0')
 		{
 			iCount++;
 
@@ -3328,7 +3332,7 @@ int PickRandomItem(int iKind)
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
-		if (iKind == -1 || g_Items[i].iKind == iKind)
+		if ((iKind == -1 || g_Items[i].iKind == iKind) && g_Items[i].sExclusive[0] == '\0')
 		{
 			iRoll -= (iTotal > 0) ? g_Items[i].iWeight : 1;
 
@@ -9942,7 +9946,7 @@ int PickEmblemInTier(int iTier)
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
-		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier)
+		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier && g_Items[i].sExclusive[0] == '\0')
 		{
 			iTotal += g_Items[i].iWeight;
 		}
@@ -9957,7 +9961,7 @@ int PickEmblemInTier(int iTier)
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
-		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier)
+		if (g_Items[i].iKind == KIND_EMBLEM && g_Items[i].iWeight > 0 && g_Items[i].iRarity == iTier && g_Items[i].sExclusive[0] == '\0')
 		{
 			iRoll -= g_Items[i].iWeight;
 

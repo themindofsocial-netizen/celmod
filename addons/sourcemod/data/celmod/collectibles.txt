@@ -69,6 +69,9 @@
 //               flames frost drip sparks thunder glint prism smoke glitch speed bolt dust float bounce
 //               wisp halo shield gold drain demon radiation vortex blink sun eclipse embers confetti
 //               stars rising pulse dusk code crackle haze void radiant phase heart, or none.
+//   exclusive   Where the item only comes from (event, dig, christmas, upgrade, shop...). Exclusive items never come
+//               from emblem drops or random rewards, whatever their dropweight: give them out with !eventitem,
+//               !giveitem, the shovel, the Power Booth and so on.
 //   rarity      Emblem drops: common, uncommon, rare, epic or legendary. Without it, it comes from the dropweight
 //               (10+ common, 6-9 uncommon, 3-5 rare, 2 epic, 1 legendary). A box first rolls a tier
 //               (cm_drop_tier_chances), then an emblem in it; epic and legendary have a daily cap
@@ -558,6 +561,7 @@
 			"range"			"4000"
 			"dropweight"	"0"
 			"aura"			"radiation"
+			"exclusive"		"event"
 		}
 		"gold"
 		{
@@ -571,6 +575,7 @@
 			"power"			"gold"
 			"value"			"250"
 			"dropweight"	"0"
+			"exclusive"		"event"
 		}
 		"corruption"
 		{
@@ -596,6 +601,7 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"0"
+			"exclusive"		"event"
 		}
 		"420"
 		{
@@ -619,6 +625,7 @@
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
 			"dropweight"	"0"
+			"exclusive"		"dig"
 		}
 		"white"
 		{
@@ -630,6 +637,7 @@
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
 			"dropweight"	"0"
+			"exclusive"		"dig"
 		}
 		"inferno"
 		{
@@ -651,6 +659,7 @@
 			"secondarycooldown"	"5.0"
 			"beamcolor"		"255 90 0 255"
 			"dropweight"	"0"
+			"exclusive"		"upgrade"
 		}
 		"glacier"
 		{
@@ -673,6 +682,7 @@
 			"secondaryvalue"	"25"
 			"secondarycooldown"	"6.0"
 			"dropweight"	"0"
+			"exclusive"		"upgrade"
 		}
 		"tsunami"
 		{
@@ -693,6 +703,7 @@
 			"sprite"		"sprites/glow04_noz.vmt"
 			"beamcolor"		"30 100 255 255"
 			"dropweight"	"0"
+			"exclusive"		"upgrade"
 		}
 		"ruby"
 		{
@@ -901,6 +912,7 @@
 			"power"			"none"
 			"dropweight"	"0"
 			"xmasgift"		"1"
+			"exclusive"		"christmas"
 		}
 		"xmasgreen"
 		{
@@ -914,6 +926,7 @@
 			"power"			"none"
 			"dropweight"	"0"
 			"xmasgift"		"1"
+			"exclusive"		"christmas"
 		}
 		// Candy canes: anyone pressing E on one gets 25 health ("usehealth"), as often as they like.
 		// Skins of candycane.mdl: 0 red and orange, 1 green, 2 red.
@@ -927,6 +940,7 @@
 			"usehealth"		"25"
 			"dropweight"	"0"
 			"xmasgift"		"1"
+			"exclusive"		"christmas"
 		}
 		"canegreen"
 		{
@@ -938,6 +952,7 @@
 			"usehealth"		"25"
 			"dropweight"	"0"
 			"xmasgift"		"1"
+			"exclusive"		"christmas"
 		}
 		"canered"
 		{
@@ -949,6 +964,7 @@
 			"usehealth"		"25"
 			"dropweight"	"0"
 			"xmasgift"		"1"
+			"exclusive"		"christmas"
 		}
 		// The shimmering core skin. It shoots small coreballs.
 		"core"
