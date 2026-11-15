@@ -113,6 +113,36 @@ enum ControlTriggerType
 #define UPDATE_BETA_URL "https://raw.githubusercontent.com/themindofsocial-netizen/celmod/beta/addons/sourcemod/celmod_update.upd"
 
 #define MAXENTITIES 2048
+
+/**
+ * The website moved from delaware.rockzehh.net to celmod.net, and its pages from .html to .php. A URL cvar
+ * still holding an old address (from a saved cfg) is switched to the new one. Returns true if it changed.
+ */
+stock bool Cel_UpdateOldSiteURL(ConVar cvURL)
+{
+	char sURL[PLATFORM_MAX_PATH];
+
+	cvURL.GetString(sURL, sizeof(sURL));
+
+	if (StrContains(sURL, "delaware.rockzehh.net", false) == -1)
+	{
+		return false;
+	}
+
+	ReplaceString(sURL, sizeof(sURL), "http://", "https://", false);
+	ReplaceString(sURL, sizeof(sURL), "delaware.rockzehh.net", "celmod.net", false);
+
+	int iLength = strlen(sURL);
+
+	if (iLength > 5 && StrEqual(sURL[iLength - 5], ".html", false))
+	{
+		strcopy(sURL[iLength - 5], sizeof(sURL) - (iLength - 5), ".php");
+	}
+
+	cvURL.SetString(sURL);
+
+	return true;
+}
 #define PLAYER_CROWBAR_ATTACK_RADIUS 2.0
 #define PLAYER_USE_RADIUS 80.0
 

@@ -79,6 +79,16 @@ public void OnPluginStart()
 	RegServerCmd("cm_exportproplist", Command_ExportPropList, "CelMod-Server: Exports the prop list into a text or html file in 'data/celmod/exports'.");
 }
 
+//A saved celmod.help.cfg can still have the old website's addresses: they're switched to celmod.net.
+public void OnConfigsExecuted()
+{
+	Cel_UpdateOldSiteURL(g_cvColorListURL);
+	Cel_UpdateOldSiteURL(g_cvCommandListURL);
+	Cel_UpdateOldSiteURL(g_cvEffectListURL);
+	Cel_UpdateOldSiteURL(g_cvPropListURL);
+	Cel_UpdateOldSiteURL(g_cvUpdateListURL);
+}
+
 public void CMHelp_OnConVarChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
 {
 	if (cvConVar == g_cvColorListURL)

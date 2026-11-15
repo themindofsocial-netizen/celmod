@@ -51,6 +51,12 @@ public void OnPluginStart()
 	g_cvDefaultInternetURL.GetString(g_sDefaultInternetURL, sizeof(g_sDefaultInternetURL));
 }
 
+//An old value for the website (delaware.rockzehh.net) is switched to celmod.net.
+public void OnConfigsExecuted()
+{
+	Cel_UpdateOldSiteURL(g_cvDefaultInternetURL);
+}
+
 public void CMCels_OnConVarChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
 {
 	if (cvConVar == g_cvDefaultInternetURL)
