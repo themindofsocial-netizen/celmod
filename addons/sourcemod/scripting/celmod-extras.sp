@@ -56,6 +56,7 @@ int g_iDiedInLand[MAXPLAYERS + 1];
 ConVar g_cvSpawnPointModel;
 ConVar g_cvSpawnHealth;
 ConVar g_cvDoubleJump;
+ConVar g_cvDoubleJumpHeight;
 ConVar g_cvUnlimitedAux;
 bool g_bDoubleJumped[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
@@ -93,7 +94,8 @@ public void OnPluginStart()
 	
 	g_cvSpawnHealth = CreateConVar("cm_spawn_health", "225", "Health (and full health) players spawn with.", _, true, 1.0);
 	g_cvUnlimitedAux = CreateConVar("cm_unlimited_aux", "1", "1: the suit's aux power (sprint, flashlight, breath underwater) never runs out.", _, true, 0.0, true, 1.0);
-	g_cvDoubleJump = CreateConVar("cm_double_jump", "300.0", "Upward speed of a double jump (jump again in the air). 0 turns double jumping off. Never in event areas.", _, true, 0.0);
+	g_cvDoubleJump = CreateConVar("cm_double_jump", "1", "Double jumping (jump again in the air): 0 turns it off. Never in event areas.", _, true, 0.0);
+	g_cvDoubleJumpHeight = CreateConVar("cm_double_jump_height", "24.0", "How high a double jump goes, in units (a normal jump is about 21).", _, true, 1.0, true, 512.0);
 	
 	g_cvHoopieBounce = CreateConVar("cm_hoopie_bounce", "650", "How hard a hoopie bounces players off it.", _, true, 0.0, true, 3000.0);
 	
@@ -2169,8 +2171,14 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fV
 	
 	float fVelocity[3];
 	
+	// The upward speed that rises cm_double_jump_height with the player's gravity (sv_gravity, scaled by a gravity
+	// emblem), so it feels like a second normal jump and not a launch.
+	ConVar cvGravity = FindConVar("sv_gravity");
+	float fScale = GetEntityGravity(iClient);
+	float fGravity = (cvGravity != null ? cvGravity.FloatValue : 600.0) * (fScale > 0.0 ? fScale : 1.0);
+
 	GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fVelocity);
-	fVelocity[2] = g_cvDoubleJump.FloatValue;
+	fVelocity[2] = SquareRoot(2.0 * fGravity * g_cvDoubleJumpHeight.FloatValue);
 	
 	TeleportEntity(iClient, NULL_VECTOR, NULL_VECTOR, fVelocity);
 	
