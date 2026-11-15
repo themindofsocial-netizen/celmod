@@ -190,8 +190,8 @@ static const int g_iRockColors[][3] =
 	{ 92, 58, 26 }, { 40, 40, 40 }, { 160, 140, 130 }, { 205, 120, 60 }, { 215, 220, 230 }, { 255, 200, 40 }, { 40, 200, 90 }, { 220, 30, 50 }, { 160, 240, 255 }
 };
 static const int g_iRockWeights[] = { 30, 22, 16, 12, 8, 5, 3, 3, 1 };
-static const int g_iRockPayMin[] = { 2, 2, 3, 4, 6, 10, 15, 15, 25 };
-static const int g_iRockPayMax[] = { 3, 3, 5, 6, 9, 15, 20, 20, 40 };
+static const int g_iRockPayMin[] = { 0, 2, 3, 4, 6, 10, 15, 15, 25 };
+static const int g_iRockPayMax[] = { 0, 3, 5, 6, 9, 15, 20, 20, 40 };
 ConVar g_cvVialFindChance;
 
 //Buried finds the Health Vial senses: a spot, and whether something is buried there (1) or not (0).
@@ -8132,7 +8132,7 @@ void DigUpRock(int iClient, float fSpot[3])
 
 	if (iRock == 0)
 	{
-		Cel_PrintToChat(iClient, "You dug up a {green}turd{default}. Lovely. A trash can will still pay for it.");
+		Cel_PrintToChat(iClient, "You dug up a {green}turd{default}. Lovely. It's worth nothing, but the trash can is the place for it.");
 	} else {
 		Cel_PrintToChat(iClient, "You dug up {green}%s{default}! Throw it in a trash can for {green}%d-%d CL{default}.", g_sRockNames[iRock], g_iRockPayMin[iRock], g_iRockPayMax[iRock]);
 	}
@@ -9218,7 +9218,7 @@ void ThinkTrash()
 
 					if (iRock == 0)
 					{
-						Cel_PrintToChat(iClient, "Someone had to get rid of that turd. {green}+%d CL{default}", iReward);
+						Cel_PrintToChat(iClient, "Someone had to get rid of that turd. Nobody pays for those, though.");
 					} else {
 						Cel_PrintToChat(iClient, "Sold your %s. {green}+%d CL{default}", g_sRockNames[iRock], iReward);
 					}

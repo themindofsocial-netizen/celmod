@@ -266,5 +266,5 @@
 		   exclusives stay out), and schedule drops for a set time, once or repeating, or start one right away.
 		   celmod-database applies both about every 30 seconds (new tables cm_drop_pool and cm_drop_schedule).
 		 - The shovel digs up rocks too (cm_dig_rock_chance, 0.3 of junk finds): turds, coal, iron, copper, silver, gold,
-		   emerald, ruby and diamond, each its own colour. Throw one in a trash can for more than junk: a turd pays 2-3 CL,
+		   emerald, ruby and diamond, each its own colour. Throw one in a trash can for more than junk (a turd pays nothing),
 		   up to 25-40 CL for a diamond.
