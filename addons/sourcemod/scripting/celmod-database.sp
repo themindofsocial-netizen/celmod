@@ -3,6 +3,7 @@
 #include <celmod>
 
 #pragma newdecls required
+#pragma dynamic 262144 // collectibles.txt is sent to the website whole
 
 /*
  * |CelMod| Database
@@ -21,7 +22,7 @@
  * created automatically.
  */
 
-#define SCHEMA_QUERIES 17
+#define SCHEMA_QUERIES 18
 #define MIGRATION_QUERIES 12
 
 Database g_dbCelMod;
@@ -88,6 +89,7 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_announcements (id INT UNSIGNED NOT NULL AUTO_INCREMENT, message VARCHAR(255) NOT NULL, server_id INT NULL, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, show_on_join TINYINT(1) NOT NULL DEFAULT 0, active TINYINT(1) NOT NULL DEFAULT 1, starts_at DATETIME NULL, ends_at DATETIME NULL, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_updates (id INT UNSIGNED NOT NULL AUTO_INCREMENT, posted_on DATE NOT NULL, body TEXT NOT NULL, published TINYINT(1) NOT NULL DEFAULT 1, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_posted (posted_on)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_collectibles (server_id INT NOT NULL, content MEDIUMTEXT NOT NULL, file_hash INT NOT NULL DEFAULT 0, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (server_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_drop_pool (emblem_id VARCHAR(64) NOT NULL, droppable TINYINT(1) NOT NULL DEFAULT 1, updated_by VARCHAR(20) NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (emblem_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_drop_schedule (id INT UNSIGNED NOT NULL AUTO_INCREMENT, run_at DATETIME NOT NULL, boxes INT NOT NULL DEFAULT 5, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, server_id INT NULL, active TINYINT(1) NOT NULL DEFAULT 1, last_run DATETIME NULL, note VARCHAR(128) NOT NULL DEFAULT '', created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_due (active, run_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_site_settings (name VARCHAR(64) NOT NULL, value VARCHAR(255) NOT NULL DEFAULT '', updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
@@ -169,7 +171,84 @@ public void OnMapStart()
 	{
 		LogMapStart();
 		SyncShopItems();
+		SyncCollectibles();
 	}
+}
+
+//The website reads the emblems from here (Emblem Drops tab, Emblem Editor), so it always has this server's
+//collectibles.txt. Sent when it has changed since the last time, checked every map.
+int g_iCollectiblesHash = 0;
+
+void SyncCollectibles()
+{
+	char sPath[PLATFORM_MAX_PATH];
+
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/collectibles.txt");
+
+	int iSize = FileSize(sPath);
+
+	if (iSize < 1 || iSize > 400000)
+	{
+		return;
+	}
+
+	File fFile = OpenFile(sPath, "rb");
+
+	if (fFile == null)
+	{
+		return;
+	}
+
+	char[] sText = new char[iSize + 1];
+	int iRead = fFile.ReadString(sText, iSize + 1, iSize);
+
+	delete fFile;
+
+	if (iRead < 1)
+	{
+		return;
+	}
+
+	sText[iRead] = '\0';
+
+	// A simple hash (djb2), so an unchanged file isn't sent again.
+	int iHash = 5381;
+
+	for (int i = 0; i < iRead; i++)
+	{
+		iHash = ((iHash << 5) + iHash) + sText[i];
+	}
+
+	if (iHash == g_iCollectiblesHash)
+	{
+		return;
+	}
+
+	int iEscapedSize = iRead * 2 + 1;
+	char[] sEscaped = new char[iEscapedSize];
+
+	if (!g_dbCelMod.Escape(sText, sEscaped, iEscapedSize))
+	{
+		return;
+	}
+
+	int iQuerySize = iEscapedSize + 256;
+	char[] sQuery = new char[iQuerySize];
+
+	FormatEx(sQuery, iQuerySize, "INSERT INTO cm_collectibles (server_id, content, file_hash) VALUES (%d, '%s', %d) ON DUPLICATE KEY UPDATE content = VALUES(content), file_hash = VALUES(file_hash), updated_at = NOW()", g_cvServerID.IntValue, sEscaped, iHash);
+
+	g_dbCelMod.Query(SQL_OnCollectiblesSynced, sQuery, iHash);
+}
+
+public void SQL_OnCollectiblesSynced(Database dbDatabase, DBResultSet rsResults, const char[] sError, any iHash)
+{
+	if (rsResults == null)
+	{
+		LogError("|CelMod| Couldn't send collectibles.txt to the website: %s", sError);
+		return;
+	}
+
+	g_iCollectiblesHash = iHash;
 }
 
 public void OnMapEnd()
@@ -475,6 +554,7 @@ public void SQL_OnSchemaReady(Database dbDatabase, any aData, int iNumQueries, D
 	g_dbCelMod.Query(SQL_Generic, sQuery);
 
 	SyncShopItems();
+	SyncCollectibles();
 	LogMapStart();
 
 	for (int i = 1; i <= MaxClients; i++)

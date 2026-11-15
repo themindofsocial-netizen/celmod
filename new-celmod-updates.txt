@@ -271,3 +271,6 @@
 		 - The website moved to celmod.net: the MOTD, readme and the list commands' default URLs point there now.
 		 - The Emblem Drops tab also picks which emblems the free emblem in a player's build can be (a Build tick per
 		   emblem), in place of cm_emblem_gift_list until it's reset. celmod-database applies it with the drop list.
+		 - celmod-database sends the server's collectibles.txt to the shared database (cm_collectibles) when it connects
+		   and every map if it has changed, so the website's Emblem Drops tab, Emblem Editor and suggestions always
+		   have the server's real emblems.
