@@ -1,0 +1,5 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "models/celmod/txt_c"
+	"$nodecal" 1
+}

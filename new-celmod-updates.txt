@@ -323,3 +323,7 @@
 		   sent, and the server log says how many were sent and which are missing.
 		 - !setpass and !pass never show in the command feed, so nobody else sees a button's passcode.
 		 - Looking at another player shows their name, money and tactics level again (the HUD's aim check skipped players).
+		 - !text <words> works: it writes the words in the world out of the original text screens, one per character,
+		   centred where you aim and facing you (^ in front for small text). Letters, numbers and ! ? : - ( ) are
+		   available. Each screen is a normal prop of yours. Spawn codes !text1 to !text4 are back too. Sold in the shop.
+		 - Fixed "Invalid command" showing when you spawn a prop by typing its name.

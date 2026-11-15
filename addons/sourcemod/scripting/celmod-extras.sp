@@ -146,6 +146,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_stuck", Command_Stuck, "|CelMod| Respawns you.");
 	RegConsoleCmd("v_turn", Command_Turn, "|CelMod| Rotates the prop you are looking at.");
 	RegConsoleCmd("v_weps", Command_LandWeps, "|CelMod| Turns other players' weapons off (or back on) inside your land.");
+	RegConsoleCmd("v_text", Command_Text, "|CelMod| Writes words in the world out of text screens where you aim: !text <words> (^ in front for small text).");
 	RegConsoleCmd("v_arsenal", Command_Arsenal, "|CelMod| Gives you every weapon (bought in the shop: !buy arsenal).");
 }
 
@@ -874,6 +875,157 @@ public Action Command_LandWeps(int iClient, int iArgs)
 		Cel_ReplyToCommand(iClient, "Outside weapons are now {green}off{default} in your land: other players can't fire their weapons inside it. Type {green}[tag]weps{default} to turn them back on.");
 	} else {
 		Cel_ReplyToCommand(iClient, "Outside weapons are now {green}on{default} in your land again.");
+	}
+	
+	return Plugin_Handled;
+}
+
+//!text <words>: the words, built out of text screens (models/celmod/txtscreen1-4), one per character, centred on the
+//crosshair and facing you. ^ in front of the words makes small text, like the original server. Each screen is an
+//ordinary prop of yours (frozen), so it can be moved, colored, saved and deleted like any other.
+//  txtscreen1 / txtscreen3 (big / small): skins 0-29 = a-z, 0-3
+//  txtscreen2 / txtscreen4 (big / small): skins 0-11 = 4-9 ! ? : - ( )
+public Action Command_Text(int iClient, int iArgs)
+{
+	static const char sSet1[] = "abcdefghijklmnopqrstuvwxyz0123";
+	static const char sSet2[] = "456789!?:-()";
+	char sText[64], sDisplay[64], sSkipped[32];
+	float fHit[3], fEyes[3], fAngles[3], fRight[3], fBack[3], fPos[3];
+	int iPrice;
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	if (Cel_CheckShopDB("text", iPrice, sDisplay, sizeof(sDisplay)) && !Cel_CheckClientPurchase(iClient, "text"))
+	{
+		Cel_ReplyToCommand(iClient, "{green}[tag]text{default} writes words in the world. Buy it for {green}%d CL{default} with {green}[tag]buy text{default}.", iPrice);
+		return Plugin_Handled;
+	}
+	
+	GetCmdArgString(sText, sizeof(sText));
+	StripQuotes(sText);
+	TrimString(sText);
+	
+	bool bSmall = (sText[0] == '^');
+	
+	if (bSmall)
+	{
+		strcopy(sText, sizeof(sText), sText[1]);
+		TrimString(sText);
+	}
+	
+	if (sText[0] == '\0')
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]text <words>{default} (letters, numbers and {green}! ? : - ( ){default}). Put {green}^{default} in front for small text.");
+		return Plugin_Handled;
+	}
+	
+	int iLength = strlen(sText);
+	
+	if (iLength > 32)
+	{
+		Cel_ReplyToCommand(iClient, "That's too long: up to {green}32{default} characters at once.");
+		return Plugin_Handled;
+	}
+	
+	// The screens are laid out to the player's right, centred on where they aim, standing upright and facing them.
+	float fWidth = bSmall ? 10.0 : 22.0, fRaise = bSmall ? 0.0 : 5.87;
+	
+	Cel_GetCrosshairHitOrigin(iClient, fHit);
+	GetClientEyePosition(iClient, fEyes);
+	GetClientEyeAngles(iClient, fAngles);
+	
+	fAngles[0] = 0.0;
+	fAngles[2] = 0.0;
+	
+	GetAngleVectors(fAngles, fBack, fRight, NULL_VECTOR);
+	NegateVector(fBack);
+	
+	// The model's face points along its -Y; turned a quarter to the left of the player's view it faces them.
+	float fPropAngles[3];
+	
+	fPropAngles[1] = fAngles[1] - 90.0;
+	
+	// Pulled back off a wall a little so the screens don't sink into it.
+	for (int k = 0; k < 3; k++)
+	{
+		fHit[k] += fBack[k] * 2.0;
+	}
+	
+	fHit[2] += fRaise;
+	
+	int iSpawned = 0, iSkippedCount = 0;
+	
+	for (int i = 0; i < iLength; i++)
+	{
+		int c = CharToLower(sText[i]);
+		
+		if (c == ' ')
+		{
+			continue;
+		}
+		
+		int iSkin = FindCharInString(sSet1, c), iModelSet = 1;
+		
+		if (iSkin == -1)
+		{
+			iSkin = FindCharInString(sSet2, c);
+			iModelSet = 2;
+		}
+		
+		if (iSkin == -1)
+		{
+			if (iSkippedCount < sizeof(sSkipped) - 1 && FindCharInString(sSkipped, c) == -1)
+			{
+				sSkipped[iSkippedCount++] = c;
+				sSkipped[iSkippedCount] = '\0';
+			}
+			
+			continue;
+		}
+		
+		if (!Cel_CheckPropCount(iClient))
+		{
+			Cel_ReplyToCommand(iClient, "%t", "MaxPropLimit", Cel_GetPropCount(iClient));
+			break;
+		}
+		
+		// Character i sits (i - middle) widths to the right of the crosshair.
+		float fShift = (float(i) - float(iLength - 1) / 2.0) * fWidth;
+		
+		for (int k = 0; k < 3; k++)
+		{
+			fPos[k] = fHit[k] + fRight[k] * fShift;
+		}
+		
+		char sModel[64], sAlias[16];
+		int iModel = (bSmall ? 2 : 0) + iModelSet;
+		
+		FormatEx(sModel, sizeof(sModel), "models/celmod/txtscreen%d.mdl", iModel);
+		FormatEx(sAlias, sizeof(sAlias), "text%d", iModel);
+		
+		int iProp = Cel_SpawnProp(iClient, sAlias, "prop_physics_override", sModel, fPropAngles, fPos, 255, 255, 255, 255);
+		
+		if (iProp == -1)
+		{
+			break;
+		}
+		
+		SetEntProp(iProp, Prop_Send, "m_nSkin", iSkin);
+		
+		iSpawned++;
+	}
+	
+	if (iSpawned > 0)
+	{
+		Cel_ReplyToCommand(iClient, "Wrote {green}%s{default} (%d screens).", sText, iSpawned);
+	}
+	
+	if (iSkippedCount > 0)
+	{
+		Cel_ReplyToCommand(iClient, "These characters aren't available and were left out: {green}%s{default}", sSkipped);
 	}
 	
 	return Plugin_Handled;

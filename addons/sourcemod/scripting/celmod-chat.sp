@@ -308,7 +308,12 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 			
 			FormatEx(sSourceMod, sizeof(sSourceMod), "sm_%s", sWord);
 			
-			if (sWord[0] != '\0' && !CommandExists(sSourceMod))
+			//"!blastdoor3" spawns a prop (celmod.sp's own chat listener, which sees the message too), so prop names and
+			//shop props aren't invalid either.
+			char sSpawn[256];
+			
+			if (sWord[0] != '\0' && !CommandExists(sSourceMod) && !Cel_CheckSpawnDB(sWord, sSpawn, sizeof(sSpawn))
+				&& Cel_CheckShopProp(iClient, sWord, sSpawn, sizeof(sSpawn)) == 0)
 			{
 				Cel_PrintToChat(iClient, "Invalid command. Type {green}!cmds{default} for a command list.");
 			}
