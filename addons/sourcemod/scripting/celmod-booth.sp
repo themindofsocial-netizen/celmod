@@ -17,7 +17,7 @@
 #define BOOTH_HALF 136.0
 #define DISPLAY_SIZE 40.0
 #define KLEINER_MODEL "models/kleiner.mdl"
-#define CONE_MODEL "models/props_junk/trafficcone001a.mdl"
+#define HAT_MODEL "models/celmod/delaware.mdl"
 #define KLEINER_HELLO "vo/k_lab/kl_ahhhh.wav"
 
 bool g_bAuction;
@@ -104,7 +104,7 @@ public void OnMapStart()
 	g_iBeam = PrecacheModel("materials/sprites/laserbeam.vmt", true);
 	
 	PrecacheModel(KLEINER_MODEL, true);
-	PrecacheModel(CONE_MODEL, true);
+	PrecacheModel(HAT_MODEL, true);
 	PrecacheSound(KLEINER_HELLO, true);
 	
 	g_iKleinerRef = INVALID_ENT_REFERENCE;
@@ -554,62 +554,217 @@ void PlaceKleiner(float fCenter[3])
 	
 	TeleportEntity(iKleiner, fPos, fAngles, NULL_VECTOR);
 	
-	//The model's reference pose: arms out, standing still.
-	SetVariantString("ragdoll");
-	AcceptEntityInput(iKleiner, "SetAnimation");
+	//Standing idle (the model's own idle animation, found in its files); his old arms-out pose if it has none.
+	char sIdle[64];
 	
-	SetEntPropFloat(iKleiner, Prop_Send, "m_flPlaybackRate", 0.0);
+	if (FindIdleSequence(KLEINER_MODEL, sIdle, sizeof(sIdle)))
+	{
+		SetVariantString(sIdle);
+		AcceptEntityInput(iKleiner, "SetDefaultAnimation");
+		
+		SetVariantString(sIdle);
+		AcceptEntityInput(iKleiner, "SetAnimation");
+	} else {
+		SetVariantString("ragdoll");
+		AcceptEntityInput(iKleiner, "SetAnimation");
+		
+		SetEntPropFloat(iKleiner, Prop_Send, "m_flPlaybackRate", 0.0);
+	}
 	
 	g_iKleinerRef = EntIndexToEntRef(iKleiner);
 	
-	//A traffic cone on his head, fixed to his eyes so it sits on his head whatever his pose.
-	int iCone = CreateEntityByName("prop_dynamic_override");
+	//The Delaware hat on his head, fixed to his eyes like a player's hat, where the hat sits on players
+	//(collectibles.txt, or its !tune'd place in tuning.txt).
+	char sHatModel[PLATFORM_MAX_PATH];
+	float fHatOffset[3] = { -1.0, 0.0, 6.0 }, fHatAngles[3], fHatScale = 1.0;
+	int iHatSkin = 0;
 	
-	if (iCone != -1)
+	strcopy(sHatModel, sizeof(sHatModel), HAT_MODEL);
+	ReadDelawareHat(sHatModel, sizeof(sHatModel), fHatOffset, fHatAngles, fHatScale, iHatSkin);
+	
+	int iHat = CreateEntityByName("prop_dynamic_override");
+	
+	if (iHat != -1 && LookupEntityAttachment(iKleiner, "eyes") > 0)
 	{
-		DispatchKeyValue(iCone, "model", CONE_MODEL);
-		DispatchKeyValue(iCone, "solid", "2");
+		PrecacheModel(sHatModel);
 		
-		DispatchSpawn(iCone);
-		// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
-		// when its model is a physics-only prop (hats, the traffic cone...).
-		DispatchKeyValue(iCone, "classname", "cel_booth_cone");
+		DispatchKeyValue(iHat, "model", sHatModel);
+		DispatchKeyValue(iHat, "solid", "0");
 		
-		//A bounding box (so its size is known) that players walk straight through.
-		SetEntProp(iCone, Prop_Send, "m_CollisionGroup", 1);
-		
-		float fConeMins[3];
-		
-		GetEntPropVector(iCone, Prop_Send, "m_vecMins", fConeMins);
-		
-		float fConePos[3], fConeAngles[3];
-		
-		fConePos = fPos;
-		fConePos[2] += 70.0;
-		
-		TeleportEntity(iCone, fConePos, fAngles, NULL_VECTOR);
-		
-		if (LookupEntityAttachment(iKleiner, "eyes") > 0)
+		if (fHatScale != 1.0)
 		{
-			SetVariantString("!activator");
-			AcceptEntityInput(iCone, "SetParent", iKleiner, iCone);
-			
-			SetVariantString("eyes");
-			AcceptEntityInput(iCone, "SetParentAttachment", iCone, iCone);
-			
-			//Relative to his eyes: a little back and up, standing upright on top of his head.
-			//The cone's base goes about 7 units above his eyes, the top of his head.
-			float fOffset[3];
-			
-			fOffset[0] = -3.0;
-			fOffset[2] = 7.0 - fConeMins[2];
-			
-			SetEntPropVector(iCone, Prop_Send, "m_vecOrigin", fOffset);
-			SetEntPropVector(iCone, Prop_Send, "m_angRotation", fConeAngles);
+			DispatchKeyValueFloat(iHat, "modelscale", fHatScale);
 		}
 		
-		g_iConeRef = EntIndexToEntRef(iCone);
+		DispatchSpawn(iHat);
+		// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
+		// when its model is a physics-only prop (hats, the traffic cone...).
+		DispatchKeyValue(iHat, "classname", "cel_booth_hat");
+		
+		SetEntProp(iHat, Prop_Send, "m_nSkin", iHatSkin);
+		
+		TeleportEntity(iHat, fPos, fAngles, NULL_VECTOR);
+		
+		SetVariantString("!activator");
+		AcceptEntityInput(iHat, "SetParent", iKleiner, iHat);
+		
+		SetVariantString("eyes");
+		AcceptEntityInput(iHat, "SetParentAttachment", iHat, iHat);
+		
+		SetEntPropVector(iHat, Prop_Send, "m_vecOrigin", fHatOffset);
+		SetEntPropVector(iHat, Prop_Send, "m_angRotation", fHatAngles);
+		
+		g_iConeRef = EntIndexToEntRef(iHat);
+	} else if (iHat != -1) {
+		AcceptEntityInput(iHat, "Kill");
 	}
+}
+
+//The Delaware hat's model and where it sits: collectibles.txt "Hats" > "delaware", then tuning.txt "hat delaware".
+void ReadDelawareHat(char[] sModel, int iMaxLength, float fOffset[3], float fAngles[3], float &fScale, int &iSkin)
+{
+	char sPath[PLATFORM_MAX_PATH];
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/collectibles.txt");
+	
+	KeyValues kvItems = new KeyValues("Collectibles");
+	
+	if (kvItems.ImportFromFile(sPath) && kvItems.JumpToKey("Hats") && kvItems.JumpToKey("delaware"))
+	{
+		kvItems.GetString("model", sModel, iMaxLength, sModel);
+		kvItems.GetVector("offset", fOffset, fOffset);
+		kvItems.GetVector("angles", fAngles, fAngles);
+		fScale = kvItems.GetFloat("scale", fScale);
+		iSkin = kvItems.GetNum("skin", iSkin);
+	}
+	
+	delete kvItems;
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/tuning.txt");
+	
+	KeyValues kvTuning = new KeyValues("Tuning");
+	
+	if (kvTuning.ImportFromFile(sPath) && kvTuning.JumpToKey("hat delaware"))
+	{
+		kvTuning.GetVector("offset", fOffset, fOffset);
+		kvTuning.GetVector("angles", fAngles, fAngles);
+		fScale = kvTuning.GetFloat("scale", fScale);
+	}
+	
+	delete kvTuning;
+}
+
+//Looks through a model's animations (its own, and the ones in the models it includes) for an idle one, so the
+//name never has to be guessed. Prefers a plain "idle".
+bool FindIdleSequence(const char[] sModel, char[] sIdle, int iMaxLength)
+{
+	static const char sPreferred[][] = { "idle", "idle01", "idle_subtle", "lineidle01", "idle_angry" };
+	char sBest[64];
+	int iBestRank = 999;
+	
+	ScanSequences(sModel, sPreferred, sizeof(sPreferred), sBest, sizeof(sBest), iBestRank, 0);
+	
+	if (sBest[0] == '\0')
+	{
+		return false;
+	}
+	
+	strcopy(sIdle, iMaxLength, sBest);
+	return true;
+}
+
+void ScanSequences(const char[] sModel, const char[][] sPreferred, int iPreferred, char[] sBest, int iBestLength, int &iBestRank, int iDepth)
+{
+	File fModel = OpenFile(sModel, "rb", true);
+	
+	if (fModel == null)
+	{
+		return;
+	}
+	
+	int iSeqCount = ReadIntAt(fModel, 188), iSeqIndex = ReadIntAt(fModel, 192);
+	int iIncludeCount = ReadIntAt(fModel, 336), iIncludeIndex = ReadIntAt(fModel, 340);
+	char sLabel[64];
+	
+	//Each sequence description is 212 bytes; its name is at an offset (stored 4 bytes in) from its own start.
+	for (int i = 0; i < iSeqCount && i < 2048; i++)
+	{
+		int iDesc = iSeqIndex + i * 212;
+		int iLabel = ReadIntAt(fModel, iDesc + 4);
+		
+		if (!ReadStringAt(fModel, iDesc + iLabel, sLabel, sizeof(sLabel)))
+		{
+			continue;
+		}
+		
+		int iRank = 999;
+		
+		for (int k = 0; k < iPreferred; k++)
+		{
+			if (StrEqual(sLabel, sPreferred[k], false))
+			{
+				iRank = k;
+				break;
+			}
+		}
+		
+		//Any other idle that isn't a transition into or out of something.
+		if (iRank == 999 && StrContains(sLabel, "idle", false) != -1 && StrContains(sLabel, "_to_", false) == -1 && StrContains(sLabel, "to_idle", false) == -1)
+		{
+			iRank = 100;
+		}
+		
+		if (iRank < iBestRank)
+		{
+			iBestRank = iRank;
+			strcopy(sBest, iBestLength, sLabel);
+		}
+	}
+	
+	//Models that include others: each include is two offsets (label, file name) from its own start.
+	char sInclude[PLATFORM_MAX_PATH];
+	
+	for (int i = 0; i < iIncludeCount && i < 16 && iDepth < 2; i++)
+	{
+		int iGroup = iIncludeIndex + i * 8;
+		int iName = ReadIntAt(fModel, iGroup + 4);
+		
+		if (ReadStringAt(fModel, iGroup + iName, sInclude, sizeof(sInclude)) && sInclude[0] != '\0')
+		{
+			if (StrContains(sInclude, "models/", false) != 0 && StrContains(sInclude, "models\\", false) != 0)
+			{
+				Format(sInclude, sizeof(sInclude), "models/%s", sInclude);
+			}
+			
+			ScanSequences(sInclude, sPreferred, iPreferred, sBest, iBestLength, iBestRank, iDepth + 1);
+		}
+	}
+	
+	delete fModel;
+}
+
+int ReadIntAt(File fFile, int iOffset)
+{
+	int iValue;
+	
+	if (iOffset < 0 || !fFile.Seek(iOffset, SEEK_SET) || !fFile.ReadInt32(iValue))
+	{
+		return 0;
+	}
+	
+	return iValue;
+}
+
+bool ReadStringAt(File fFile, int iOffset, char[] sBuffer, int iMaxLength)
+{
+	sBuffer[0] = '\0';
+	
+	if (iOffset <= 0 || !fFile.Seek(iOffset, SEEK_SET))
+	{
+		return false;
+	}
+	
+	return fFile.ReadString(sBuffer, iMaxLength) > 0;
 }
 
 public void OnClientPutInServer(int iClient)

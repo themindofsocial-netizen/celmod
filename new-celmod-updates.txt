@@ -224,3 +224,4 @@
 		   Water, Speed, Orange, Grey, Peach, Pink, Crimson, Lime, Cyan; cm_emblem_gift_list), never a rare one. Still one per player.
 		 - !setguessbooth (and !guessbooth) turn the Guess Booth to face the way you're facing: Dr. Kleiner stands ahead of
 		   you, the three props run left to right in front of him, and the square turns with it. The facing is saved per map.
+		 - Dr. Kleiner at the Guess Booth stands in his idle animation and wears the Delaware hat instead of a traffic cone.
