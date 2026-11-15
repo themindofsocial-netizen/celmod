@@ -72,6 +72,7 @@ enum struct Item
 	char sPower[24];
 	float fValue;
 	int iNearAlpha;
+	int iUseHealth;
 	float fNearDistance;
 	float fCooldown;
 	float fDuration;
@@ -234,6 +235,9 @@ ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
 ConVar g_cvGiftChance;
 ConVar g_cvGiftList;
+ConVar g_cvXmasForce;
+ConVar g_cvXmasItems;
+ConVar g_cvCaneMaxHealth;
 ConVar g_cvXPEvent;
 ConVar g_cvXPReward;
 ConVar g_cvXPBox;
@@ -387,6 +391,9 @@ public void OnPluginStart()
 	g_cvXPBox = CreateConVar("cm_tactics_xp_box", "10", "Tactics experience for winning an emblem box from an emblem drop.", _, true, 0.0);
 	g_cvXPUpgrade = CreateConVar("cm_tactics_xp_upgrade", "15", "Tactics experience for upgrading emblems at the Power Booth.", _, true, 0.0);
 	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
+	g_cvXmasForce = CreateConVar("cm_xmas_gift_force", "0", "Testing: 1 hands out the Christmas gift on any day, not just December 25th.", _, true, 0.0, true, 1.0);
+	g_cvXmasItems = CreateConVar("cm_xmas_gift_items", "emblem:xmasred,emblem:xmasgreen,emblem:caneorange,emblem:canegreen,emblem:canered,hat:santahat,hat:santahat_green", "The festive items the Christmas gift is picked from (kind:id, comma separated).");
+	g_cvCaneMaxHealth = CreateConVar("cm_candycane_max_health", "100", "Candy canes heal up to this much health.", _, true, 1.0);
 	g_cvGiftList = CreateConVar("cm_emblem_gift_list", "fire,water,speed,orange,grey,peach,pink,crimson,lime,cyan", "The emblems the one time free emblem is picked from (ids, comma separated): the basic solid colour ones.");
 	g_cvGiftDays = CreateConVar("cm_emblem_gift_days", "3", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
 
@@ -539,6 +546,7 @@ public void OnMapStart()
 	PrecacheSound(SOUND_BLINK, true);
 	PrecacheSound(SOUND_DROP, true);
 	PrecacheSound(SOUND_REWARD, true);
+	PrecacheSound("items/smallmedkit1.wav", true);
 	PrecacheSound("physics/flesh/flesh_impact_bullet1.wav", true);
 
 	for (int i = 0; i <= MAXENTITIES; i++)
@@ -707,6 +715,8 @@ public void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
 public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 {
 	float fBottom[3], fOrigin[3], fTop[3];
+
+	GiveChristmasGift(iClient);
 
 	if (!IsRealClient(iClient) || g_cvGiftDays.IntValue < 0)
 	{
@@ -1865,6 +1875,13 @@ public void Hook_ItemUse(int iEntity, int iActivator, int iCaller, UseType utTyp
 	}
 
 	int iItem = g_iEntItem[iEntity];
+
+	// Candy canes (and anything with "usehealth"): anyone can press E on one for health, as often as they like.
+	if (g_Items[iItem].iUseHealth > 0)
+	{
+		UseHealthItem(iActivator, iEntity, iItem);
+		return;
+	}
 
 	if (!Cel_CheckOwner(iActivator, iEntity))
 	{
@@ -3111,6 +3128,7 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].fJump = kvItems.GetFloat("jumpboost", 0.0);
 	g_Items[iItem].fFallDamage = kvItems.GetFloat("falldamage", 1.0);
 	g_Items[iItem].bGlow = view_as<bool>(kvItems.GetNum("glow", 0));
+	g_Items[iItem].iUseHealth = kvItems.GetNum("usehealth", 0);
 	g_Items[iItem].iNearAlpha = kvItems.GetNum("nearalpha", 0);
 	g_Items[iItem].fNearDistance = kvItems.GetFloat("neardistance", 96.0);
 	g_Items[iItem].fHitDamage = kvItems.GetFloat("hitdamage", 25.0);
@@ -9196,4 +9214,120 @@ bool CopyBinaryFile(const char[] sFrom, const char[] sTo, bool bPatchModel)
 	delete fOut;
 
 	return bOk;
+}
+
+//Christmas gift: on December 25th, the first saved build a player loads brings a present (from Santa) at the corner of
+//their build, holding one festive item from cm_xmas_gift_items. Once a year per player; it opens like any present.
+void GiveChristmasGift(int iClient)
+{
+	char sYear[8], sKey[32], sDay[8];
+
+	FormatTime(sDay, sizeof(sDay), "%m%d", GetTime());
+
+	if (!StrEqual(sDay, "1225") && !g_cvXmasForce.BoolValue)
+	{
+		return;
+	}
+
+	FormatTime(sYear, sizeof(sYear), "%Y", GetTime());
+	Format(sKey, sizeof(sKey), "xmasgift_%s", sYear);
+
+	if (Inv_GetInt(iClient, sKey) == 1)
+	{
+		return;
+	}
+
+	// A random festive item.
+	char sList[512], sChoices[16][48], sParts[2][32];
+	int iChoices[16], iCount = 0;
+
+	g_cvXmasItems.GetString(sList, sizeof(sList));
+
+	int iItems = ExplodeString(sList, ",", sChoices, sizeof(sChoices), sizeof(sChoices[]));
+
+	for (int i = 0; i < iItems; i++)
+	{
+		TrimString(sChoices[i]);
+
+		if (ExplodeString(sChoices[i], ":", sParts, sizeof(sParts), sizeof(sParts[])) != 2)
+		{
+			continue;
+		}
+
+		int iItem = FindItem(KindFromName(sParts[0]), sParts[1]);
+
+		if (iItem != -1)
+		{
+			iChoices[iCount++] = iItem;
+		}
+	}
+
+	if (iCount == 0)
+	{
+		return;
+	}
+
+	int iItem = iChoices[GetRandomInt(0, iCount - 1)];
+
+	// Into the player's presents (so it can never be lost), then the present itself at a corner of their build.
+	char sPresents[PRESENT_LIST_MAX], sEntry[160];
+	int iUid = GetRandomInt(1, 2147483646);
+
+	FormatEx(sEntry, sizeof(sEntry), "%d:%s:%s:Santa", iUid, g_sKindName[g_Items[iItem].iKind], g_Items[iItem].sId);
+
+	GetPresentList(iClient, sPresents, sizeof(sPresents));
+
+	if (strlen(sPresents) + strlen(sEntry) + 2 >= sizeof(sPresents))
+	{
+		return;
+	}
+
+	Format(sPresents, sizeof(sPresents), "%s%s%s", sPresents, sPresents[0] == '\0' ? "" : ";", sEntry);
+	Inv_SetString(iClient, "presents", sPresents);
+	Inv_SetInt(iClient, sKey, 1);
+
+	float fBottom[3], fTop[3], fCorner[3];
+
+	if (Cel_IsLandCreated(iClient))
+	{
+		Cel_GetLandPositions(iClient, 2, fBottom);
+		Cel_GetLandPositions(iClient, 3, fTop);
+
+		// The lower corner, a little way in.
+		fCorner[0] = (fBottom[0] < fTop[0] ? fBottom[0] : fTop[0]) + 32.0;
+		fCorner[1] = (fBottom[1] < fTop[1] ? fBottom[1] : fTop[1]) + 32.0;
+		fCorner[2] = (fBottom[2] < fTop[2] ? fBottom[2] : fTop[2]) + 24.0;
+	} else {
+		Cel_GetCrosshairHitOrigin(iClient, fCorner);
+		fCorner[2] += 24.0;
+	}
+
+	SpawnPresent(iClient, iUid, fCorner);
+
+	Cel_PrintToChat(iClient, "{green}Merry Christmas!{default} Santa left a present in the corner of your build. Press {green}E{default} on it to open it.");
+}
+
+//Candy canes: a little health each press, for anyone, up to cm_candycane_max_health.
+float g_fNextCane[MAXPLAYERS + 1];
+
+void UseHealthItem(int iClient, int iEntity, int iItem)
+{
+	if (!IsPlayerAlive(iClient) || GetGameTime() < g_fNextCane[iClient])
+	{
+		return;
+	}
+
+	g_fNextCane[iClient] = GetGameTime() + 0.5;
+
+	int iHealth = GetClientHealth(iClient), iMax = g_cvCaneMaxHealth.IntValue;
+
+	if (iHealth >= iMax)
+	{
+		Cel_PrintToChat(iClient, "You're already full of candy.");
+		return;
+	}
+
+	SetEntityHealth(iClient, (iHealth + g_Items[iItem].iUseHealth > iMax) ? iMax : iHealth + g_Items[iItem].iUseHealth);
+
+	EmitSoundToAll("items/smallmedkit1.wav", iEntity);
 }

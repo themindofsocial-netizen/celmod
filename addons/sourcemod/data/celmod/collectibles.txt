@@ -884,6 +884,63 @@
 			"power"			"none"
 			"dropweight"	"8"
 		}
+		// Christmas gift items (only from the Christmas gift on December 25th: dropweight 0).
+		"xmasred"
+		{
+			"name"			"Red"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 0 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"0"
+		}
+		"xmasgreen"
+		{
+			"name"			"Green"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"0 255 0 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"none"
+			"dropweight"	"0"
+		}
+		// Candy canes: anyone pressing E on one gets 25 health ("usehealth"), as often as they like.
+		// Skins of candycane.mdl: 0 red and orange, 1 green, 2 red.
+		"caneorange"
+		{
+			"name"			"Orange Candy Cane"
+			"model"			"models/celmod/candycane.mdl"
+			"skin"			"0"
+			"color"			"255 255 255 255"
+			"power"			"none"
+			"usehealth"		"25"
+			"dropweight"	"0"
+		}
+		"canegreen"
+		{
+			"name"			"Green Candy Cane"
+			"model"			"models/celmod/candycane.mdl"
+			"skin"			"1"
+			"color"			"255 255 255 255"
+			"power"			"none"
+			"usehealth"		"25"
+			"dropweight"	"0"
+		}
+		"canered"
+		{
+			"name"			"Red Candy Cane"
+			"model"			"models/celmod/candycane.mdl"
+			"skin"			"2"
+			"color"			"255 255 255 255"
+			"power"			"none"
+			"usehealth"		"25"
+			"dropweight"	"0"
+		}
 		// The shimmering core skin. It shoots small coreballs.
 		"core"
 		{
@@ -1264,7 +1321,7 @@
 		}
 		"santahat"
 		{
-			"name"			"Santa Hat"
+			"name"			"Red Santa Hat"
 			"model"			"models/celmod/santahat.mdl"
 			"skin"			"0"
 			"color"			"255 255 255 255"
@@ -1272,6 +1329,18 @@
 			"angles"		"0 0 0"
 			"scale"			"1"
 			"dropweight"	"2"
+		}
+		// The same hat in green (skin 5 of santahat.mdl). From the Christmas gift.
+		"santahat_green"
+		{
+			"name"			"Green Santa Hat"
+			"model"			"models/celmod/santahat.mdl"
+			"skin"			"5"
+			"color"			"255 255 255 255"
+			"offset"		"-1 2.5 7"
+			"angles"		"0 0 0"
+			"scale"			"1"
+			"dropweight"	"0"
 		}
 		"cone"
 		{
