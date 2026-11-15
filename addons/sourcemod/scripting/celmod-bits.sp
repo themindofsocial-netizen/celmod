@@ -1180,72 +1180,42 @@ public int Native_TriggerEntity(Handle hPlugin, int iNumParams)
 //Hooks:
 public void Hook_AmmoBitTouch(int iEntity, int iClient)
 {
-	if(!Cel_IsLocked(iEntity))
+	//Anything can touch the box (props too): only living players get ammo.
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || !IsPlayerAlive(iClient) || Cel_IsLocked(iEntity) || g_bTouched[iClient])
 	{
-		if(!g_bTouched[iClient])
-		{
-			switch(Cel_GetAmmoType(iEntity))
-			{
-				case AMMOBIT_PISTOL:
-				{
-					if(Client_HasWeapon(iClient, "weapon_pistol"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_pistol", false);
-					}
-				}
-				case AMMOBIT_MAGNUM:
-				{
-					if(Client_HasWeapon(iClient, "weapon_357"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_357", false);
-					}
-				}
-				case AMMOBIT_SMG:
-				{
-					if(Client_HasWeapon(iClient, "weapon_smg1"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_smg1", false, 45, 3, 45, 3);
-					}
-				}
-				case AMMOBIT_AR2:
-				{
-					if(Client_HasWeapon(iClient, "weapon_ar2"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_ar2", false);
-					}
-				}
-				case AMMOBIT_SHOTGUN:
-				{
-					if(Client_HasWeapon(iClient, "weapon_shotgun"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_shotgun", false);
-					}
-				}
-				case AMMOBIT_CROSSBOW:
-				{
-					if(Client_HasWeapon(iClient, "weapon_crossbow"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_crossbow", false);
-					}
-				}
-				case AMMOBIT_RPG:
-				{
-					if(Client_HasWeapon(iClient, "weapon_rpg"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_rpg", false);
-					}
-				}
-				case AMMOBIT_UNKNOWN:
-				{
-					if(Client_HasWeapon(iClient, "weapon_pistol"))
-					{
-						Client_GiveWeaponAndAmmo(iClient, "weapon_pistol", false);
-					}
-				}
-			}
-			
-			g_bTouched[iClient] = true;
-		}
+		return;
+	}
+	
+	//Each box gives what Half-Life 2's own pickup of that ammo gives, on top of what you have (up to the maximum),
+	//for a weapon you're carrying.
+	char sWeapon[32];
+	int iAmount;
+	
+	switch (Cel_GetAmmoType(iEntity))
+	{
+		case AMMOBIT_MAGNUM: { sWeapon = "weapon_357"; iAmount = 6; }
+		case AMMOBIT_SMG: { sWeapon = "weapon_smg1"; iAmount = 45; }
+		case AMMOBIT_AR2: { sWeapon = "weapon_ar2"; iAmount = 20; }
+		case AMMOBIT_SHOTGUN: { sWeapon = "weapon_shotgun"; iAmount = 20; }
+		case AMMOBIT_CROSSBOW: { sWeapon = "weapon_crossbow"; iAmount = 6; }
+		case AMMOBIT_RPG: { sWeapon = "weapon_rpg"; iAmount = 1; }
+		default: { sWeapon = "weapon_pistol"; iAmount = 20; }
+	}
+	
+	g_bTouched[iClient] = true;
+	
+	int iWeapon = Client_GetWeapon(iClient, sWeapon);
+	
+	if (iWeapon == INVALID_ENT_REFERENCE || iWeapon == -1)
+	{
+		return;
+	}
+	
+	int iAmmoType = GetEntProp(iWeapon, Prop_Send, "m_iPrimaryAmmoType");
+	
+	if (iAmmoType >= 0)
+	{
+		GivePlayerAmmo(iClient, iAmount, iAmmoType, false);
 	}
 }
 
@@ -1289,11 +1259,19 @@ void PressButton(int iEntity, int iActivator)
 
 public void Hook_StopTouch(int iEntity, int iClient)
 {
-	g_bTouched[iClient] = false;
+	if (iClient >= 1 && iClient <= MaxClients)
+	{
+		g_bTouched[iClient] = false;
+	}
 }
 
 public void Hook_WeaponBitTouch(int iEntity, int iClient)
 {
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return;
+	}
+	
 	if(!Cel_IsLocked(iEntity))
 	{
 		if(!g_bTouched[iClient])

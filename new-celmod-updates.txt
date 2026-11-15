@@ -330,3 +330,6 @@
 		 - A land owner's !delall also clears their build team's props inside their land (teammates are told how many).
 		 - Fixed land lookups missing the player in the last server slot.
 		 - Levelling up no longer says so in chat (the bell still rings and the HUD shows the new level).
+		 - Ammo boxes (!ammo) give ammo again: the same amount as Half-Life 2's own pickups (20 pistol, 6 357, 45 SMG,
+		   20 AR2, 20 buckshot, 6 bolts, 1 rocket), added to what you have up to the maximum, for a weapon you carry.
+		   Props touching ammo or weapon boxes no longer cause errors.
