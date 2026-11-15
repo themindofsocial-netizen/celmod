@@ -1668,6 +1668,12 @@ native void Cel_TriggerEntity(int iClient, int iEntity);
 //Stocks:
 stock void Cel_ActivateEffect(int iEntity)
 {
+	//An effect without its attached entity (gone, or a broken copy) has nothing to switch.
+	if (Cel_GetEffectAttachment(iEntity) <= MaxClients)
+	{
+		return;
+	}
+	
 	switch(Cel_GetEffectType(iEntity))
 	{
 		case EFFECT_CORE:

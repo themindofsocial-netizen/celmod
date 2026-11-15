@@ -271,7 +271,7 @@ public Action Command_Alpha(int iClient, int iArgs)
 					Cel_SetColor(i, -1, -1, -1, iAlpha);
 					
 					if(Cel_GetEntityType(i) == ENTTYPE_EFFECT)
-					Cel_SetColor(Cel_GetEffectAttachment(i), -1, -1, -1, iAlpha);
+					if (Cel_GetEffectAttachment(i) > MaxClients) Cel_SetColor(Cel_GetEffectAttachment(i), -1, -1, -1, iAlpha);
 				}
 			}
 			
@@ -294,7 +294,7 @@ public Action Command_Alpha(int iClient, int iArgs)
 			Cel_SetColor(iProp, -1, -1, -1, iAlpha);
 			
 			if(Cel_GetEntityType(iProp) == ENTTYPE_EFFECT)
-			Cel_SetColor(Cel_GetEffectAttachment(iProp), -1, -1, -1, iAlpha);
+			if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetColor(Cel_GetEffectAttachment(iProp), -1, -1, -1, iAlpha);
 			
 			Cel_ChangeBeam(iClient, iProp);
 			
@@ -431,9 +431,9 @@ public Action Command_Color(int iClient, int iArgs)
 						
 						if(Cel_GetEntityType(i) == ENTTYPE_EFFECT)
 						{
-							Cel_SetRainbow(Cel_GetEffectAttachment(i), false);
+							if (Cel_GetEffectAttachment(i) > MaxClients) Cel_SetRainbow(Cel_GetEffectAttachment(i), false);
 							
-							Cel_SetColor(Cel_GetEffectAttachment(i), StringToInt(sColorBuffer[0]), StringToInt(sColorBuffer[1]), StringToInt(sColorBuffer[2]), -1);
+							if (Cel_GetEffectAttachment(i) > MaxClients) Cel_SetColor(Cel_GetEffectAttachment(i), StringToInt(sColorBuffer[0]), StringToInt(sColorBuffer[1]), StringToInt(sColorBuffer[2]), -1);
 						}
 						
 						if(Cel_GetEntityType(i) == ENTTYPE_LIGHT)
@@ -502,9 +502,9 @@ public Action Command_Color(int iClient, int iArgs)
 				
 				if(Cel_GetEntityType(iProp) == ENTTYPE_EFFECT)
 				{
-					Cel_SetRainbow(Cel_GetEffectAttachment(iProp), false);
+					if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetRainbow(Cel_GetEffectAttachment(iProp), false);
 					
-					Cel_SetColor(Cel_GetEffectAttachment(iProp), StringToInt(sColorBuffer[0]), StringToInt(sColorBuffer[1]), StringToInt(sColorBuffer[2]), -1);
+					if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetColor(Cel_GetEffectAttachment(iProp), StringToInt(sColorBuffer[0]), StringToInt(sColorBuffer[1]), StringToInt(sColorBuffer[2]), -1);
 				}
 				
 				if(Cel_GetEntityType(iProp) == ENTTYPE_LIGHT)
@@ -602,11 +602,11 @@ public Action Command_Delete(int iClient, int iArgs)
 		{
 			if (Cel_CheckEntityType(iProp, "effect"))
 			{
-				Cel_SetRainbow(Cel_GetEffectAttachment(iProp), false);
-				Cel_SetColorFade(Cel_GetEffectAttachment(iProp), false, 0, 0, 0, 0, 0, 0);
+				if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetRainbow(Cel_GetEffectAttachment(iProp), false);
+				if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetColorFade(Cel_GetEffectAttachment(iProp), false, 0, 0, 0, 0, 0, 0);
 				
-				AcceptEntityInput(Cel_GetEffectAttachment(iProp), "TurnOff");
-				AcceptEntityInput(Cel_GetEffectAttachment(iProp), "kill");
+				if (Cel_GetEffectAttachment(iProp) > MaxClients) AcceptEntityInput(Cel_GetEffectAttachment(iProp), "TurnOff");
+				if (Cel_GetEffectAttachment(iProp) > MaxClients) AcceptEntityInput(Cel_GetEffectAttachment(iProp), "kill");
 			}
 			
 			Cel_RemovalBeam(iClient, iProp);
@@ -658,11 +658,11 @@ public Action Command_DeleteAll(int iClient, int iArgs)
 		{
 			if (Cel_CheckEntityType(i, "effect"))
 			{
-				Cel_SetRainbow(Cel_GetEffectAttachment(i), false);
-				Cel_SetColorFade(Cel_GetEffectAttachment(i), false, 0, 0, 0, 0, 0, 0);
+				if (Cel_GetEffectAttachment(i) > MaxClients) Cel_SetRainbow(Cel_GetEffectAttachment(i), false);
+				if (Cel_GetEffectAttachment(i) > MaxClients) Cel_SetColorFade(Cel_GetEffectAttachment(i), false, 0, 0, 0, 0, 0, 0);
 				
-				AcceptEntityInput(Cel_GetEffectAttachment(i), "TurnOff");
-				AcceptEntityInput(Cel_GetEffectAttachment(i), "kill");
+				if (Cel_GetEffectAttachment(i) > MaxClients) AcceptEntityInput(Cel_GetEffectAttachment(i), "TurnOff");
+				if (Cel_GetEffectAttachment(i) > MaxClients) AcceptEntityInput(Cel_GetEffectAttachment(i), "kill");
 			}
 			
 			AcceptEntityInput(i, "kill");
@@ -1797,7 +1797,7 @@ public void Frame_FadeColor(any iProp)
 		
 		if(Cel_GetEntityType(iProp) == ENTTYPE_EFFECT)
 		{
-			Cel_SetColor(Cel_GetEffectAttachment(iProp), iColor[0], iColor[1], iColor[2], g_iColor[iProp][3]);
+			if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetColor(Cel_GetEffectAttachment(iProp), iColor[0], iColor[1], iColor[2], g_iColor[iProp][3]);
 		}
 		
 		if(Cel_GetEntityType(iProp) == ENTTYPE_LIGHT)
@@ -1841,7 +1841,7 @@ public void Frame_Rainbow(any iProp)
 
 		if(Cel_GetEntityType(iProp) == ENTTYPE_EFFECT)
 		{
-			Cel_SetColor(Cel_GetEffectAttachment(iProp), iColor[0], iColor[1], iColor[2], g_iColor[iProp][3]);
+			if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetColor(Cel_GetEffectAttachment(iProp), iColor[0], iColor[1], iColor[2], g_iColor[iProp][3]);
 		}*/
 		
 		float fHue = (GetGameTime() - g_fRainbowTime[iProp]) * (360.0 / PERIOD);
@@ -1852,7 +1852,7 @@ public void Frame_Rainbow(any iProp)
 		
 		if(Cel_GetEntityType(iProp) == ENTTYPE_EFFECT)
 		{
-			Cel_SetColor(Cel_GetEffectAttachment(iProp), iColor[0], iColor[1], iColor[2], g_iColor[iProp][3]);
+			if (Cel_GetEffectAttachment(iProp) > MaxClients) Cel_SetColor(Cel_GetEffectAttachment(iProp), iColor[0], iColor[1], iColor[2], g_iColor[iProp][3]);
 		}
 		
 		if(Cel_GetEntityType(iProp) == ENTTYPE_LIGHT)
@@ -2529,6 +2529,15 @@ public int Native_PasteProp(Handle hPlugin, int iNumParams)
 	
 	GetNativeArray(2, fAngles, 3);
 	GetNativeArray(3, fOrigin, 3);
+	
+	//An effect cel is a base plus its effect (env_fire, ...): a copy is a new effect of the same type, never a bare
+	//base given the effect's classname (that had no effect attached, and deleting it once crashed the server).
+	if (StrContains(g_sCopyBuffer[iClient][0], "effect_", false) == 0)
+	{
+		EffectType etCopy = Cel_GetEffectTypeFromName(g_sCopyBuffer[iClient][0][7]);
+		
+		return Cel_SpawnEffect(iClient, fOrigin, etCopy, true, StringToInt(g_sCopyBuffer[iClient][8]), StringToInt(g_sCopyBuffer[iClient][9]), StringToInt(g_sCopyBuffer[iClient][10]), StringToInt(g_sCopyBuffer[iClient][11]));
+	}
 	
 	int iEntity = Cel_SpawnProp(iClient, g_sCopyBuffer[iClient][20], "prop_physics_override", g_sCopyBuffer[iClient][2], fAngles, fOrigin, StringToInt(g_sCopyBuffer[iClient][8]), StringToInt(g_sCopyBuffer[iClient][9]), StringToInt(g_sCopyBuffer[iClient][10]), StringToInt(g_sCopyBuffer[iClient][11]));
 	

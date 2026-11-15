@@ -799,11 +799,11 @@ public Action Event_Disconnect(Event eEvent, const char[] sName, bool bDontBroad
 		{
 			if (Cel_CheckEntityType(i, "effect"))
 			{
-				Cel_SetRainbow(Cel_GetEffectAttachment(i), false);
-				Cel_SetColorFade(Cel_GetEffectAttachment(i), false, 0, 0, 0, 0, 0, 0);
+				if (Cel_GetEffectAttachment(i) > MaxClients) Cel_SetRainbow(Cel_GetEffectAttachment(i), false);
+				if (Cel_GetEffectAttachment(i) > MaxClients) Cel_SetColorFade(Cel_GetEffectAttachment(i), false, 0, 0, 0, 0, 0, 0);
 				
-				AcceptEntityInput(Cel_GetEffectAttachment(i), "TurnOff");
-				AcceptEntityInput(Cel_GetEffectAttachment(i), "kill");
+				if (Cel_GetEffectAttachment(i) > MaxClients) AcceptEntityInput(Cel_GetEffectAttachment(i), "TurnOff");
+				if (Cel_GetEffectAttachment(i) > MaxClients) AcceptEntityInput(Cel_GetEffectAttachment(i), "kill");
 			}
 			
 			AcceptEntityInput(i, "kill");

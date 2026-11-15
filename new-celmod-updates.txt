@@ -340,3 +340,6 @@
 		   can't build stops cleanly.
 		 - !text screens now stand in a straight row facing you (they stood across the row like dominoes before).
 		 - Chat commands keep every ! and / after the first one (e.g. "!text hi!"), so !text's ! ? : - ( ) all work.
+		 - Fixed a server crash: copying an effect cel (!fire, !effect) made an empty copy, and deleting that copy deleted
+		   the world. Copies of effects are now real effects, and an effect's attached part is only ever acted on while it
+		   still exists.

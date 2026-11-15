@@ -10,7 +10,9 @@ EffectType g_etEffectType[MAXENTITIES + 1];
 
 Handle g_hOnEffectSpawn;
 
-int g_iEffectEntity[MAXENTITIES + 1];
+//An effect cel's attached entity (env_fire, ...), as an entity reference: it reads as -1 once that entity is gone, so
+//nothing ever acts on a stale index, or on entity 0 (the world: killing it crashes the server).
+int g_iEffectEntity[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... };
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
@@ -111,7 +113,14 @@ public int Native_GetEffectAttachment(Handle hPlugin, int iNumParams)
 {
 	int iEffect = GetNativeCell(1);
 	
-	return g_iEffectEntity[iEffect];
+	if (iEffect < 0 || iEffect > MAXENTITIES)
+	{
+		return -1;
+	}
+	
+	int iAttachment = EntRefToEntIndex(g_iEffectEntity[iEffect]);
+	
+	return (iAttachment > MaxClients) ? iAttachment : -1;
 }
 
 public int Native_GetEffectType(Handle hPlugin, int iNumParams)
@@ -221,7 +230,7 @@ public int Native_SetEffectAttachment(Handle hPlugin, int iNumParams)
 {
 	int iAttachment = GetNativeCell(2), iEffect = GetNativeCell(1);
 	
-	g_iEffectEntity[iEffect] = iAttachment;
+	g_iEffectEntity[iEffect] = (iAttachment > MaxClients && IsValidEntity(iAttachment)) ? EntIndexToEntRef(iAttachment) : INVALID_ENT_REFERENCE;
 	
 	return true;
 }
@@ -515,4 +524,13 @@ public int Native_SpawnEffect(Handle hPlugin, int iNumParams)
 	}
 	
 	return -1;
+}
+
+//A new entity in a slot never inherits the attachment of whatever had that slot before.
+public void OnEntityCreated(int iEntity, const char[] sClassname)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		g_iEffectEntity[iEntity] = INVALID_ENT_REFERENCE;
+	}
 }
