@@ -168,6 +168,8 @@ int g_iFireballItem[MAXENTITIES + 1];
 int g_iFireballOwner[MAXENTITIES + 1];
 int g_iMoneyBox[MAXENTITIES + 1];
 bool g_bDugUp[MAXENTITIES + 1];
+int g_iDugRock[MAXENTITIES + 1];
+int g_iLastDugUp = -1; // which dug up rock (1 = the first in g_sRockNames), 0 for plain junk
 int g_iDugBy[MAXENTITIES + 1];
 int g_iDigger;
 bool g_bVial[MAXENTITIES + 1];
@@ -177,6 +179,19 @@ bool g_bMarkedCan[MAXENTITIES + 1];
 ArrayList g_alMarkedHammer;
 ConVar g_cvDigHoboChance;
 ConVar g_cvDigVialChance;
+ConVar g_cvDigRockChance;
+
+// Rocks dug up with the shovel: thrown in a trash can, each pays more than junk. Rarer ones pay more.
+// Every rock is models/props_junk/rock001a.mdl, coloured.
+#define MODEL_ROCK "models/props_junk/rock001a.mdl"
+static const char g_sRockNames[][] = { "Turd", "Coal", "Iron", "Copper", "Silver", "Gold", "Emerald", "Ruby", "Diamond" };
+static const int g_iRockColors[][3] =
+{
+	{ 92, 58, 26 }, { 40, 40, 40 }, { 160, 140, 130 }, { 205, 120, 60 }, { 215, 220, 230 }, { 255, 200, 40 }, { 40, 200, 90 }, { 220, 30, 50 }, { 160, 240, 255 }
+};
+static const int g_iRockWeights[] = { 30, 22, 16, 12, 8, 5, 3, 3, 1 };
+static const int g_iRockPayMin[] = { 2, 2, 3, 4, 6, 10, 15, 15, 25 };
+static const int g_iRockPayMax[] = { 3, 3, 5, 6, 9, 15, 20, 20, 40 };
 ConVar g_cvVialFindChance;
 
 //Buried finds the Health Vial senses: a spot, and whether something is buried there (1) or not (0).
@@ -407,6 +422,7 @@ public void OnPluginStart()
 	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.02", "Share of finds that are a Black or White emblem (0.02 = 2%).", _, true, 0.0, true, 1.0);
 	g_cvDigMoneyChance = CreateConVar("cm_dig_money_chance", "0.12", "Share of finds that are a money box. The rest is junk.", _, true, 0.0, true, 1.0);
 	g_cvDigHoboChance = CreateConVar("cm_dig_hobo_chance", "0.02", "Share of finds that are a hobo (an idle, brown Eli).", _, true, 0.0, true, 1.0);
+	g_cvDigRockChance = CreateConVar("cm_dig_rock_chance", "0.3", "Share of junk finds that are a rock instead (a turd, coal, iron, copper, silver, gold, emerald, ruby or diamond), worth more in a trash can.", _, true, 0.0, true, 1.0);
 	g_cvDigVialChance = CreateConVar("cm_dig_vial_chance", "0.05", "Share of finds that are a Health Vial (it senses buried items).", _, true, 0.0, true, 1.0);
 	g_cvVialFindChance = CreateConVar("cm_vial_find_chance", "0.35", "Chance something is buried near a spot the Health Vial checks for the first time.", _, true, 0.0, true, 1.0);
 	g_cvTrashMin = CreateConVar("cm_trash_reward_min", "1", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
@@ -610,6 +626,8 @@ public void OnMapStart()
 		PrecacheModel(g_sJunkModels[i], true);
 	}
 
+	PrecacheModel(MODEL_ROCK, true);
+
 	char sMoneyBox[PLATFORM_MAX_PATH];
 
 	Cel_GetMoneyBoxModel(sMoneyBox, sizeof(sMoneyBox));
@@ -685,6 +703,7 @@ public void OnEntityDestroyed(int iEntity)
 	{
 		g_iFireballOwner[iEntity] = 0;
 		g_bDugUp[iEntity] = false;
+		g_iDugRock[iEntity] = 0;
 		g_bVial[iEntity] = false;
 		g_bMarkedCan[iEntity] = false;
 		g_iMoneyBox[iEntity] = 0;
@@ -8066,7 +8085,57 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 		return;
 	}
 
+	if (GetRandomFloat(0.0, 1.0) < g_cvDigRockChance.FloatValue)
+	{
+		DigUpRock(iClient, fSpot);
+		return;
+	}
+
 	SpawnDugUp(g_sJunkModels[GetRandomInt(0, sizeof(g_sJunkModels) - 1)], fSpot, 0);
+}
+
+void DigUpRock(int iClient, float fSpot[3])
+{
+	int iTotal = 0, iRock = 0;
+
+	for (int i = 0; i < sizeof(g_iRockWeights); i++)
+	{
+		iTotal += g_iRockWeights[i];
+	}
+
+	int iRoll = GetRandomInt(1, iTotal);
+
+	for (int i = 0; i < sizeof(g_iRockWeights); i++)
+	{
+		iRoll -= g_iRockWeights[i];
+
+		if (iRoll <= 0)
+		{
+			iRock = i;
+			break;
+		}
+	}
+
+	SpawnDugUp(MODEL_ROCK, fSpot, 0);
+
+	int iProp = g_iLastDugUp;
+
+	if (iProp == -1 || !IsValidEntity(iProp))
+	{
+		return;
+	}
+
+	g_iDugRock[iProp] = iRock + 1;
+
+	SetEntityRenderMode(iProp, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(iProp, g_iRockColors[iRock][0], g_iRockColors[iRock][1], g_iRockColors[iRock][2], 255);
+
+	if (iRock == 0)
+	{
+		Cel_PrintToChat(iClient, "You dug up a {green}turd{default}. Lovely. A trash can will still pay for it.");
+	} else {
+		Cel_PrintToChat(iClient, "You dug up {green}%s{default}! Throw it in a trash can for {green}%d-%d CL{default}.", g_sRockNames[iRock], g_iRockPayMin[iRock], g_iRockPayMax[iRock]);
+	}
 }
 
 // A buried find the Health Vial sensed: one of the shovel's emblems (Black or White), a fat cleers box, or a hobo.
@@ -8410,6 +8479,8 @@ public Action Command_TrashCan(int iClient, int iArgs)
 // Something dug up: it pops out of the ground and is gone again after a while. Money boxes hold cleers.
 void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
 {
+	g_iLastDugUp = -1;
+
 	int iProp = CreateEntityByName("prop_physics_override");
 
 	if (iProp == -1 || iProp > MAXENTITIES)
@@ -8425,7 +8496,9 @@ void SpawnDugUp(const char[] sModel, float fSpot[3], int iMoney)
 
 	TeleportEntity(iProp, fSpot, NULL_VECTOR, NULL_VECTOR);
 
+	g_iLastDugUp = iProp;
 	g_bDugUp[iProp] = true;
+	g_iDugRock[iProp] = 0;
 	g_iMoneyBox[iProp] = iMoney;
 	g_iDugBy[iProp] = g_iDigger;
 
@@ -9126,7 +9199,10 @@ void ThinkTrash()
 				iClient = GetClientOfUserId(g_iDugBy[iJunk]);
 			}
 
+			int iRock = g_iDugRock[iJunk] - 1;
+
 			g_bDugUp[iJunk] = false;
+			g_iDugRock[iJunk] = 0;
 
 			AcceptEntityInput(iJunk, "kill");
 
@@ -9134,11 +9210,25 @@ void ThinkTrash()
 
 			if (IsRealClient(iClient))
 			{
-				int iReward = GetRandomInt(g_cvTrashMin.IntValue, g_cvTrashMax.IntValue);
+				if (iRock >= 0)
+				{
+					int iReward = GetRandomInt(g_iRockPayMin[iRock], g_iRockPayMax[iRock]);
 
-				Cel_AddToClientBalance(iClient, iReward);
+					Cel_AddToClientBalance(iClient, iReward);
 
-				Cel_PrintToChat(iClient, "Thanks for keeping the place clean! {green}+%d CL{default}", iReward);
+					if (iRock == 0)
+					{
+						Cel_PrintToChat(iClient, "Someone had to get rid of that turd. {green}+%d CL{default}", iReward);
+					} else {
+						Cel_PrintToChat(iClient, "Sold your %s. {green}+%d CL{default}", g_sRockNames[iRock], iReward);
+					}
+				} else {
+					int iReward = GetRandomInt(g_cvTrashMin.IntValue, g_cvTrashMax.IntValue);
+
+					Cel_AddToClientBalance(iClient, iReward);
+
+					Cel_PrintToChat(iClient, "Thanks for keeping the place clean! {green}+%d CL{default}", iReward);
+				}
 			}
 
 			break;
