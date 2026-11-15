@@ -333,3 +333,5 @@
 		 - Ammo boxes (!ammo) give ammo again: the same amount as Half-Life 2's own pickups (20 pistol, 6 357, 45 SMG,
 		   20 AR2, 20 buckshot, 6 bolts, 1 rocket), added to what you have up to the maximum, for a weapon you carry.
 		   Props touching ammo or weapon boxes no longer cause errors.
+		 - No more player-to-player collision (cm_noblock, on by default): players walk through each other but still
+		   stand on props and the world, and can still be shot.

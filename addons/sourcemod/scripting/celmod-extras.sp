@@ -58,6 +58,7 @@ int g_iSpawnPointRef[MAXPLAYERS + 1] = {INVALID_ENT_REFERENCE, ...};
 int g_iDiedInLand[MAXPLAYERS + 1];
 ConVar g_cvSpawnPointModel;
 ConVar g_cvSpawnHealth;
+ConVar g_cvNoBlock;
 ConVar g_cvDoubleJump;
 ConVar g_cvDoubleJumpHeight;
 ConVar g_cvUnlimitedAux;
@@ -95,6 +96,8 @@ public void OnPluginStart()
 	HookEvent("player_spawn", Event_SpawnPointSpawn);
 	HookEvent("player_spawn", Event_SpawnHealth);
 	
+	g_cvNoBlock = CreateConVar("cm_noblock", "1", "1: players walk through each other (they still collide with the world and props, and can still be shot).", _, true, 0.0, true, 1.0);
+	g_cvNoBlock.AddChangeHook(CMExtras_OnNoBlockChanged);
 	g_cvSpawnHealth = CreateConVar("cm_spawn_health", "225", "Health (and full health) players spawn with.", _, true, 1.0);
 	g_cvUnlimitedAux = CreateConVar("cm_unlimited_aux", "1", "1: the suit's aux power (sprint, flashlight, breath underwater) never runs out.", _, true, 0.0, true, 1.0);
 	g_cvDoubleJump = CreateConVar("cm_double_jump", "1", "Double jumping (jump again in the air): 0 turns it off. Never in event areas.", _, true, 0.0);
@@ -2315,6 +2318,27 @@ public Action Timer_BuildMessages(Handle hTimer)
 }
 
 //Spawn health: every player starts with cm_spawn_health (225), which is also their full health for healing.
+//No player-to-player collision: players are put in the "debris trigger" collision group, which other players pass
+//through, while the world, props, bullets and triggers still treat them as normal.
+#define COLLISION_GROUP_PLAYER_DEFAULT 5
+#define COLLISION_GROUP_PLAYER_NOBLOCK 2
+
+void SetNoBlock(int iClient)
+{
+	SetEntProp(iClient, Prop_Send, "m_CollisionGroup", g_cvNoBlock.BoolValue ? COLLISION_GROUP_PLAYER_NOBLOCK : COLLISION_GROUP_PLAYER_DEFAULT);
+}
+
+public void CMExtras_OnNoBlockChanged(ConVar cvConVar, const char[] sOldValue, const char[] sNewValue)
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && IsPlayerAlive(i))
+		{
+			SetNoBlock(i);
+		}
+	}
+}
+
 public void Event_SpawnHealth(Event eEvent, const char[] sName, bool bDontBroadcast)
 {
 	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
@@ -2336,6 +2360,8 @@ public void Frame_SpawnHealth(any iUserId)
 	{
 		return;
 	}
+	
+	SetNoBlock(iClient);
 	
 	int iHealth = g_cvSpawnHealth.IntValue;
 	
