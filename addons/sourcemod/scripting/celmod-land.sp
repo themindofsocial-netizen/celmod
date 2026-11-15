@@ -66,6 +66,7 @@ Land g_liLand[MAXPLAYERS+1];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("Cel_GetGuessBoothArea");
 	CreateNative("Cel_ClearLand", Native_ClearLand);
 	CreateNative("Cel_CreateLand", Native_CreateLand);
 	CreateNative("Cel_DrawLandBorders", Native_DrawLandBorders);
@@ -698,6 +699,16 @@ public Action Command_Land(int iClient, int iArgs)
 					return Plugin_Handled;
 				}
 				
+				float fStart[3];
+				
+				Cel_GetCrosshairHitOrigin(iClient, fStart);
+				
+				if(Cel_LandHitsGuessBooth(fStart, fStart))
+				{
+					Cel_ReplyToCommand(iClient, "Lands can't be claimed on the {green}Guess Booth{default}.");
+					return Plugin_Handled;
+				}
+				
 				Cel_GetCrosshairHitOrigin(iClient, g_liLand[iClient].fLandPosBottom);
 				Cel_GetCrosshairHitOrigin(iClient, g_liLand[iClient].fLandPosStarting);
 				
@@ -714,6 +725,12 @@ public Action Command_Land(int iClient, int iArgs)
 				if(Cel_IsClientCrosshairInLand(iClient))
 				{
 					Cel_ReplyToCommand(iClient, "%t", "CantEndLandInLand");
+					return Plugin_Handled;
+				}
+				
+				if(Cel_LandHitsGuessBooth(g_liLand[iClient].fLandPosBottom, g_liLand[iClient].fLandPosTop))
+				{
+					Cel_ReplyToCommand(iClient, "Your land would overlap the {green}Guess Booth{default}: make it smaller or move it away, then type {green}!land{default} again.");
 					return Plugin_Handled;
 				}
 				

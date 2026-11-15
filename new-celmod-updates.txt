@@ -277,3 +277,5 @@
 		 - Unlimited aux power (cm_unlimited_aux, on by default): sprinting, the flashlight and swimming never drain the suit.
 		 - Double jump feels like a second normal jump now instead of a launch: it rises cm_double_jump_height units
 		   (24, a normal jump is about 21), worked out from the player's gravity. cm_double_jump is just on (1) or off (0).
+		 - Lands can't overlap the Guess Booth: !land refuses to start on it or finish over it (with 16 units to spare),
+		   and !setguess won't move the booth onto a player's land.

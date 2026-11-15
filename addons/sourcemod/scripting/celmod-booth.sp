@@ -71,6 +71,8 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 {
 	MarkNativeAsOptional("Cel_AddTacticsXP");
 	
+	CreateNative("Cel_GetGuessBoothArea", Native_GetGuessBoothArea);
+	
 	return APLRes_Success;
 }
 
@@ -296,7 +298,21 @@ public Action Command_SetGuessBooth(int iClient, int iArgs)
 	float fEyes[3];
 	
 	GetClientEyeAngles(iClient, fEyes);
+	
+	//No player's land may overlap the booth.
+	float fOldYaw = g_fBoothYaw;
+	
 	g_fBoothYaw = fEyes[1];
+	
+	int iBlocker = LandInBoothArea(fOrigin);
+	
+	if (iBlocker > 0)
+	{
+		g_fBoothYaw = fOldYaw;
+		
+		Cel_ReplyToCommand(iClient, "The Guess Booth can't go here: it would overlap {green}%N{default}'s land.", iBlocker);
+		return Plugin_Handled;
+	}
 	
 	MoveBooth(fOrigin);
 	
@@ -780,6 +796,53 @@ bool ReadStringAt(File fFile, int iOffset, char[] sBuffer, int iMaxLength)
 public void OnClientPutInServer(int iClient)
 {
 	g_bGreeted[iClient] = false;
+}
+
+public int Native_GetGuessBoothArea(Handle hPlugin, int iNumParams)
+{
+	if (!g_bBooth)
+	{
+		return false;
+	}
+	
+	SetNativeArray(1, g_fCenter, 3);
+	SetNativeCellRef(2, g_fBoothYaw);
+	SetNativeCellRef(3, BOOTH_HALF);
+	
+	return true;
+}
+
+//The first player whose land would overlap the booth if it stood at fOrigin (facing g_fBoothYaw), or 0.
+int LandInBoothArea(const float fOrigin[3])
+{
+	float fA[3], fB[3];
+	bool bWas = g_bBooth;
+	float fWas[3];
+	
+	fWas = g_fCenter;
+	g_fCenter = fOrigin;
+	g_bBooth = true;
+	
+	int iFound = 0;
+	
+	for (int i = 1; i <= MaxClients && iFound == 0; i++)
+	{
+		if (IsClientInGame(i) && Cel_IsLandCreated(i))
+		{
+			Cel_GetLandPositions(i, 2, fA);
+			Cel_GetLandPositions(i, 3, fB);
+			
+			if (Cel_LandHitsGuessBooth(fA, fB))
+			{
+				iFound = i;
+			}
+		}
+	}
+	
+	g_fCenter = fWas;
+	g_bBooth = bWas;
+	
+	return iFound;
 }
 
 bool IsInBooth(int iClient)

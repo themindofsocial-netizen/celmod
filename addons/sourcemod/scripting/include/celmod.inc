@@ -590,6 +590,71 @@ native int Cel_GetZoneType(const float fPos[3]);
  */
 native bool Cel_IsZoneExempt(int iClient);
 
+/**
+ * The Guess Booth's area: a square fHalf units from its middle to each side, turned to fYaw, from its floor
+ * (fCenter[2]) up to 160 units. Returns false when there's no booth on this map.
+ */
+native bool Cel_GetGuessBoothArea(float fCenter[3], float &fYaw, float &fHalf);
+
+/**
+ * Whether a land's box (two opposite corners) overlaps the Guess Booth's area, with fMargin units to spare
+ * around the booth. False when the booth plugin isn't loaded or there's no booth.
+ */
+stock bool Cel_LandHitsGuessBooth(const float fCornerA[3], const float fCornerB[3], float fMargin = 16.0)
+{
+	float fCenter[3], fYaw, fHalf;
+
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetGuessBoothArea") != FeatureStatus_Available || !Cel_GetGuessBoothArea(fCenter, fYaw, fHalf))
+	{
+		return false;
+	}
+
+	// Heights first: the land's box against the booth's floor to 160 units above it.
+	float fLow = fCornerA[2] < fCornerB[2] ? fCornerA[2] : fCornerB[2], fHigh = fCornerA[2] < fCornerB[2] ? fCornerB[2] : fCornerA[2];
+
+	if (fHigh < fCenter[2] - 32.0 || fLow > fCenter[2] + 160.0)
+	{
+		return false;
+	}
+
+	// Then from above: the land's rectangle against the booth's turned square (separating axis test).
+	float fBoxMid[2], fBoxHalf[2];
+
+	fBoxMid[0] = (fCornerA[0] + fCornerB[0]) / 2.0;
+	fBoxMid[1] = (fCornerA[1] + fCornerB[1]) / 2.0;
+	fBoxHalf[0] = FloatAbs(fCornerA[0] - fCornerB[0]) / 2.0;
+	fBoxHalf[1] = FloatAbs(fCornerA[1] - fCornerB[1]) / 2.0;
+
+	fHalf += fMargin;
+
+	float fRad = DegToRad(fYaw);
+	float fF[2], fR[2];
+
+	fF[0] = Cosine(fRad); fF[1] = Sine(fRad);
+	fR[0] = Sine(fRad); fR[1] = -Cosine(fRad);
+
+	float fAxes[4][2];
+
+	fAxes[0][0] = 1.0; fAxes[0][1] = 0.0;
+	fAxes[1][0] = 0.0; fAxes[1][1] = 1.0;
+	fAxes[2] = fF;
+	fAxes[3] = fR;
+
+	for (int i = 0; i < 4; i++)
+	{
+		float fDistance = FloatAbs((fBoxMid[0] - fCenter[0]) * fAxes[i][0] + (fBoxMid[1] - fCenter[1]) * fAxes[i][1]);
+		float fBoxReach = fBoxHalf[0] * FloatAbs(fAxes[i][0]) + fBoxHalf[1] * FloatAbs(fAxes[i][1]);
+		float fBoothReach = fHalf * (FloatAbs(fF[0] * fAxes[i][0] + fF[1] * fAxes[i][1]) + FloatAbs(fR[0] * fAxes[i][0] + fR[1] * fAxes[i][1]));
+
+		if (fDistance > fBoxReach + fBoothReach)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /** Cel_IsZoneExempt, or false when the zones plugin isn't loaded. */
 stock bool Cel_ZoneExempt(int iClient)
 {
