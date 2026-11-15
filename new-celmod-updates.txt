@@ -363,3 +363,7 @@
 		   box goes to whoever held it last.
 		 - Automatic emblem drops scale with the players on the server (cm_drop_per_player, 0.5 boxes each, up to
 		   cm_drop_count), and are super rare in the last 10 minutes of a map (cm_drop_end_minutes, cm_drop_end_chance).
+		 - Holding an emblem no longer makes the gravity gun and player animations stutter: the gun's punt is held back
+		   with one change instead of a change every frame.
+		 - On each map start the server console says how many held-item and hat tunings it loaded from
+		   data/celmod/tuning.txt, or that the file is missing.

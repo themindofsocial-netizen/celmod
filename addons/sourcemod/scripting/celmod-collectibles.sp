@@ -160,6 +160,7 @@ char g_sBoothModel[PLATFORM_MAX_PATH];
 char g_sDropModel[PLATFORM_MAX_PATH];
 
 int g_iHeldBox[MAXPLAYERS + 1];
+int g_iPuntHeldRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the gravity gun whose punt is held back for an emblem
 //Emblem boxes that have been held, by box: who held it last, when, and which emblem it holds. Kept outside the entity,
 //because when the map ends the box itself may already be gone. [userid, item, time]
 StringMap g_smBoxHolds;
@@ -1139,8 +1140,18 @@ void ApplyTuning()
 	{
 		delete kvTuning;
 
+		// Linux file names are case sensitive: "Tuning.txt" copied from a Windows server isn't read.
+		if (FileExists(sPath))
+		{
+			LogError("|CelMod| Tuning: '%s' could not be read (is it valid KeyValues?). Held items and hats use collectibles.txt.", sPath);
+		} else {
+			PrintToServer("|CelMod| Tuning: no '%s' yet (it must be named exactly that, all lower case). Held items and hats use collectibles.txt.", sPath);
+		}
+
 		return;
 	}
+
+	int iHeld = 0, iHats = 0;
 
 	for (int i = 0; i < g_iItemCount; i++)
 	{
@@ -1154,6 +1165,7 @@ void ApplyTuning()
 				kvTuning.GetVector("angles", g_Items[i].fAngles, g_Items[i].fAngles);
 				g_Items[i].fScale = kvTuning.GetFloat("scale", g_Items[i].fScale);
 				kvTuning.Rewind();
+				iHats++;
 			}
 
 			continue;
@@ -1168,10 +1180,13 @@ void ApplyTuning()
 			g_Items[i].fHandScale = kvTuning.GetFloat("scale", g_Items[i].fHandScale);
 			g_Items[i].bBoneMerge = (kvTuning.GetNum("bonemerge", g_Items[i].bBoneMerge ? 1 : 0) == 1);
 			kvTuning.Rewind();
+			iHeld++;
 		}
 	}
 
 	delete kvTuning;
+
+	PrintToServer("|CelMod| Tuning: applied to %d held items and %d hats from '%s'.", iHeld, iHats, sPath);
 }
 
 // The model an item is shown with in the hand.
@@ -2589,10 +2604,28 @@ public Action Timer_Think(Handle hTimer)
 
 		// With an emblem that has a power, the left click is the emblem's: the gravity gun's own punt (its electric
 		// shock on enemies and players) is held back. Throwing a prop the gravity gun is holding still works.
-		if (g_bHoldingGravGun[i] && iItem != -1 && !StrEqual(g_Items[iItem].sPower, "none")
-			&& !(HasEntProp(iWeapon, Prop_Send, "m_bActive") && GetEntProp(iWeapon, Prop_Send, "m_bActive")))
+		// It's held back with one change when that starts and undone once when it stops: changing the gun's
+		// (networked, predicted) next-attack time every frame made the gun and the player's animations stutter.
+		bool bHoldPunt = (g_bHoldingGravGun[i] && iItem != -1 && !StrEqual(g_Items[iItem].sPower, "none")
+			&& !(HasEntProp(iWeapon, Prop_Send, "m_bActive") && GetEntProp(iWeapon, Prop_Send, "m_bActive")));
+
+		if (bHoldPunt)
 		{
-			SetEntPropFloat(iWeapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime() + 0.5);
+			if (g_iPuntHeldRef[i] != EntIndexToEntRef(iWeapon) || GetEntPropFloat(iWeapon, Prop_Send, "m_flNextPrimaryAttack") < GetGameTime() + 60.0)
+			{
+				SetEntPropFloat(iWeapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime() + 100000.0);
+				g_iPuntHeldRef[i] = EntIndexToEntRef(iWeapon);
+			}
+		} else if (g_iPuntHeldRef[i] != INVALID_ENT_REFERENCE)
+		{
+			int iHeldGun = EntRefToEntIndex(g_iPuntHeldRef[i]);
+
+			if (iHeldGun != INVALID_ENT_REFERENCE && iHeldGun > MaxClients)
+			{
+				SetEntPropFloat(iHeldGun, Prop_Send, "m_flNextPrimaryAttack", GetGameTime());
+			}
+
+			g_iPuntHeldRef[i] = INVALID_ENT_REFERENCE;
 		}
 
 		// A celwep is shown the same way while its weapon is the one in hand.
