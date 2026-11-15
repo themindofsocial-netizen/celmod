@@ -279,7 +279,8 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 	StripQuotes(sCommandString);
 	
 	if (sCommandString[0] == '!' || sCommandString[0] == '/') {
-		ReplaceString(sCommandString, sizeof(sCommandString), (sCommandString[0] == '!') ? "!" : "/", "v_");
+		//Only the leading ! or / becomes v_: the rest is left alone, so "!text hi!" keeps its last "!".
+		Format(sCommandString, sizeof(sCommandString), "v_%s", sCommandString[1]);
 		
 		if(Cel_IsCelCommand(sCommandString))
 		{

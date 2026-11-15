@@ -946,10 +946,11 @@ public Action Command_Text(int iClient, int iArgs)
 	GetAngleVectors(fAngles, fBack, fRight, NULL_VECTOR);
 	NegateVector(fBack);
 	
-	// The model's face points along its -Y; turned a quarter to the left of the player's view it faces them.
+	// Turned to the player's own yaw, the screen faces back at them and its letters read left to right along the row.
+	// (Measured in game: at the player's yaw minus 90 they stood across the row like dominoes, fronts toward its start.)
 	float fPropAngles[3];
 	
-	fPropAngles[1] = fAngles[1] - 90.0;
+	fPropAngles[1] = fAngles[1];
 	
 	// Pulled back off a wall a little so the screens don't sink into it.
 	for (int k = 0; k < 3; k++)

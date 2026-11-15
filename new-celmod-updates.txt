@@ -338,3 +338,5 @@
 		 - !stack works as documented: !stack <x> <y> <z> [copies] copies the prop you look at, each copy moved by x, y and
 		   z (the same numbers !stackinfo gives), up to 10 copies. Dynamic props stay dynamic, and stacking into a place you
 		   can't build stops cleanly.
+		 - !text screens now stand in a straight row facing you (they stood across the row like dominoes before).
+		 - Chat commands keep every ! and / after the first one (e.g. "!text hi!"), so !text's ! ? : - ( ) all work.
