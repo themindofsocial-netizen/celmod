@@ -147,7 +147,7 @@
 	</ul>
 
 	<div class="foot">Shop, leaderboards, updates and the Emblem Editor on the website:
-	<a href="https://delaware.rockzehh.net">delaware.rockzehh.net</a><br>
+	<a href="https://celmod.net">celmod.net</a><br>
 	|CelMod| - A Living Project. Have fun building!</div>
 </div>
 </body>

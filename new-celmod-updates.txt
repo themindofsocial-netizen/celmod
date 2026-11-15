@@ -268,3 +268,4 @@
 		 - The shovel digs up rocks too (cm_dig_rock_chance, 0.3 of junk finds): turds, coal, iron, copper, silver, gold,
 		   emerald, ruby and diamond, each its own colour. Throw one in a trash can for more than junk (a turd pays nothing),
 		   up to 25-40 CL for a diamond.
+		 - The website moved to celmod.net: the MOTD, readme and the list commands' default URLs point there now.

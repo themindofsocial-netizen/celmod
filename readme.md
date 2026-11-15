@@ -36,8 +36,8 @@ v_charger|Creates a health/suit charger bit that will give health/suit to the pl
 v_cl|Shows your balance, or drops an amount of cleers for another player to pick up.|None|Client|
 v_clear|Deletes one of your saved builds.|None|Client|
 v_color|Colors the prop you are looking at.|v_paint|Client|
-v_colorlist|Displays the color list.|v_colors|Client|[Color List](https://delaware.rockzehh.net/colors.html)
-v_commandlist|Displays the command list.|v_cmds, v_commands|Client|[Command List](https://delaware.rockzehh.net/cmds.html)
+v_colorlist|Displays the color list.|v_colors|Client|[Color List](https://celmod.net/colors.php)
+v_commandlist|Displays the command list.|v_cmds, v_commands|Client|[Command List](https://celmod.net/cmds.php)
 v_copy|Copies the prop you are looking at into your copy buffer.|None|Client|
 v_delete|Removes the prop you are looking at.|v_del, v_remove|Client|
 v_delreward|Removes the reward pickup you are looking at.|None|Admin|
@@ -48,7 +48,7 @@ v_dm|Changes the deathmatch setting within the land.|v_landdeathmatch|Client|
 v_door|Spawns a working door cel.|None|Client|
 v_drop|Teleports the entity you are looking at to the floor.|None|Client|
 v_effect|Spawns a working effect cel.|v_emitter|Client|
-v_effectlist|Displays the effect list.|v_effects|Client|[Effects List](https://delaware.rockzehh.net/effects.html)
+v_effectlist|Displays the effect list.|v_effects|Client|[Effects List](https://celmod.net/effects.php)
 v_emblem|Spawns an emblem you own, or disables your active emblem (off).|None|Client|
 v_emblemdrop|Starts an emblem drop.|None|Admin|
 v_emblems|Lists the emblems and hats you own.|v_hats, v_inventory|Client|
@@ -94,7 +94,7 @@ v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Clien
 v_playermodel|Wears a player model you own, or goes back to your own (off).|None|Client|
 v_playermodels|Lists the player models and their prices.|None|Client|
 v_powerbooth|Moves the Power Booth to where you are looking.|None|Admin|
-v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://delaware.rockzehh.net/props/index.html)
+v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://celmod.net/props/index.php)
 v_release|Releases the entity you are looking at from a weld.|None|Client|
 v_renderfx|Changes the RenderFX on what prop you are looking at.|None|Client|
 v_reward|Creates a reward pickup that gives an emblem or hat once per player.|None|Admin|

@@ -44,7 +44,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_light", Command_Light, "|CelMod| Creates a working light cel.");
 	RegConsoleCmd("v_seturl", Command_SetURL, "|CelMod| Sets the url of the internet cel you are looking at.");
 	
-	g_cvDefaultInternetURL = CreateConVar("cm_default_internet_url", "https://delaware.rockzehh.net", "Default internet cel URL.");
+	g_cvDefaultInternetURL = CreateConVar("cm_default_internet_url", "https://celmod.net", "Default internet cel URL.");
 	
 	g_cvDefaultInternetURL.AddChangeHook(CMCels_OnConVarChanged);
 	
