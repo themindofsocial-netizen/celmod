@@ -173,7 +173,7 @@
 
 	"CMD_Stack"
 	{
-		"en"			"Usage: {green}[tag]stack{default} <x> <y> <z>"
+		"en"			"Usage: {green}[tag]stack{default} <x> <y> <z> [copies] - copies the prop you look at, moved by x, y and z (up to 10 copies)."
 	}
 
 	"CannotSellForFree"

@@ -45,7 +45,7 @@ for cat, names in {
 USAGE = {
     'spawn': '<prop name>', 'land': '(again to finish, #clear to remove)', 'save': '<build name>', 'load': '<build name>', 'clear': '<build name>',
     'r': '<degrees>', 'flip': '<degrees>', 'roll': '<degrees>', 'turn': '<degrees>', 'rotate': '<flip> <r> <roll>',
-    'stack': '<x> <y> <z>', 'smove': '<x> <y> <z>', 'replace': '<prop name>', 'skin': '<number>',
+    'stack': '<x> <y> <z> [copies]', 'smove': '<x> <y> <z>', 'replace': '<prop name>', 'skin': '<number>',
     'color': '<color> (#all for everything you own)', 'fadecolor': '<color 1> <color 2>', 'palette': '<red> <green> <blue>',
     'alpha': '<0-255>', 'renderfx': '<effect>', 'door': '<door skin>', 'light': '[distance]', 'ladder': '<1 or 2>',
     'seturl': '<url>', 'text': '<words> (^ in front for small text)', 'effect': '<effect name>', 'message': '<text>', 'music': '<song>', 'sound': '<sound name>',

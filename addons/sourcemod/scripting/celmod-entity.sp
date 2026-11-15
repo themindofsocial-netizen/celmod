@@ -160,7 +160,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_skin", Command_Skin, "|CelMod| Changes the skin on the prop you are looking at.");
 	RegConsoleCmd("v_smove", Command_SMove, "|CelMod| Moves the prop you are looking at along its own axes.");
 	RegConsoleCmd("v_solid", Command_Solid, "|CelMod| Makes the prop you are looking at solid or not solid.");
-	RegConsoleCmd("v_stack", Command_Stack, "|CelMod| Stacks one prop on the x, y and z axis.");
+	RegConsoleCmd("v_stack", Command_Stack, "|CelMod| Copies the prop you are looking at, moved by x, y and z: !stack <x> <y> <z> [copies].");
 	RegConsoleCmd("v_stackinfo", Command_StackInfo, "|CelMod| Gets the origin difference between props for help stacking.");
 	RegConsoleCmd("v_stand", Command_Stand, "|CelMod| Resets the angles on the prop you are looking at.");
 	RegConsoleCmd("v_straight", Command_Stand, "|CelMod| Resets the angles on the prop you are looking at.");
@@ -1334,83 +1334,111 @@ public Action Command_Solid(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+//!stack <x> <y> <z> [copies]: copies the prop you're looking at, each copy moved by x, y and z from the one before
+//(world axes, the same numbers !stackinfo gives for two props). One copy unless a count is given, up to 10.
 public Action Command_Stack(int iClient, int iArgs)
 {
-	char sArgs[3][32], sEntity[4][64];
-	float fAngles[3], fFinalOrigin[3], fOrigin[3];
+	char sArg[32], sEntity[4][64];
+	float fAngles[3], fOffset[3], fOrigin[3];
 	int iColor[4];
 	
-	if (iArgs < 4)
+	if (iArgs < 3)
 	{
 		Cel_ReplyToCommand(iClient, "%t", "CMD_Stack");
 		return Plugin_Handled;
 	}
 	
-	if (Cel_GetClientAimTarget(iClient) == -1)
+	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (iProp == -1)
 	{
 		Cel_NotLooking(iClient);
 		return Plugin_Handled;
 	}
 	
-	GetCmdArg(1, sArgs[0], sizeof(sArgs[]));
-	GetCmdArg(2, sArgs[1], sizeof(sArgs[]));
-	GetCmdArg(3, sArgs[2], sizeof(sArgs[]));
-	
-	int iProp = Cel_GetClientAimTarget(iClient);
-	
-	if (Cel_CanEdit(iClient, iProp))
+	for (int i = 0; i < 3; i++)
 	{
-		if(Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "dynamic"))
-		{
-			Entity_GetClassName(iProp, sEntity[0], sizeof(sEntity[]));
-			Entity_GetName(iProp, sEntity[1], sizeof(sEntity[]));
-			Entity_GetModel(iProp, sEntity[2], sizeof(sEntity[]));
-			
-			Cel_GetPropName(iProp, sEntity[3], sizeof(sEntity[3]));
-			
-			Entity_GetRenderColor(iProp, iColor);
-			
-			Cel_GetEntityAngles(iProp, fAngles);
-			
-			Cel_GetEntityOrigin(iProp, fOrigin);
-			
-			for(int i = 0; i < StringToInt(sArgs[0]); i++)
-			{
-				if (!Cel_CheckPropCount(iClient))
-				{
-					Cel_ReplyToCommand(iClient, "%t", "MaxPropLimit", Cel_GetPropCount(iClient));
-					return Plugin_Handled;
-				}
-				
-				fFinalOrigin[0] = fOrigin[0] += StringToFloat(sArgs[0]);
-				fFinalOrigin[1] = fOrigin[1] += StringToFloat(sArgs[1]);
-				fFinalOrigin[2] = fOrigin[2] += StringToFloat(sArgs[2]);
-				
-				int iNewProp = Cel_SpawnProp(iClient, sEntity[3], "prop_physics_override", sEntity[2], fAngles, fFinalOrigin, iColor[0], iColor[1], iColor[2], iColor[3]);
-				
-				Entity_SetClassName(iNewProp, sEntity[0]);
-				Entity_SetName(iNewProp, sEntity[1]);
-				
-				Entity_SetSpawnFlags(iNewProp, Entity_GetSpawnFlags(iProp));
-				Entity_SetSkin(iNewProp, Entity_GetSkin(iProp));
-				Cel_SetMotion(iNewProp, Cel_GetMotion(iProp));
-				Cel_SetSolid(iNewProp, Cel_IsSolid(iProp));
-				Cel_SetBreakable(iNewProp, Cel_IsBreakable(iProp));
-				
-				Cel_SetRenderFX(iNewProp, Cel_GetRenderFX(iProp));
-				
-				Cel_SetColorFade(iNewProp, Cel_IsFading(iProp), g_iFadeColor[iProp][0], g_iFadeColor[iProp][1], g_iFadeColor[iProp][2], g_iFadeColor[iProp][3], g_iFadeColor[iProp][4], g_iFadeColor[iProp][5]);
-				Cel_SetRainbow(iNewProp, Cel_IsRainbow(iProp));
-			}
-			
-			Cel_ReplyToCommandEntity(iClient, iProp, "%t", "StackedProps", 1);
-		}else{
-			Cel_ReplyToCommand(iClient, "%t", "CantUseCommand-Prop");
-			return Plugin_Handled;
-		}
-	} else {
+		GetCmdArg(i + 1, sArg, sizeof(sArg));
+		fOffset[i] = StringToFloat(sArg);
+	}
+	
+	int iCopies = 1;
+	
+	if (iArgs >= 4)
+	{
+		GetCmdArg(4, sArg, sizeof(sArg));
+		iCopies = StringToInt(sArg);
+		
+		if (iCopies < 1) iCopies = 1;
+		if (iCopies > 10) iCopies = 10;
+	}
+	
+	if (fOffset[0] == 0.0 && fOffset[1] == 0.0 && fOffset[2] == 0.0)
+	{
+		Cel_ReplyToCommand(iClient, "Give an offset to stack by, e.g. {green}[tag]stack 0 0 50{default} puts a copy 50 units above. {green}[tag]stackinfo{default} on two props tells you theirs.");
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CanEdit(iClient, iProp))
+	{
 		Cel_NotYours(iClient, iProp);
 		return Plugin_Handled;
+	}
+	
+	bool bDynamic = Cel_CheckEntityType(iProp, "dynamic");
+	
+	if (!bDynamic && !Cel_CheckEntityType(iProp, "physics"))
+	{
+		Cel_ReplyToCommand(iClient, "%t", "CantUseCommand-Prop");
+		return Plugin_Handled;
+	}
+	
+	Entity_GetClassName(iProp, sEntity[0], sizeof(sEntity[]));
+	Entity_GetName(iProp, sEntity[1], sizeof(sEntity[]));
+	Entity_GetModel(iProp, sEntity[2], sizeof(sEntity[]));
+	Cel_GetPropName(iProp, sEntity[3], sizeof(sEntity[]));
+	Entity_GetRenderColor(iProp, iColor);
+	Cel_GetEntityAngles(iProp, fAngles);
+	Cel_GetEntityOrigin(iProp, fOrigin);
+	
+	int iStacked = 0;
+	
+	for (int i = 0; i < iCopies; i++)
+	{
+		if (!Cel_CheckPropCount(iClient))
+		{
+			Cel_ReplyToCommand(iClient, "%t", "MaxPropLimit", Cel_GetPropCount(iClient));
+			break;
+		}
+		
+		AddVectors(fOrigin, fOffset, fOrigin);
+		
+		int iNewProp = Cel_SpawnProp(iClient, sEntity[3], bDynamic ? "prop_dynamic_override" : "prop_physics_override", sEntity[2], fAngles, fOrigin, iColor[0], iColor[1], iColor[2], iColor[3]);
+		
+		// Not allowed there (an event area, for example): the rest would be too.
+		if (iNewProp == -1)
+		{
+			break;
+		}
+		
+		Entity_SetClassName(iNewProp, sEntity[0]);
+		Entity_SetName(iNewProp, sEntity[1]);
+		
+		Entity_SetSpawnFlags(iNewProp, Entity_GetSpawnFlags(iProp));
+		Entity_SetSkin(iNewProp, Entity_GetSkin(iProp));
+		Cel_SetMotion(iNewProp, Cel_GetMotion(iProp));
+		Cel_SetSolid(iNewProp, Cel_IsSolid(iProp));
+		Cel_SetBreakable(iNewProp, Cel_IsBreakable(iProp));
+		Cel_SetRenderFX(iNewProp, Cel_GetRenderFX(iProp));
+		Cel_SetColorFade(iNewProp, Cel_IsFading(iProp), g_iFadeColor[iProp][0], g_iFadeColor[iProp][1], g_iFadeColor[iProp][2], g_iFadeColor[iProp][3], g_iFadeColor[iProp][4], g_iFadeColor[iProp][5]);
+		Cel_SetRainbow(iNewProp, Cel_IsRainbow(iProp));
+		
+		iStacked++;
+	}
+	
+	if (iStacked > 0)
+	{
+		Cel_ReplyToCommandEntity(iClient, iProp, "%t", "StackedProps", iStacked);
 	}
 	
 	return Plugin_Handled;
