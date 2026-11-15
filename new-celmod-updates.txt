@@ -359,3 +359,7 @@
 		   taking one out puts it where you aim.
 		 - Emblems, hats, celweps, cleers boxes and hobos can't be recolored, reskinned, re-modelled or copied.
 		 - Turning off an emblem while it's in your hand no longer leaves your gravity gun invisible.
+		 - Emblem boxes held when the map changes give their emblem again (the end-of-map scoreboard made it miss), and a
+		   box goes to whoever held it last.
+		 - Automatic emblem drops scale with the players on the server (cm_drop_per_player, 0.5 boxes each, up to
+		   cm_drop_count), and are super rare in the last 10 minutes of a map (cm_drop_end_minutes, cm_drop_end_chance).

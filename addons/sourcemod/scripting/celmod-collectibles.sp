@@ -160,6 +160,12 @@ char g_sBoothModel[PLATFORM_MAX_PATH];
 char g_sDropModel[PLATFORM_MAX_PATH];
 
 int g_iHeldBox[MAXPLAYERS + 1];
+//Emblem boxes that have been held, by box: who held it last, when, and which emblem it holds. Kept outside the entity,
+//because when the map ends the box itself may already be gone. [userid, item, time]
+StringMap g_smBoxHolds;
+ConVar g_cvDropPerPlayer;
+ConVar g_cvDropEndMinutes;
+ConVar g_cvDropEndChance;
 float g_fHeldBoxTime[MAXPLAYERS + 1];
 char g_sCanisterModel[PLATFORM_MAX_PATH];
 int g_iCelWepItem[MAXPLAYERS + 1];
@@ -443,6 +449,9 @@ public void OnPluginStart()
 	g_cvDigMoneyMax = CreateConVar("cm_dig_money_max", "1500", "Most cleers in a dug up money box.", _, true, 0.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
 	g_cvDropInterval = CreateConVar("cm_drop_interval", "0", "Minutes between automatic emblem drops. 0 disables automatic drops.", _, true, 0.0);
+	g_cvDropPerPlayer = CreateConVar("cm_drop_per_player", "0.5", "Automatic drops: emblem boxes per player on the server (0.5 = one box for every two players), at least 1 and at most cm_drop_count.", _, true, 0.0);
+	g_cvDropEndMinutes = CreateConVar("cm_drop_end_minutes", "10", "Automatic drops in the last this many minutes of a map are super rare (cm_drop_end_chance). 0 turns this off.", _, true, 0.0);
+	g_cvDropEndChance = CreateConVar("cm_drop_end_chance", "0.05", "Chance an automatic drop still happens in the last minutes of a map (0.05 = 5%).", _, true, 0.0, true, 1.0);
 	g_cvDropMinPlayers = CreateConVar("cm_drop_min_players", "2", "Players needed on the server for an automatic emblem drop.", _, true, 1.0);
 	g_cvDropRadius = CreateConVar("cm_drop_radius", "1200.0", "How far from a player or land a crate can fall.", _, true, 64.0);
 	g_cvXPEvent = CreateConVar("cm_tactics_xp_event", "50", "Tactics experience for claiming an event reward (the end of a maze or parkour course).", _, true, 0.0);
@@ -2530,6 +2539,22 @@ public Action Timer_Think(Handle hTimer)
 
 				g_iHeldBox[i] = EntIndexToEntRef(iHeld);
 				g_fHeldBoxTime[i] = GetGameTime();
+
+				// Who held this box last, and which emblem it holds (the box may be gone by the map's end).
+				char sBox[16];
+				any aHold[3];
+
+				IntToString(EntIndexToEntRef(iHeld), sBox, sizeof(sBox));
+				aHold[0] = GetClientUserId(i);
+				aHold[1] = g_iEntItem[iHeld];
+				aHold[2] = GetGameTime();
+
+				if (g_smBoxHolds == null)
+				{
+					g_smBoxHolds = new StringMap();
+				}
+
+				g_smBoxHolds.SetArray(sBox, aHold, 3);
 			}
 		}
 
@@ -2808,7 +2833,22 @@ public Action Timer_Minute(Handle hTimer)
 
 	if (g_cvDropInterval.IntValue > 0 && g_iMinutesSinceDrop >= g_cvDropInterval.IntValue && iPlayers >= g_cvDropMinPlayers.IntValue)
 	{
-		StartDrop(g_cvDropCount.IntValue);
+		int iLeft;
+
+		// Right before the map ends, a drop is super rare: there'd be no time to grab a box and hold it.
+		if (g_cvDropEndMinutes.IntValue > 0 && GetMapTimeLeft(iLeft) && iLeft > 0 && iLeft <= g_cvDropEndMinutes.IntValue * 60
+			&& GetRandomFloat(0.0, 1.0) >= g_cvDropEndChance.FloatValue)
+		{
+			g_iMinutesSinceDrop = 0;
+		} else {
+			// As many boxes as there are players to grab them: cm_drop_per_player each, 1 to cm_drop_count.
+			int iBoxes = RoundToNearest(float(iPlayers) * g_cvDropPerPlayer.FloatValue);
+
+			if (iBoxes < 1) iBoxes = 1;
+			if (iBoxes > g_cvDropCount.IntValue) iBoxes = g_cvDropCount.IntValue;
+
+			StartDrop(iBoxes);
+		}
 	}
 
 	return Plugin_Continue;
@@ -9391,18 +9431,55 @@ void BinJunk(int iJunk, const float fWhere[3])
 // when the map ends) keeps the emblem inside.
 public void OnMapEnd()
 {
-	for (int i = 1; i <= MaxClients; i++)
+	// Each box goes to whoever held it last, if they were still holding it when the map ended. The end-of-map
+	// scoreboard (mp_chattime) comes first, and the gravity gun lets go during it, so that time is allowed for.
+	ConVar cvChat = FindConVar("mp_chattime");
+	float fWindow = 2.0 + (cvChat != null ? cvChat.FloatValue : 10.0);
+
+	if (g_smBoxHolds != null)
 	{
-		int iBox = EntRefToEntIndex(g_iHeldBox[i]);
+		StringMapSnapshot smsBoxes = g_smBoxHolds.Snapshot();
+		char sBox[16];
+		any aHold[3];
 
-		g_iHeldBox[i] = INVALID_ENT_REFERENCE;
-
-		if (!IsRealClient(i) || iBox == INVALID_ENT_REFERENCE || !g_bDropBox[iBox] || GetGameTime() - g_fHeldBoxTime[i] > 1.5)
+		for (int b = 0; b < smsBoxes.Length; b++)
 		{
-			continue;
+			smsBoxes.GetKey(b, sBox, sizeof(sBox));
+
+			if (!g_smBoxHolds.GetArray(sBox, aHold, 3))
+			{
+				continue;
+			}
+
+			int iClient = GetClientOfUserId(aHold[0]), iItem = aHold[1];
+
+			if (!IsRealClient(iClient) || GetGameTime() - view_as<float>(aHold[2]) > fWindow || iItem < 0 || iItem >= g_iItemCount)
+			{
+				continue;
+			}
+
+			// Won once only (the entity, if it still exists, is spent).
+			int iBox = EntRefToEntIndex(StringToInt(sBox));
+
+			if (iBox != INVALID_ENT_REFERENCE && iBox > MaxClients && iBox <= MAXENTITIES)
+			{
+				g_bDropBox[iBox] = false;
+			}
+
+			Cel_AddXP(iClient, g_cvXPBox.IntValue);
+			SetOwned(iClient, iItem, GetOwned(iClient, iItem) + 1);
+
+			Cel_PrintToChat(iClient, "You kept your emblem box: a {green}%s{default} emblem is yours! Type {green}!emblem %s{default} to spawn it.", g_Items[iItem].sName, g_Items[iItem].sId);
 		}
 
-		ClaimDropBox(i, iBox, "You kept your emblem box");
+		delete smsBoxes;
+
+		g_smBoxHolds.Clear();
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_iHeldBox[i] = INVALID_ENT_REFERENCE;
 	}
 
 	// Boxes left lying around (in a land or not) are lost: only the ones being held are kept.
