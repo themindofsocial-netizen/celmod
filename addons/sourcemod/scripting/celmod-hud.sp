@@ -125,6 +125,12 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 	
 	if (sRealCommand[0] == '!')
 	{
+		//Private commands (a button's passcode) are never shown to everyone in the command feed.
+		if (IsPrivateCommand(sRealCommand))
+		{
+			return Plugin_Handled;
+		}
+		
 		g_alCommands.PushString(sRealCommand);
 		
 		if(g_alCommands.Length >= 6)
@@ -136,6 +142,31 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 	}
 	
 	return Plugin_Continue;
+}
+
+bool IsPrivateCommand(const char[] sText)
+{
+	static const char sPrivate[][] = { "setpass", "pass" };
+	char sName[32];
+	
+	strcopy(sName, sizeof(sName), sText[1]);
+	
+	int iSpace = FindCharInString(sName, ' ');
+	
+	if (iSpace != -1)
+	{
+		sName[iSpace] = '\0';
+	}
+	
+	for (int i = 0; i < sizeof(sPrivate); i++)
+	{
+		if (StrEqual(sName, sPrivate[i], false))
+		{
+			return true;
+		}
+	}
+	
+	return false;
 }
 
 public Action Command_Switch(int iClient, int iArgs)
