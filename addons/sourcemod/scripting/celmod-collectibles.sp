@@ -245,6 +245,7 @@ ConVar g_cvDropCount;
 ConVar g_cvDropDelay;
 ConVar g_cvThirdPersonAimFix;
 ConVar g_cvBoothAlpha;
+ConVar g_cvBoothChance;
 ConVar g_cvDropInterval;
 ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
@@ -384,6 +385,7 @@ public void OnPluginStart()
 	}
 
 	g_cvThirdPersonAimFix = CreateConVar("cm_thirdperson_aimfix", "1", "1 = keep the !thirdperson view following the player's aim. Set 0 if the view acts strangely.", _, true, 0.0, true, 1.0);
+	g_cvBoothChance = CreateConVar("cm_powerbooth_chance", "0.333", "Chance the Power Booth appears on a map (1 = every map). Admins can still place it with !powerbooth.", _, true, 0.0, true, 1.0);
 	g_cvBoothAlpha = CreateConVar("cm_powerbooth_alpha", "90", "How see-through the Power Booth is (0 invisible, 255 solid). Lower is harder to spot.", _, true, 0.0, true, 255.0);
 	g_cvAura = CreateConVar("cm_emblem_aura", "1", "1 = an emblem held out shows its own aura around the player.", _, true, 0.0, true, 1.0);
 	g_cvDropDelay = CreateConVar("cm_drop_delay", "3.0", "Seconds between one emblem box and the next in a drop.", _, true, 0.0, true, 60.0);
@@ -6960,6 +6962,13 @@ public Action Command_PlayerModel(int iClient, int iArgs)
 public Action Timer_SpawnBooth(Handle hTimer)
 {
 	float fSpot[3];
+
+	// The Power Booth only turns up on about one map in three, which makes finding it rarer.
+	if (GetRandomFloat(0.0, 1.0) > g_cvBoothChance.FloatValue)
+	{
+		LogMessage("|CelMod| The Power Booth doesn't appear on this map (cm_powerbooth_chance).");
+		return Plugin_Stop;
+	}
 
 	// Hidden away: of many open spots in the air, the one furthest from both the Guess Booth and the spawn points.
 	if (FindHiddenBoothSpot(fSpot))
