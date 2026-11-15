@@ -1040,9 +1040,8 @@ void AddTacticsXP(int iClient, int iAmount)
 	{
 		SaveTactics(iClient);
 		
+		//Just the bell: the new level shows on the HUD, nothing is said in chat.
 		EmitSoundToClient(iClient, "buttons/bell1.wav");
-		
-		Cel_PrintToChat(iClient, "Tactics level up! You are now {green}level %d{default}.", g_iTacticsLevel[iClient]);
 	}
 }
 

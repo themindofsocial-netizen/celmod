@@ -329,3 +329,4 @@
 		 - Fixed "Invalid command" showing when you spawn a prop by typing its name.
 		 - A land owner's !delall also clears their build team's props inside their land (teammates are told how many).
 		 - Fixed land lookups missing the player in the last server slot.
+		 - Levelling up no longer says so in chat (the bell still rings and the HUD shows the new level).
