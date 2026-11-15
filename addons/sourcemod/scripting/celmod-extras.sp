@@ -893,7 +893,7 @@ public Action Command_Text(int iClient, int iArgs)
 	static const char sSet1[] = "abcdefghijklmnopqrstuvwxyz0123";
 	static const char sSet2[] = "456789!?:-()";
 	char sText[64], sDisplay[64], sSkipped[32];
-	float fHit[3], fEyes[3], fAngles[3], fRight[3], fBack[3], fPos[3];
+	float fHit[3], fEyes[3], fAngles[3], fPos[3];
 	int iPrice;
 	
 	if (iClient < 1 || !IsClientInGame(iClient))
@@ -933,32 +933,77 @@ public Action Command_Text(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	// The screens are laid out to the player's right, centred on where they aim, standing upright and facing them.
-	float fWidth = bSmall ? 10.0 : 22.0, fRaise = bSmall ? 0.0 : 5.87;
+	// The screens lie flat on the surface under the crosshair (wall, floor, ceiling or slope), facing out of it, the row
+	// centred on the crosshair. Text "up" is the world's up on walls and slopes; on a floor it points the way the player
+	// faces, and on a ceiling back towards them, so it always reads upright and left to right from where they stand.
+	float fWidth = bSmall ? 10.0 : 22.0;
+	float fNormal[3], fUp[3], fForward[3], fInto[3], fRow[3], fFlat[3], fPropAngles[3];
 	
-	Cel_GetCrosshairHitOrigin(iClient, fHit);
 	GetClientEyePosition(iClient, fEyes);
 	GetClientEyeAngles(iClient, fAngles);
 	
-	fAngles[0] = 0.0;
-	fAngles[2] = 0.0;
+	Handle hTrace = TR_TraceRayFilterEx(fEyes, fAngles, MASK_SOLID, RayType_Infinite, Cel_FilterPlayer, iClient);
 	
-	GetAngleVectors(fAngles, fBack, fRight, NULL_VECTOR);
-	NegateVector(fBack);
-	
-	// Turned to the player's own yaw, the screen faces back at them and its letters read left to right along the row.
-	// (Measured in game: at the player's yaw minus 90 they stood across the row like dominoes, fronts toward its start.)
-	float fPropAngles[3];
-	
-	fPropAngles[1] = fAngles[1];
-	
-	// Pulled back off a wall a little so the screens don't sink into it.
-	for (int k = 0; k < 3; k++)
+	if (!TR_DidHit(hTrace))
 	{
-		fHit[k] += fBack[k] * 2.0;
+		delete hTrace;
+		Cel_ReplyToCommand(iClient, "Aim at a wall, floor or ceiling to write on it.");
+		return Plugin_Handled;
 	}
 	
-	fHit[2] += fRaise;
+	TR_GetEndPosition(fHit, hTrace);
+	TR_GetPlaneNormal(hTrace, fNormal);
+	delete hTrace;
+	
+	NormalizeVector(fNormal, fNormal);
+	
+	// The player's facing, flat.
+	fFlat[0] = 0.0;
+	fFlat[1] = fAngles[1];
+	fFlat[2] = 0.0;
+	GetAngleVectors(fFlat, fForward, NULL_VECTOR, NULL_VECTOR);
+	
+	if (FloatAbs(fNormal[2]) < 0.7)
+	{
+		fUp[0] = 0.0; fUp[1] = 0.0; fUp[2] = 1.0;
+	} else if (fNormal[2] > 0.0) {
+		fUp = fForward;
+	} else {
+		fUp[0] = -fForward[0]; fUp[1] = -fForward[1]; fUp[2] = 0.0;
+	}
+	
+	// Up, kept flat against the surface.
+	float fAlong = GetVectorDotProduct(fUp, fNormal);
+	
+	for (int k = 0; k < 3; k++)
+	{
+		fUp[k] -= fNormal[k] * fAlong;
+	}
+	
+	NormalizeVector(fUp, fUp);
+	
+	// The row runs along the text's right: up x normal.
+	GetVectorCrossProduct(fUp, fNormal, fRow);
+	NormalizeVector(fRow, fRow);
+	
+	// The screen's front is its local -X: so its +X points into the surface, and its up (local +Z) is fUp, with the roll
+	// worked out from the up vector the pitch and yaw alone would give.
+	float fRight0[3], fUp0[3];
+	
+	NegateVector(fNormal);
+	fInto = fNormal;
+	NegateVector(fNormal);
+	
+	GetVectorAngles(fInto, fPropAngles);
+	fPropAngles[2] = 0.0;
+	GetAngleVectors(fPropAngles, NULL_VECTOR, fRight0, fUp0);
+	fPropAngles[2] = RadToDeg(ArcTangent2(GetVectorDotProduct(fUp, fRight0), GetVectorDotProduct(fUp, fUp0)));
+	
+	// Sitting on the surface (half the screen's thickness out of it), with the middle of the characters on the crosshair.
+	for (int k = 0; k < 3; k++)
+	{
+		fHit[k] += fNormal[k] * 0.6 - fUp[k] * 5.0;
+	}
 	
 	int iSpawned = 0, iSkippedCount = 0;
 	
@@ -996,12 +1041,12 @@ public Action Command_Text(int iClient, int iArgs)
 			break;
 		}
 		
-		// Character i sits (i - middle) widths to the right of the crosshair.
+		// Character i sits (i - middle) widths along the row from the crosshair.
 		float fShift = (float(i) - float(iLength - 1) / 2.0) * fWidth;
 		
 		for (int k = 0; k < 3; k++)
 		{
-			fPos[k] = fHit[k] + fRight[k] * fShift;
+			fPos[k] = fHit[k] + fRow[k] * fShift;
 		}
 		
 		char sModel[64], sAlias[16];

@@ -343,3 +343,5 @@
 		 - Fixed a server crash: copying an effect cel (!fire, !effect) made an empty copy, and deleting that copy deleted
 		   the world. Copies of effects are now real effects, and an effect's attached part is only ever acted on while it
 		   still exists.
+		 - !text lies flat on the surface you aim at (walls, floors, ceilings and slopes), facing out of it, centred on your
+		   crosshair and reading upright and left to right from where you stand.
