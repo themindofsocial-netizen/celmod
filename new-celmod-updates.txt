@@ -315,3 +315,9 @@
 		   the plugins by tools/export_commands.py, with a search box.
 		 - +move and +copy follow your crosshair: the prop is held out in front of you like the gravity gun (the spot you
 		   grabbed stays under your crosshair, at the same distance), instead of only moving with your movement keys.
+		 - New plugin celmod-mapdownloads: each map's own custom textures, sky and models (that the server has) are sent to
+		   players, so maps don't show pink textures and error models for new players. What a map needs but the server
+		   lacks is listed in data/celmod/missing_downloads/<map>.txt; tools/fetch_missing_downloads.sh fetches those from
+		   the FastDL into the server.
+		 - The download list works on Linux servers: Windows line endings and \ in paths no longer stop files from being
+		   sent, and the server log says how many were sent and which are missing.

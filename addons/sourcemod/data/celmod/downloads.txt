@@ -1,5 +1,5 @@
-materials\celmod\cm_overlay2.vmt
-materials\celmod\cm_overlay2.vtf
+materials/celmod/cm_overlay2.vmt
+materials/celmod/cm_overlay2.vtf
 models/celmod/phys8.dx80.vtx
 models/celmod/phys8.dx90.vtx
 models/celmod/phys8.mdl

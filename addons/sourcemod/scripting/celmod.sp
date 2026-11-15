@@ -999,31 +999,47 @@ public int Native_DownloadClientFiles(Handle hPlugin, int iNumParams)
 		File fDownloadFiles = OpenFile(sPath, "r");
 		
 		char sBuffer[256];
+		int iAdded = 0, iMissing = 0;
 		
-		while (fDownloadFiles.ReadLine(sBuffer, sizeof(sBuffer)))
+		while (!fDownloadFiles.EndOfFile() && fDownloadFiles.ReadLine(sBuffer, sizeof(sBuffer)))
 		{
-			int iLen = strlen(sBuffer);
+			//Works whatever the file was saved with: Windows line endings (\r\n), spaces, and \ for folders, which
+			//Linux doesn't understand (a file on a Linux server is never found with them, so it's never sent).
+			TrimString(sBuffer);
+			ReplaceString(sBuffer, sizeof(sBuffer), "\\", "/");
 			
-			if (sBuffer[iLen-1] == '\n')
+			if (sBuffer[0] == '\0' || (sBuffer[0] == '/' && sBuffer[1] == '/'))
 			{
-				sBuffer[--iLen] = '\0';
+				continue;
 			}
 			
 			if (FileExists(sBuffer))
 			{
 				AddFileToDownloadsTable(sBuffer);
+				iAdded++;
+				
+				if(StrContains(sBuffer, ".mdl", false) != -1)
+				{
+					PrecacheModel(sBuffer, true);
+				}
+			} else {
+				//Linux is case sensitive: a file named differently in upper/lower case counts as missing too.
+				if (iMissing < 20)
+				{
+					LogMessage("|CelMod| Download list: '%s' isn't on the server, so players can't download it.", sBuffer);
+				}
+				
+				iMissing++;
 			}
-			
-			if(StrContains(sBuffer, ".mdl", false) != -1)
-			{
-				PrecacheModel(sBuffer, true);
-			}
-			
-			if (fDownloadFiles.EndOfFile())
-			{
-				fDownloadFiles.Close();
-				break;
-			}
+		}
+		
+		fDownloadFiles.Close();
+		
+		PrintToServer("|CelMod| Download list: %d files sent to players%s", iAdded, iMissing > 0 ? " (some are missing on the server, see the SourceMod log)." : ".");
+		
+		if (iMissing > 20)
+		{
+			LogMessage("|CelMod| Download list: %d more files are missing.", iMissing - 20);
 		}
 	}
 	
