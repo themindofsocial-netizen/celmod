@@ -413,7 +413,7 @@ public void OnPluginStart()
 	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
 	g_cvXmasForce = CreateConVar("cm_xmas_gift_force", "0", "Testing: 1 hands out the Christmas gift on any day, not just December 25th.", _, true, 0.0, true, 1.0);
 	g_cvXmasItems = CreateConVar("cm_xmas_gift_items", "", "The festive items the Christmas gift is picked from (kind:id, comma separated). Empty uses every item marked \"xmasgift\" \"1\" in collectibles.txt.");
-	g_cvCaneMaxHealth = CreateConVar("cm_candycane_max_health", "100", "Candy canes heal up to this much health.", _, true, 1.0);
+	g_cvCaneMaxHealth = CreateConVar("cm_candycane_max_health", "0", "Candy canes heal up to this much health (0 = the player's full health).", _, true, 1.0);
 	g_cvGiftList = CreateConVar("cm_emblem_gift_list", "fire,water,speed,orange,grey,peach,pink,crimson,lime,cyan", "The emblems the one time free emblem is picked from (ids, comma separated): the basic solid colour ones.");
 	g_cvGiftDays = CreateConVar("cm_emblem_gift_days", "3", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
 
@@ -2690,11 +2690,11 @@ public Action Timer_Think(Handle hTimer)
 		{
 			int iHealth = GetClientHealth(i);
 
-			if (iHealth < 100)
+			if (iHealth < ClientMaxHealth(i))
 			{
 				iHealth += RoundToFloor(g_Items[iItem].fValue);
 
-				SetEntityHealth(i, iHealth > 100 ? 100 : iHealth);
+				SetEntityHealth(i, iHealth > ClientMaxHealth(i) ? ClientMaxHealth(i) : iHealth);
 			}
 		}
 	}
@@ -4021,11 +4021,11 @@ void FireEmblemShot(int iClient, int iItem)
 	// Pink: heals the player being aimed at.
 	if (StrEqual(sPower, "medic"))
 	{
-		if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && IsPlayerAlive(iTarget) && GetClientHealth(iTarget) < 100)
+		if (iTarget > 0 && iTarget <= MaxClients && IsClientInGame(iTarget) && IsPlayerAlive(iTarget) && GetClientHealth(iTarget) < ClientMaxHealth(iTarget))
 		{
 			int iHealth = GetClientHealth(iTarget) + RoundToFloor(g_Items[iItem].fValue);
 
-			SetEntityHealth(iTarget, iHealth > 100 ? 100 : iHealth);
+			SetEntityHealth(iTarget, iHealth > ClientMaxHealth(iTarget) ? ClientMaxHealth(iTarget) : iHealth);
 
 			EmitSoundToAll(SOUND_HEAL, iTarget);
 		}
@@ -5756,11 +5756,11 @@ void SecondaryEmblemPower(int iClient, int iItem)
 	// Pink: heals the holder.
 	if (StrEqual(sPower, "medic"))
 	{
-		if (GetClientHealth(iClient) < 100)
+		if (GetClientHealth(iClient) < ClientMaxHealth(iClient))
 		{
 			int iHealth = GetClientHealth(iClient) + RoundToFloor(g_Items[iItem].fValue * 2.0);
 
-			SetEntityHealth(iClient, iHealth > 100 ? 100 : iHealth);
+			SetEntityHealth(iClient, iHealth > ClientMaxHealth(iClient) ? ClientMaxHealth(iClient) : iHealth);
 
 			EmitSoundToAll(SOUND_HEAL, iClient);
 		}
@@ -9742,7 +9742,7 @@ void UseHealthItem(int iClient, int iEntity, int iItem)
 
 	g_fNextCane[iClient] = GetGameTime() + 0.5;
 
-	int iHealth = GetClientHealth(iClient), iMax = g_cvCaneMaxHealth.IntValue;
+	int iHealth = GetClientHealth(iClient), iMax = g_cvCaneMaxHealth.IntValue > 0 ? g_cvCaneMaxHealth.IntValue : ClientMaxHealth(iClient);
 
 	if (iHealth >= iMax)
 	{
@@ -9753,4 +9753,12 @@ void UseHealthItem(int iClient, int iEntity, int iItem)
 	SetEntityHealth(iClient, (iHealth + g_Items[iItem].iUseHealth > iMax) ? iMax : iHealth + g_Items[iItem].iUseHealth);
 
 	EmitSoundToAll("items/smallmedkit1.wav", iEntity);
+}
+
+// A player's full health (225 on CelMod, set when they spawn; never under 100).
+int ClientMaxHealth(int iClient)
+{
+	int iMax = HasEntProp(iClient, Prop_Data, "m_iMaxHealth") ? GetEntProp(iClient, Prop_Data, "m_iMaxHealth") : 100;
+
+	return iMax < 100 ? 100 : iMax;
 }

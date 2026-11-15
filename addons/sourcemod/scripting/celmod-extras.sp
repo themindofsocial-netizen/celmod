@@ -54,6 +54,10 @@ float g_fNextBounce[MAXPLAYERS + 1];
 int g_iSpawnPointRef[MAXPLAYERS + 1] = {INVALID_ENT_REFERENCE, ...};
 int g_iDiedInLand[MAXPLAYERS + 1];
 ConVar g_cvSpawnPointModel;
+ConVar g_cvSpawnHealth;
+ConVar g_cvDoubleJump;
+bool g_bDoubleJumped[MAXPLAYERS + 1];
+int g_iLastButtons[MAXPLAYERS + 1];
 ConVar g_cvHoopieBounce;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
@@ -84,6 +88,10 @@ public void OnPluginStart()
 	
 	HookEvent("player_death", Event_SpawnPointDeath);
 	HookEvent("player_spawn", Event_SpawnPointSpawn);
+	HookEvent("player_spawn", Event_SpawnHealth);
+	
+	g_cvSpawnHealth = CreateConVar("cm_spawn_health", "225", "Health (and full health) players spawn with.", _, true, 1.0);
+	g_cvDoubleJump = CreateConVar("cm_double_jump", "300.0", "Upward speed of a double jump (jump again in the air). 0 turns double jumping off. Never in event areas.", _, true, 0.0);
 	
 	g_cvHoopieBounce = CreateConVar("cm_hoopie_bounce", "650", "How hard a hoopie bounces players off it.", _, true, 0.0, true, 3000.0);
 	
@@ -2066,6 +2074,84 @@ public Action Timer_BuildMessages(Handle hTimer)
 		
 		g_iLastLandIn[i] = iOwner;
 	}
+	
+	return Plugin_Continue;
+}
+
+//Spawn health: every player starts with cm_spawn_health (225), which is also their full health for healing.
+public void Event_SpawnHealth(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
+	
+	if (iClient > 0)
+	{
+		g_bDoubleJumped[iClient] = false;
+		
+		//A frame later, after the game has set its own spawn health.
+		RequestFrame(Frame_SpawnHealth, GetClientUserId(iClient));
+	}
+}
+
+public void Frame_SpawnHealth(any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+	
+	if (iClient < 1 || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return;
+	}
+	
+	int iHealth = g_cvSpawnHealth.IntValue;
+	
+	SetEntProp(iClient, Prop_Data, "m_iMaxHealth", iHealth);
+	SetEntityHealth(iClient, iHealth);
+}
+
+//Double jump: pressing jump again in the air gives one more jump, until the player lands. Not inside event areas
+//(mazes and parkour), unless the player is an admin with !zonebypass on.
+public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fVel[3], float fAngles[3], int &iWeapon)
+{
+	int iLast = g_iLastButtons[iClient];
+	
+	g_iLastButtons[iClient] = iButtons;
+	
+	if (g_cvDoubleJump.FloatValue <= 0.0 || !IsPlayerAlive(iClient) || IsFakeClient(iClient))
+	{
+		return Plugin_Continue;
+	}
+	
+	if (GetEntityFlags(iClient) & FL_ONGROUND)
+	{
+		g_bDoubleJumped[iClient] = false;
+		return Plugin_Continue;
+	}
+	
+	if (!(iButtons & IN_JUMP) || (iLast & IN_JUMP) || g_bDoubleJumped[iClient] || GetEntityMoveType(iClient) != MOVETYPE_WALK || GetEntProp(iClient, Prop_Data, "m_nWaterLevel") > 1)
+	{
+		return Plugin_Continue;
+	}
+	
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && !Cel_ZoneExempt(iClient))
+	{
+		float fFeet[3];
+		
+		GetClientAbsOrigin(iClient, fFeet);
+		fFeet[2] += 16.0;
+		
+		if (Cel_GetZoneType(fFeet) == CEL_ZONE_EVENT)
+		{
+			return Plugin_Continue;
+		}
+	}
+	
+	g_bDoubleJumped[iClient] = true;
+	
+	float fVelocity[3];
+	
+	GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fVelocity);
+	fVelocity[2] = g_cvDoubleJump.FloatValue;
+	
+	TeleportEntity(iClient, NULL_VECTOR, NULL_VECTOR, fVelocity);
 	
 	return Plugin_Continue;
 }

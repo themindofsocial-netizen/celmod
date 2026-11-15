@@ -247,3 +247,6 @@
 		   "This button requires a passcode" and use it with !pass <passcode>. Passcodes are saved with your build.
 		 - Map timer: the warning bell (ambient/alarms/warningbell1.wav), and "final warning" after the Metro Cop at 1 minute.
 		 - The Guess Booth's three props are holograms now: see-through cyan, flickering, projected from the floor.
+		 - Players spawn with 225 health (cm_spawn_health), which is also their full health for medkits, chargers, healing
+		   emblems and candy canes.
+		 - Double jump: press jump again in the air for one more jump (cm_double_jump). Not inside event areas.
