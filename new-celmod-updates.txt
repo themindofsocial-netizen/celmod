@@ -283,3 +283,10 @@
 		   .php pages automatically when the server loads them.
 		 - !timeleft: "|CelMod| Timeleft in map: 12:34", the time in green.
 		 - Announcements from the website show in chat as |CM| instead of |CelMod|.
+		 - Announcement rotation: set on the website's admin panel, the server shows one announcement every few minutes,
+		   going through the whole list in random order before repeating any.
+		 - !reportbug <what happened>: sends a bug report (with the map and where you were) to the website's admin panel
+		   (Bug Reports tab) and data/celmod/bugreports.txt. Admins on the server see it in chat. One a minute per player.
+		 - !pmute <name>: mutes a player just for you, voice and chat. Type it again (or !punmute) to unmute; !pmute alone
+		   lists who you've muted.
+		 - The Updater was removed: updates are installed by hand from the release zip.

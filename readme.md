@@ -6,7 +6,7 @@ Latest release is *3.0.0*.
 
 Built against SourceMod *1.12.0-git7198* and Metamod: Source *1.12.0-git1219*.
 
-This plugin uses [Updater](https://github.com/rockzehh/updater) to update its files, and is required.
+Updates are installed by hand: download the latest release zip and extract it over the server (keep your own `cfg/` and `data/celmod/` changes).
 This plugin uses [More Colors](https://forums.alliedmods.net/showthread.php?t=185016) for the text color, and [StudioHdr](https://forums.alliedmods.net/showthread.php?t=333857) for advanced model information. It is required if you want to recompile the plugin.
 
 ## Installation

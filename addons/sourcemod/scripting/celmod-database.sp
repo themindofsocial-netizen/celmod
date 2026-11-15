@@ -22,7 +22,7 @@
  * created automatically.
  */
 
-#define SCHEMA_QUERIES 18
+#define SCHEMA_QUERIES 19
 #define MIGRATION_QUERIES 12
 
 Database g_dbCelMod;
@@ -70,6 +70,17 @@ int g_iAnnounceID[MAX_ANNOUNCEMENTS];
 int g_iAnnounceRepeat[MAX_ANNOUNCEMENTS];
 bool g_bAnnounceOnJoin[MAX_ANNOUNCEMENTS];
 char g_sAnnounce[MAX_ANNOUNCEMENTS][256];
+
+//Rotation (admin panel, Announcements tab): every few minutes one of the announcements, in a shuffled order that
+//goes through the whole list before any is shown again.
+int g_iRotateMinutes;
+float g_fLastRotate;
+int g_iRotateBag[MAX_ANNOUNCEMENTS];
+int g_iRotateBagCount;
+int g_iRotateLastID;
+
+//!reportbug: one report a minute per player.
+float g_fLastBugReport[MAXPLAYERS + 1];
 StringMap g_smAnnounceShown;
 ConVar g_cvAnnouncePoll;
 Handle g_hAnnounceTimer;
@@ -89,6 +100,7 @@ char g_sSchema[SCHEMA_QUERIES][] = {
 	"CREATE TABLE IF NOT EXISTS cm_maps (map VARCHAR(64) NOT NULL, times_played INT UNSIGNED NOT NULL DEFAULT 0, last_played DATETIME NULL, PRIMARY KEY (map)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_announcements (id INT UNSIGNED NOT NULL AUTO_INCREMENT, message VARCHAR(255) NOT NULL, server_id INT NULL, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, show_on_join TINYINT(1) NOT NULL DEFAULT 0, active TINYINT(1) NOT NULL DEFAULT 1, starts_at DATETIME NULL, ends_at DATETIME NULL, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_updates (id INT UNSIGNED NOT NULL AUTO_INCREMENT, posted_on DATE NOT NULL, body TEXT NOT NULL, published TINYINT(1) NOT NULL DEFAULT 1, created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_posted (posted_on)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+	"CREATE TABLE IF NOT EXISTS cm_bug_reports (id INT UNSIGNED NOT NULL AUTO_INCREMENT, server_id INT NULL, steamid64 VARCHAR(20) NOT NULL, name VARCHAR(64) NOT NULL DEFAULT '', map VARCHAR(64) NOT NULL DEFAULT '', pos_x FLOAT NOT NULL DEFAULT 0, pos_y FLOAT NOT NULL DEFAULT 0, pos_z FLOAT NOT NULL DEFAULT 0, message VARCHAR(255) NOT NULL, status ENUM('open','fixed','closed') NOT NULL DEFAULT 'open', admin_note VARCHAR(255) NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_collectibles (server_id INT NOT NULL, content MEDIUMTEXT NOT NULL, file_hash INT NOT NULL DEFAULT 0, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (server_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_drop_pool (emblem_id VARCHAR(64) NOT NULL, droppable TINYINT(1) NOT NULL DEFAULT 1, updated_by VARCHAR(20) NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (emblem_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	"CREATE TABLE IF NOT EXISTS cm_drop_schedule (id INT UNSIGNED NOT NULL AUTO_INCREMENT, run_at DATETIME NOT NULL, boxes INT NOT NULL DEFAULT 5, repeat_minutes INT UNSIGNED NOT NULL DEFAULT 0, server_id INT NULL, active TINYINT(1) NOT NULL DEFAULT 1, last_run DATETIME NULL, note VARCHAR(128) NOT NULL DEFAULT '', created_by VARCHAR(20) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_due (active, run_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
@@ -148,6 +160,7 @@ public void OnPluginStart()
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Pre);
 	HookEvent("player_death", Event_StatsPlayerDeath);
 
+	RegConsoleCmd("v_reportbug", Command_ReportBug, "|CelMod| Reports a bug or glitch to the admins: !reportbug <what happened>.");
 	RegAdminCmd("cm_db_status", Command_DBStatus, ADMFLAG_ROOT, "|CelMod| Shows the shared database connection status.");
 }
 
@@ -281,6 +294,7 @@ public Action Timer_PollAnnouncements(Handle hTimer)
 
 	FormatEx(sQuery, sizeof(sQuery), "SELECT id, message, repeat_minutes, show_on_join, UNIX_TIMESTAMP() - UNIX_TIMESTAMP(created_at) FROM cm_announcements WHERE active = 1 AND (starts_at IS NULL OR starts_at <= NOW()) AND (ends_at IS NULL OR ends_at > NOW()) AND (server_id IS NULL OR server_id = %d) ORDER BY id LIMIT %d", g_cvServerID.IntValue, MAX_ANNOUNCEMENTS);
 
+	g_dbCelMod.Query(SQL_OnRotateSetting, "SELECT value FROM cm_site_settings WHERE name = 'announce_rotation'");
 	g_dbCelMod.Query(SQL_OnAnnouncements, sQuery);
 
 	PollEmblemDrops();
@@ -440,6 +454,151 @@ public void SQL_OnAnnouncements(Database dbDatabase, DBResultSet rsResults, cons
 			Announce(i);
 
 			g_smAnnounceShown.SetValue(sKey, GetEngineTime());
+		}
+	}
+
+	RotateAnnouncements();
+}
+
+//!reportbug <what happened>: saved for the admins (the website's admin panel, Bug Reports tab) with where the
+//player was standing. Without the database it goes to data/celmod/bugreports.txt so it's never lost.
+public Action Command_ReportBug(int iClient, int iArgs)
+{
+	char sMessage[256], sName[64], sEscMessage[520], sEscName[136], sEscMap[136], sQuery[1200];
+	float fPos[3];
+
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	GetCmdArgString(sMessage, sizeof(sMessage));
+	StripQuotes(sMessage);
+	TrimString(sMessage);
+
+	if (strlen(sMessage) < 8)
+	{
+		Cel_ReplyToCommand(iClient, "Found a bug or glitch? Say {green}!reportbug <what happened>{default}, e.g. {green}!reportbug my door cel won't open{default}.");
+		return Plugin_Handled;
+	}
+
+	if (g_fLastBugReport[iClient] > 0.0 && GetEngineTime() - g_fLastBugReport[iClient] < 60.0)
+	{
+		Cel_ReplyToCommand(iClient, "Thanks! Please wait a minute before sending another bug report.");
+		return Plugin_Handled;
+	}
+
+	g_fLastBugReport[iClient] = GetEngineTime();
+
+	GetClientName(iClient, sName, sizeof(sName));
+	GetClientAbsOrigin(iClient, fPos);
+
+	if (g_dbCelMod != null && g_sSteamID[iClient][0] != '\0' && g_dbCelMod.Escape(sMessage, sEscMessage, sizeof(sEscMessage)) && g_dbCelMod.Escape(sName, sEscName, sizeof(sEscName)) && g_dbCelMod.Escape(g_sMap, sEscMap, sizeof(sEscMap)))
+	{
+		FormatEx(sQuery, sizeof(sQuery), "INSERT INTO cm_bug_reports (server_id, steamid64, name, map, pos_x, pos_y, pos_z, message) VALUES (%d, '%s', '%s', '%s', %.1f, %.1f, %.1f, '%s')", g_cvServerID.IntValue, g_sSteamID[iClient], sEscName, sEscMap, fPos[0], fPos[1], fPos[2], sEscMessage);
+
+		g_dbCelMod.Query(SQL_Generic, sQuery);
+	}
+
+	char sPath[PLATFORM_MAX_PATH], sSteam[32];
+
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/bugreports.txt");
+
+	if (!GetClientAuthId(iClient, AuthId_Steam2, sSteam, sizeof(sSteam)))
+	{
+		strcopy(sSteam, sizeof(sSteam), "unknown");
+	}
+
+	LogToFileEx(sPath, "%N <%s> on %s at %.0f %.0f %.0f: %s", iClient, sSteam, g_sMap, fPos[0], fPos[1], fPos[2], sMessage);
+
+	// Admins on the server hear about it right away.
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i != iClient && IsClientInGame(i) && !IsFakeClient(i) && CheckCommandAccess(i, "cm_bugreports_notify", ADMFLAG_GENERIC))
+		{
+			Cel_PrintToChat(i, "Bug report from {green}%N{default}: %s", iClient, sMessage);
+		}
+	}
+
+	Cel_ReplyToCommand(iClient, "Thanks! Your bug report was sent to the admins.");
+
+	return Plugin_Handled;
+}
+
+public void SQL_OnRotateSetting(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aData)
+{
+	int iMinutes = 0;
+
+	if (rsResults != null && rsResults.FetchRow())
+	{
+		char sValue[16];
+
+		rsResults.FetchString(0, sValue, sizeof(sValue));
+		iMinutes = StringToInt(sValue);
+	}
+
+	// Just switched on (or changed): the first one comes after a full interval, not at once.
+	if (iMinutes != g_iRotateMinutes)
+	{
+		g_fLastRotate = GetEngineTime();
+	}
+
+	g_iRotateMinutes = iMinutes;
+}
+
+// Called after each refresh of the list: shows the next announcement in the rotation when it's due.
+void RotateAnnouncements()
+{
+	if (g_iRotateMinutes < 1 || g_iAnnounceCount < 1 || GetEngineTime() - g_fLastRotate < g_iRotateMinutes * 60.0)
+	{
+		return;
+	}
+
+	for (int iTries = 0; iTries < 2; iTries++)
+	{
+		// The bag is empty: a new shuffled round of every announcement, not starting with the one just shown.
+		if (g_iRotateBagCount < 1)
+		{
+			for (int i = 0; i < g_iAnnounceCount; i++)
+			{
+				g_iRotateBag[i] = g_iAnnounceID[i];
+			}
+
+			g_iRotateBagCount = g_iAnnounceCount;
+
+			for (int i = g_iRotateBagCount - 1; i > 0; i--)
+			{
+				int j = GetRandomInt(0, i), iSwap = g_iRotateBag[i];
+
+				g_iRotateBag[i] = g_iRotateBag[j];
+				g_iRotateBag[j] = iSwap;
+			}
+
+			if (g_iRotateBagCount > 1 && g_iRotateBag[g_iRotateBagCount - 1] == g_iRotateLastID)
+			{
+				int iSwap = g_iRotateBag[0];
+
+				g_iRotateBag[0] = g_iRotateBag[g_iRotateBagCount - 1];
+				g_iRotateBag[g_iRotateBagCount - 1] = iSwap;
+			}
+		}
+
+		// The next one still on the list (one deleted or paused on the website since is skipped).
+		while (g_iRotateBagCount > 0)
+		{
+			int iID = g_iRotateBag[--g_iRotateBagCount];
+
+			for (int i = 0; i < g_iAnnounceCount; i++)
+			{
+				if (g_iAnnounceID[i] == iID)
+				{
+					Announce(i);
+
+					g_iRotateLastID = iID;
+					g_fLastRotate = GetEngineTime();
+					return;
+				}
+			}
 		}
 	}
 }
@@ -756,6 +915,8 @@ public void SQL_OnSessionCreated(Database dbDatabase, DBResultSet rsResults, con
 /** Runs on every disconnect, including map changes. */
 public void OnClientDisconnect(int iClient)
 {
+	g_fLastBugReport[iClient] = 0.0;
+
 	char sQuery[512];
 
 	if (!g_bTracked[iClient])
