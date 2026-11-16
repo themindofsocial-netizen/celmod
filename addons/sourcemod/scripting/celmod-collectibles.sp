@@ -2365,7 +2365,7 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		}
 	}
 
-	int iItem = g_iActiveEmblem[iClient];
+	int iItem = g_bInEvent[iClient] ? -1 : g_iActiveEmblem[iClient];
 
 	if (iItem == -1 || !g_bHoldingGravGun[iClient] || !IsPlayerAlive(iClient))
 	{
@@ -2441,7 +2441,7 @@ public void Frame_Jump(any iUserId)
 		return;
 	}
 
-	int iItem = g_iActiveEmblem[iClient];
+	int iItem = g_bInEvent[iClient] ? -1 : g_iActiveEmblem[iClient];
 
 	if (iItem == -1)
 	{
@@ -2640,9 +2640,9 @@ public Action Timer_Think(Handle hTimer)
 
 		g_bInEvent[i] = (!IsZoneExempt(i) && ZoneTypeAt(fFeet) == CEL_ZONE_EVENT);
 
-		if (g_bInEvent[i] && !bWasInEvent && iItem != -1 && IsMovementPower(iItem))
+		if (g_bInEvent[i] && !bWasInEvent && iItem != -1)
 		{
-			Cel_PrintToChat(i, "Your {green}%s{default} emblem's power does not work in event areas.", g_Items[iItem].sName);
+			Cel_PrintToChat(i, "Your {green}%s{default} emblem does nothing in event areas: it's only shown in your hand.", g_Items[iItem].sName);
 		}
 
 		if (iWeapon > MaxClients && IsValidEntity(iWeapon))
@@ -2660,7 +2660,7 @@ public Action Timer_Think(Handle hTimer)
 		// shock on enemies and players) is held back. Throwing a prop the gravity gun is holding still works.
 		// It's held back with one change when that starts and undone once when it stops: changing the gun's
 		// (networked, predicted) next-attack time every frame made the gun and the player's animations stutter.
-		bool bHoldPunt = (g_cvTestPuntHold.BoolValue && g_bHoldingGravGun[i] && iItem != -1 && !StrEqual(g_Items[iItem].sPower, "none")
+		bool bHoldPunt = (g_cvTestPuntHold.BoolValue && !g_bInEvent[i] && g_bHoldingGravGun[i] && iItem != -1 && !StrEqual(g_Items[iItem].sPower, "none")
 			&& !(HasEntProp(iWeapon, Prop_Send, "m_bActive") && GetEntProp(iWeapon, Prop_Send, "m_bActive")));
 
 		if (bHoldPunt)
@@ -2741,7 +2741,8 @@ public Action Timer_Think(Handle hTimer)
 			}
 		}
 
-		if (!g_cvTestPowers.BoolValue)
+		// In an event area an emblem is only shown in the hand: none of its powers work.
+		if (!g_cvTestPowers.BoolValue || g_bInEvent[i])
 		{
 			iItem = -1;
 		}
@@ -2915,7 +2916,7 @@ public Action Timer_Minute(Handle hTimer)
 		iItem = g_iActiveEmblem[i];
 
 		// Gold emblem: pays its owner every minute it is enabled.
-		if (iItem != -1 && StrEqual(g_Items[iItem].sPower, "gold") && IsPlayerAlive(i))
+		if (iItem != -1 && StrEqual(g_Items[iItem].sPower, "gold") && IsPlayerAlive(i) && !g_bInEvent[i])
 		{
 			Cel_AddToClientBalance(i, RoundToFloor(g_Items[iItem].fValue));
 		}
@@ -6312,7 +6313,7 @@ public Action Hook_PlayerTakeDamage(int iVictim, int &iAttacker, int &iInflictor
 		return aResult;
 	}
 
-	int iItem = g_iActiveEmblem[iVictim];
+	int iItem = g_bInEvent[iVictim] ? -1 : g_iActiveEmblem[iVictim];
 
 	if (iItem == -1)
 	{

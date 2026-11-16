@@ -2690,6 +2690,12 @@ public int Native_SetMotion(Handle hPlugin, int iNumParams)
 	int iEntity = GetNativeCell(1);
 	bool bMotion = view_as<bool>(GetNativeCell(2));
 	
+	//A welded (parented) prop stays frozen: physics moving it while its parent carries it is a crash risk.
+	if (bMotion && IsValidEntity(iEntity) && HasEntProp(iEntity, Prop_Data, "m_hMoveParent") && GetEntPropEnt(iEntity, Prop_Data, "m_hMoveParent") != -1)
+	{
+		bMotion = false;
+	}
+	
 	bMotion ? AcceptEntityInput(iEntity, "enablemotion") : AcceptEntityInput(iEntity, "disablemotion");
 	
 	g_bMotion[iEntity] = bMotion;

@@ -72,6 +72,8 @@ ConVar g_cvHoopieBounce;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("SetEntityCollisionGroup");
+	
 	MarkNativeAsOptional("Cel_GetZoneType");
 	MarkNativeAsOptional("Cel_IsZoneExempt");
 	MarkNativeAsOptional("Cel_AddPlayerStat");
@@ -1382,6 +1384,10 @@ public Action Command_Weld(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
+	//A welded prop is carried by the other one: its own physics is frozen first, as a moving physics object that is
+	//also parented fights the hierarchy inside the physics engine.
+	Cel_SetMotion(iFirst, false);
+	
 	SetVariantString("!activator");
 	AcceptEntityInput(iFirst, "SetParent", iProp, iFirst);
 	
@@ -2422,6 +2428,8 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 					continue;
 				}
 				
+				Cel_SetMotion(iEntity, false);
+				
 				SetVariantString("!activator");
 				AcceptEntityInput(iEntity, "SetParent", iOther, iEntity);
 			}
@@ -2524,7 +2532,35 @@ public Action Timer_BuildMessages(Handle hTimer)
 
 void SetNoBlock(int iClient)
 {
-	SetEntProp(iClient, Prop_Send, "m_CollisionGroup", (g_cvNoBlock.BoolValue && PlayerNearby(iClient)) ? COLLISION_GROUP_PLAYER_NOBLOCK : COLLISION_GROUP_PLAYER_DEFAULT);
+	int iGroup = (g_cvNoBlock.BoolValue && PlayerNearby(iClient)) ? COLLISION_GROUP_PLAYER_NOBLOCK : COLLISION_GROUP_PLAYER_DEFAULT;
+	
+	if (GetEntProp(iClient, Prop_Send, "m_CollisionGroup") != iGroup)
+	{
+		SetCollisionGroupSafe(iClient, iGroup);
+	}
+}
+
+//The physics engine has to be told when an entity's collision group changes (CBaseEntity::SetCollisionGroup calls
+//CollisionRulesChanged): changing the value behind its back leaves its collision data stale, which can crash the
+//server inside the physics step. SourceMod's SetEntityCollisionGroup does it properly; the old way is only used if
+//this SourceMod lacks it, or if it once failed on this game (the line after the call is then never reached).
+bool g_bCollisionNativeTried = false;
+bool g_bCollisionNativeWorks = false;
+
+void SetCollisionGroupSafe(int iEntity, int iGroup)
+{
+	if (GetFeatureStatus(FeatureType_Native, "SetEntityCollisionGroup") == FeatureStatus_Available && (!g_bCollisionNativeTried || g_bCollisionNativeWorks))
+	{
+		g_bCollisionNativeTried = true;
+		g_bCollisionNativeWorks = false;
+		
+		SetEntityCollisionGroup(iEntity, iGroup);
+		
+		g_bCollisionNativeWorks = true;
+		return;
+	}
+	
+	SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", iGroup);
 }
 
 //Another living player close enough to touch soon (a little more than two player widths, and overlapping in height).

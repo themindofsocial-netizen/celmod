@@ -361,7 +361,9 @@ int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false,
 	
 	PrecacheModel(sModel);
 	
-	int iEntity = CreateEntityByName("prop_physics_override");
+	//A display only turns in place, so it has no physics at all: it is made not solid before it spawns, instead of
+	//changing a physics prop's solidity and collision group afterwards behind the physics engine's back (a crash risk).
+	int iEntity = CreateEntityByName("prop_dynamic_override");
 	
 	if (iEntity == -1)
 	{
@@ -369,8 +371,8 @@ int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false,
 	}
 	
 	DispatchKeyValue(iEntity, "model", sModel);
+	DispatchKeyValue(iEntity, "solid", "0");
 	
-	//A physics prop whose model is missing or has no physics removes itself while spawning.
 	if (!DispatchSpawn(iEntity) || !IsValidEntity(iEntity))
 	{
 		return -1;
@@ -387,13 +389,7 @@ int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false,
 		SetEntityRenderFx(iEntity, RENDERFX_HOLOGRAM);
 	}
 	
-	AcceptEntityInput(iEntity, "DisableMotion");
-	
 	SetEntProp(iEntity, Prop_Data, "m_takedamage", 0, 1);
-	
-	//Players and shots pass straight through it.
-	SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", 1);
-	SetEntProp(iEntity, Prop_Send, "m_nSolidType", 0);
 	
 	GetEntPropVector(iEntity, Prop_Send, "m_vecMins", fMins);
 	GetEntPropVector(iEntity, Prop_Send, "m_vecMaxs", fMaxs);

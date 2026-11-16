@@ -405,3 +405,9 @@
 		   never flicker; on the ground they stay see-through.
 		 - Cleers box amounts are shortened: looking at a box shows "Contains: 20M CL" instead of 20000000.
 		 - Cleers boxes can't be moved with +move.
+		 - Emblems do nothing in event areas: they are still shown in your hand, but no power, aura, punt block or gold
+		   pay works there.
+		 - Physics crash fixes (a crash dump showed the server dying inside the physics engine): players' noblock
+		   collision changes now tell the physics engine (and only happen when the group really changes), Guess Booth
+		   displays have no physics at all instead of a physics prop made non-solid afterwards, and welded props are
+		   frozen and can't be unfrozen while welded.

@@ -1380,7 +1380,7 @@ public void Fx_ThinkAuras()
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (!IsClientInGame(i) || !IsPlayerAlive(i) || !g_bHoldingGravGun[i] || g_iActiveEmblem[i] == -1 || fNow < g_fNextAura[i])
+		if (!IsClientInGame(i) || !IsPlayerAlive(i) || !g_bHoldingGravGun[i] || g_iActiveEmblem[i] == -1 || g_bInEvent[i] || fNow < g_fNextAura[i])
 		{
 			continue;
 		}
