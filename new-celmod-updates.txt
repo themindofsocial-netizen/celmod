@@ -396,3 +396,5 @@
 		 - Shop props are finite CelItems: each purchase is one copy, and only as many as you own can be out at once
 		   (spawning, loading builds and pasting all count). Props can be bought again for more copies; the bank
 		   shows how many of each you have. Props bought before this update count as one.
+		 - Emblem boxes held when the map changes are kept again: a map change (sm_map, changelevel or the end of
+		   the map) disconnects players before the map ends, so the box is now given at that moment.

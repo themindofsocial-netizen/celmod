@@ -167,6 +167,7 @@ int g_iPuntHeldRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the grav
 //Emblem boxes that have been held, by box: who held it last, when, and which emblem it holds. Kept outside the entity,
 //because when the map ends the box itself may already be gone. [userid, item, time]
 StringMap g_smBoxHolds;
+bool g_bRealLeave[MAXPLAYERS + 1]; //a player_disconnect event came first: really leaving, not a map change
 ConVar g_cvDropPerPlayer;
 ConVar g_cvDropEndMinutes;
 ConVar g_cvDropEndChance;
@@ -507,6 +508,7 @@ public void OnPluginStart()
 
 	HookEvent("player_death", Event_Death, EventHookMode_Post);
 	HookEvent("player_spawn", Event_Spawn, EventHookMode_Post);
+	HookEvent("player_disconnect", Event_PlayerLeft, EventHookMode_Pre);
 
 	CreateTimer(0.2, Timer_Think, _, TIMER_REPEAT);
 	CreateTimer(60.0, Timer_Minute, _, TIMER_REPEAT);
@@ -702,6 +704,15 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
+	// A map change disconnects everyone without a player_disconnect event, before OnMapEnd: a box held right then
+	// is given now, while the player's inventory is still open. Someone really leaving forfeits it.
+	if (!g_bRealLeave[iClient])
+	{
+		ClaimHeldBoxes(iClient);
+	}
+
+	g_bRealLeave[iClient] = false;
+
 	RemoveThirdPersonCamera(iClient);
 
 	// The items stay in the player's ledger, so they can spawn them again next time.
@@ -9523,49 +9534,11 @@ void BinJunk(int iJunk, const float fWhere[3])
 // when the map ends) keeps the emblem inside.
 public void OnMapEnd()
 {
-	// Each box goes to whoever held it last, if they were still holding it when the map ended. The end-of-map
-	// scoreboard (mp_chattime) comes first, and the gravity gun lets go during it, so that time is allowed for.
-	ConVar cvChat = FindConVar("mp_chattime");
-	float fWindow = 2.0 + (cvChat != null ? cvChat.FloatValue : 10.0);
+	// Players still connected when the map ends (most map changes disconnect them first: see OnClientDisconnect).
+	ClaimHeldBoxes(0);
 
 	if (g_smBoxHolds != null)
 	{
-		StringMapSnapshot smsBoxes = g_smBoxHolds.Snapshot();
-		char sBox[16];
-		any aHold[3];
-
-		for (int b = 0; b < smsBoxes.Length; b++)
-		{
-			smsBoxes.GetKey(b, sBox, sizeof(sBox));
-
-			if (!g_smBoxHolds.GetArray(sBox, aHold, 3))
-			{
-				continue;
-			}
-
-			int iClient = GetClientOfUserId(aHold[0]), iItem = aHold[1];
-
-			if (!IsRealClient(iClient) || GetGameTime() - view_as<float>(aHold[2]) > fWindow || iItem < 0 || iItem >= g_iItemCount)
-			{
-				continue;
-			}
-
-			// Won once only (the entity, if it still exists, is spent).
-			int iBox = EntRefToEntIndex(StringToInt(sBox));
-
-			if (iBox != INVALID_ENT_REFERENCE && iBox > MaxClients && iBox <= MAXENTITIES)
-			{
-				g_bDropBox[iBox] = false;
-			}
-
-			Cel_AddXP(iClient, g_cvXPBox.IntValue);
-			SetOwned(iClient, iItem, GetOwned(iClient, iItem) + 1);
-
-			Cel_PrintToChat(iClient, "You kept your emblem box: a {green}%s{default} emblem is yours! Type {green}!emblem %s{default} to spawn it.", g_Items[iItem].sName, g_Items[iItem].sId);
-		}
-
-		delete smsBoxes;
-
 		g_smBoxHolds.Clear();
 	}
 
@@ -9575,6 +9548,72 @@ public void OnMapEnd()
 	}
 
 	// Boxes left lying around (in a land or not) are lost: only the ones being held are kept.
+}
+
+// Each box goes to whoever held it last, if they were still holding it when the map ended. The end-of-map
+// scoreboard (mp_chattime) comes first, and the gravity gun lets go during it, so that time is allowed for.
+// iOnly limits it to one player (0 = everyone). Claimed boxes are taken off the list.
+public Action Event_PlayerLeft(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
+
+	if (iClient > 0 && iClient <= MaxClients)
+	{
+		g_bRealLeave[iClient] = true;
+	}
+
+	return Plugin_Continue;
+}
+
+void ClaimHeldBoxes(int iOnly)
+{
+	if (g_smBoxHolds == null)
+	{
+		return;
+	}
+
+	ConVar cvChat = FindConVar("mp_chattime");
+	float fWindow = 2.0 + (cvChat != null ? cvChat.FloatValue : 10.0);
+
+	StringMapSnapshot smsBoxes = g_smBoxHolds.Snapshot();
+	char sBox[16];
+	any aHold[3];
+
+	for (int b = 0; b < smsBoxes.Length; b++)
+	{
+		smsBoxes.GetKey(b, sBox, sizeof(sBox));
+
+		if (!g_smBoxHolds.GetArray(sBox, aHold, 3))
+		{
+			continue;
+		}
+
+		int iClient = GetClientOfUserId(aHold[0]), iItem = aHold[1];
+
+		if (iClient < 1 || (iOnly != 0 && iClient != iOnly) || !IsClientInGame(iClient) || IsFakeClient(iClient)
+			|| GetGameTime() - view_as<float>(aHold[2]) > fWindow || iItem < 0 || iItem >= g_iItemCount)
+		{
+			continue;
+		}
+
+		g_smBoxHolds.Remove(sBox);
+
+		// Won once only (the entity, if it still exists, is spent).
+		int iBox = EntRefToEntIndex(StringToInt(sBox));
+
+		if (iBox != INVALID_ENT_REFERENCE && iBox > MaxClients && iBox <= MAXENTITIES)
+		{
+			g_bDropBox[iBox] = false;
+		}
+
+		Cel_AddXP(iClient, g_cvXPBox.IntValue);
+		SetOwned(iClient, iItem, GetOwned(iClient, iItem) + 1);
+
+		Cel_PrintToChat(iClient, "You kept your emblem box: a {green}%s{default} emblem is yours! Type {green}!emblem %s{default} to spawn it.", g_Items[iItem].sName, g_Items[iItem].sId);
+		LogMessage("|CelMod| %L kept an emblem box: %s.", iClient, g_Items[iItem].sId);
+	}
+
+	delete smsBoxes;
 }
 
 //Presents (Christmas only): an emblem, hat or celwep wrapped up for another player.
