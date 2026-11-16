@@ -169,6 +169,8 @@ int g_iPuntHeldRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the grav
 StringMap g_smBoxHolds;
 // Flicker test switches: each turns one thing an enabled emblem does off, live (sm_cvar ... 0).
 ConVar g_cvTestHoldModel, g_cvTestPuntHold, g_cvTestPowers;
+ConVar g_cvEmblemWorldModel;
+int g_iOrigWorldModel[MAXPLAYERS + 1] = { -1, ... }; //the gravity gun's own third person model while an emblem replaces it
 bool g_bRealLeave[MAXPLAYERS + 1]; //a player_disconnect event came first: really leaving, not a map change
 ConVar g_cvDropPerPlayer;
 ConVar g_cvDropEndMinutes;
@@ -514,6 +516,7 @@ public void OnPluginStart()
 	
 	g_cvTestHoldModel = CreateConVar("cm_test_emblem_model", "1", "Test switch: 0 shows nothing extra for an emblem in hand (the plain gravity gun, untouched).", _, true, 0.0, true, 1.0);
 	g_cvTestPuntHold = CreateConVar("cm_test_emblem_punt", "1", "Test switch: 0 never holds back the gravity gun's punt while an emblem is in hand.", _, true, 0.0, true, 1.0);
+	g_cvEmblemWorldModel = CreateConVar("cm_emblem_worldmodel", "1", "1: an emblem in hand replaces the gravity gun's own third person model (drawn on the hand by the game, no flicker). 0: an extra model attached to the hand.", _, true, 0.0, true, 1.0);
 	g_cvTestPowers = CreateConVar("cm_test_emblem_powers", "1", "Test switch: 0 turns off emblem powers in hand (speed, tint, cloak, gravity, regen...).", _, true, 0.0, true, 1.0);
 
 	CreateTimer(0.2, Timer_Think, _, TIMER_REPEAT);
@@ -3884,6 +3887,26 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 		return;
 	}
 
+	// The gravity gun's own third person model is swapped for the emblem's. The game draws a carried weapon's
+	// model on the player's hand from the player's own skeleton, so it is held exactly like the gravity gun and
+	// stays in step with the body. (Any extra model attached to the player made the body flicker for viewers.)
+	if (g_cvEmblemWorldModel.BoolValue && g_Items[iItem].iKind == KIND_EMBLEM && HasEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex") && ModelHasHandBone(sHeld))
+	{
+		int iIndex = PrecacheModel(sHeld);
+
+		if (iIndex > 0)
+		{
+			g_iOrigWorldModel[iClient] = GetEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex");
+
+			SetEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex", iIndex);
+
+			SetEntityRenderMode(iWeapon, RENDER_NORMAL);
+			SetEntityRenderColor(iWeapon, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+
+			return;
+		}
+	}
+
 	int iHand = CreateEntityByName("prop_dynamic_override");
 
 	if (iHand == -1)
@@ -4053,8 +4076,14 @@ void RestoreWeapon(int iClient)
 		SetEntityRenderMode(iWeapon, RENDER_NORMAL);
 		SetEntityRenderColor(iWeapon, 255, 255, 255, 255);
 		SetEntityRenderFx(iWeapon, RENDERFX_NONE);
+
+		if (g_iOrigWorldModel[iClient] > 0 && HasEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex"))
+		{
+			SetEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex", g_iOrigWorldModel[iClient]);
+		}
 	}
 
+	g_iOrigWorldModel[iClient] = -1;
 	g_bHeldShown[iClient] = false;
 	g_iHandEntRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iHandItem[iClient] = -1;
