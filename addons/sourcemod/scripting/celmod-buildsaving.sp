@@ -223,10 +223,14 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 	if(kvLoadBuild.ImportFromFile(sFile))
 	{
 		//First pass: how much room the build needs. Nothing is spawned unless all of it fits in the land.
+		int iEntries = 0;
+		
 		if (kvLoadBuild.GotoFirstSubKey())
 		{
 			do
 			{
+				iEntries++;
+				
 				if (FloatAbs(kvLoadBuild.GetFloat("o1")) > fNeeded[0]) fNeeded[0] = FloatAbs(kvLoadBuild.GetFloat("o1"));
 				if (FloatAbs(kvLoadBuild.GetFloat("o2")) > fNeeded[1]) fNeeded[1] = FloatAbs(kvLoadBuild.GetFloat("o2"));
 				if (kvLoadBuild.GetFloat("o3") > fNeeded[2]) fNeeded[2] = kvLoadBuild.GetFloat("o3");
@@ -241,6 +245,28 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 			kvLoadBuild.Close();
 			
 			Cel_ReplyToCommand(iClient, "The build {green}%s{default} does not fit in your land. It needs {green}%d x %d{default} units and {green}%d{default} high; your land is {green}%d x %d{default} and {green}%d{default} high.", sSaveName, RoundToCeil(fNeeded[0] * 2.0), RoundToCeil(fNeeded[1] * 2.0), RoundToCeil(fNeeded[2]), RoundToFloor(fHalfSize[0] * 2.0), RoundToFloor(fHalfSize[1] * 2.0), RoundToFloor(fHeight));
+			
+			return false;
+		}
+		
+		//A build is spawned all at once, so it has to fit in the player's limits, and in what is left of the
+		//server's entity slots: running out of those crashes the whole server.
+		int iRoom = (Cel_GetPropLimit() - Cel_GetPropCount(iClient)) + (Cel_GetCelLimit() - Cel_GetCelCount(iClient));
+		
+		if (iEntries > iRoom)
+		{
+			kvLoadBuild.Close();
+			
+			Cel_ReplyToCommand(iClient, "The build {green}%s{default} has {green}%d{default} entities, but you only have room for {green}%d{default} more. Delete some first.", sSaveName, iEntries, iRoom < 0 ? 0 : iRoom);
+			
+			return false;
+		}
+		
+		if (GetEntityCount() + iEntries * 2 > GetMaxEntities() - Cel_EdictReserve())
+		{
+			kvLoadBuild.Close();
+			
+			Cel_ReplyToCommand(iClient, "The server is too full of entities to load {green}%s{default} ({green}%d{default} entities) right now.", sSaveName, iEntries);
 			
 			return false;
 		}

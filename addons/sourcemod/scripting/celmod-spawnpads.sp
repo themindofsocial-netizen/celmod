@@ -715,6 +715,12 @@ int SpawnEnemyAt(int iType, float fOrigin[3], float fYaw)
 {
 	float fAngles[3];
 
+	//Enemies bring their own extra entities (weapons, gibs, effects): none spawn when the server is nearly full.
+	if (Cel_EdictsLow(16))
+	{
+		return -1;
+	}
+
 	int iEnemy = CreateEntityByName(g_sTypeClass[iType]);
 
 	if (iEnemy == -1)

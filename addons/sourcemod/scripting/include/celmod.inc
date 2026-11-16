@@ -1736,6 +1736,39 @@ stock bool Cel_IsSpecialEntity(int iEntity)
 	return StrEqual(sName, "hobo", false);
 }
 
+// Entity slots kept free for the game itself (weapons, gibs, projectiles, NPCs): running out of them crashes the
+// server, so player spawns stop this far from the limit (cm_edict_reserve).
+stock int Cel_EdictReserve()
+{
+	ConVar cvReserve = FindConVar("cm_edict_reserve");
+	
+	return (cvReserve != null) ? cvReserve.IntValue : 256;
+}
+
+stock bool Cel_EdictsLow(int iExtra = 1)
+{
+	return (GetEntityCount() + iExtra > GetMaxEntities() - Cel_EdictReserve());
+}
+
+// True when a model that isn't precached yet can't be: the model precache table is (nearly) full, and
+// overflowing it shuts the server down.
+stock bool Cel_ModelTableFull(const char[] sModel)
+{
+	if (IsModelPrecached(sModel))
+	{
+		return false;
+	}
+	
+	int iTable = FindStringTable("modelprecache");
+	
+	if (iTable == INVALID_STRING_TABLE)
+	{
+		return false;
+	}
+	
+	return (GetStringTableNumStrings(iTable) >= GetStringTableMaxStrings(iTable) - 32);
+}
+
 /** Says so and returns true when the entity is special (see Cel_IsSpecialEntity). */
 stock bool Cel_RefuseSpecial(int iClient, int iEntity)
 {
@@ -2335,7 +2368,10 @@ public Action Timer_DelayRemove(Handle hTimer, any iRef)
 {
 	int iEntity = EntRefToEntIndex(iRef);
 	
-	AcceptEntityInput(iEntity, "kill");
+	if (iEntity != INVALID_ENT_REFERENCE && iEntity > MaxClients)
+	{
+		AcceptEntityInput(iEntity, "kill");
+	}
 	
 	return Plugin_Continue;
 }
@@ -2344,7 +2380,10 @@ public Action Timer_DisRemove(Handle hTimer, any iRef)
 {
 	int iEntity = EntRefToEntIndex(iRef);
 	
-	Cel_DissolveEntity(iEntity);
+	if (iEntity != INVALID_ENT_REFERENCE && iEntity > MaxClients)
+	{
+		Cel_DissolveEntity(iEntity);
+	}
 	
 	return Plugin_Continue;
 }

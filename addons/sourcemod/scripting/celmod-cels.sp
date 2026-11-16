@@ -10,6 +10,9 @@ char g_sDefaultInternetURL[PLATFORM_MAX_PATH];
 char g_sInternetURL[MAXENTITIES + 1][PLATFORM_MAX_PATH];
 
 ConVar g_cvDefaultInternetURL;
+ConVar g_cvInternetStopDistance;
+
+int g_iViewingRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; //the internet cel a player last opened
 
 Handle g_hOnCelSpawn;
 
@@ -47,6 +50,13 @@ public void OnPluginStart()
 	g_cvDefaultInternetURL = CreateConVar("cm_default_internet_url", "https://celmod.net", "Default internet cel URL.");
 	
 	g_cvDefaultInternetURL.AddChangeHook(CMCels_OnConVarChanged);
+	
+	g_cvInternetStopDistance = CreateConVar("cm_internet_stop_distance", "160", "Walking this far from an internet cel stops its video or sound.", _, true, 32.0);
+	
+	//The viewer's close button runs this (see OpenInternetCel), and so does walking away: the page is swapped
+	//for a blank one so videos and music stop instead of playing on in the hidden browser.
+	AddCommandListener(Listener_ClosedHtmlPage, "closed_htmlpage");
+	CreateTimer(0.5, Timer_InternetDistance, _, TIMER_REPEAT);
 	
 	g_cvDefaultInternetURL.GetString(g_sDefaultInternetURL, sizeof(g_sDefaultInternetURL));
 }
@@ -390,7 +400,7 @@ public int Native_SpawnInternet(Handle hPlugin, int iNumParams)
 	
 	Cel_SetRenderFX(iInternet, RENDERFX_NONE);
 	
-	SDKHook(iInternet, SDKHook_Use, Hook_InternetUse);
+	SDKHook(iInternet, SDKHook_Use, Hook_CelsInternetUse);
 	
 	return iInternet;
 }
@@ -539,4 +549,104 @@ public int Native_SpawnLight(Handle hPlugin, int iNumParams)
 	Cel_SetRenderFX(iProp, RENDERFX_NONE);
 	
 	return iProp;
+}
+
+public void OnClientDisconnect(int iClient)
+{
+	g_iViewingRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+public void Hook_CelsInternetUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	if (iActivator < 1 || iActivator > MaxClients || !IsClientInGame(iActivator) || Cel_IsLocked(iEntity))
+	{
+		return;
+	}
+	
+	char sURL[PLATFORM_MAX_PATH];
+	
+	Cel_GetInternetURL(iEntity, sURL, sizeof(sURL));
+	
+	OpenInternetCel(iActivator, sURL);
+	
+	g_iViewingRef[iActivator] = EntIndexToEntRef(iEntity);
+}
+
+//"unload" makes the game blank the page itself when the viewer is closed, and cmd 5 (closed_htmlpage) tells the
+//server it was closed.
+void OpenInternetCel(int iClient, const char[] sURL)
+{
+	KeyValues kvMOTD = new KeyValues("data");
+	
+	kvMOTD.SetString("title", "|CelMod| Viewer");
+	kvMOTD.SetNum("type", MOTDPANEL_TYPE_URL);
+	kvMOTD.SetString("msg", sURL);
+	kvMOTD.SetNum("cmd", 5);
+	kvMOTD.SetNum("unload", 1);
+	
+	ShowVGUIPanel(iClient, "info", kvMOTD, true);
+	
+	delete kvMOTD;
+}
+
+void StopInternetCel(int iClient)
+{
+	g_iViewingRef[iClient] = INVALID_ENT_REFERENCE;
+	
+	if (!IsClientInGame(iClient) || IsFakeClient(iClient))
+	{
+		return;
+	}
+	
+	KeyValues kvMOTD = new KeyValues("data");
+	
+	kvMOTD.SetString("title", "|CelMod| Viewer");
+	kvMOTD.SetNum("type", MOTDPANEL_TYPE_URL);
+	kvMOTD.SetString("msg", "about:blank");
+	
+	ShowVGUIPanel(iClient, "info", kvMOTD, false);
+	
+	delete kvMOTD;
+}
+
+public Action Listener_ClosedHtmlPage(int iClient, const char[] sCommand, int iArgc)
+{
+	if (iClient > 0 && iClient <= MaxClients && g_iViewingRef[iClient] != INVALID_ENT_REFERENCE)
+	{
+		StopInternetCel(iClient);
+	}
+	
+	return Plugin_Handled;
+}
+
+public Action Timer_InternetDistance(Handle hTimer)
+{
+	float fClient[3], fCel[3];
+	float fMax = g_cvInternetStopDistance.FloatValue;
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_iViewingRef[i] == INVALID_ENT_REFERENCE || !IsClientInGame(i))
+		{
+			continue;
+		}
+		
+		int iCel = EntRefToEntIndex(g_iViewingRef[i]);
+		
+		if (iCel == INVALID_ENT_REFERENCE || !IsPlayerAlive(i))
+		{
+			StopInternetCel(i);
+			continue;
+		}
+		
+		GetClientAbsOrigin(i, fClient);
+		GetEntPropVector(iCel, Prop_Data, "m_vecAbsOrigin", fCel);
+		
+		if (GetVectorDistance(fClient, fCel) > fMax)
+		{
+			StopInternetCel(i);
+		}
+	}
+	
+	return Plugin_Continue;
 }

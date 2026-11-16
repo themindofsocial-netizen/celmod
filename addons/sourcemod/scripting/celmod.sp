@@ -36,6 +36,7 @@ int g_iHalo;
 int g_iPhys;
 int g_iPropCount[MAXPLAYERS + 1];
 int g_iPropLimit;
+float g_fNextSpawnRefusal[MAXPLAYERS + 1];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
@@ -167,6 +168,7 @@ public void OnPluginStart()
 	CreateConVar("celmod", "1", "Notifies the server that the plugin is running.");
 	g_cvCelLimit = CreateConVar("cm_max_player_cels", "20", "Maxiumum number of cel entities a client is allowed.");
 	g_cvDownloadPath = CreateConVar("cm_download_list_path", "data/celmod/downloads.txt", "Path for the download list for clients.");
+	CreateConVar("cm_edict_reserve", "256", "Entity slots kept free for the game: players can't spawn or load anything once the server is this close to its 2048 entity limit (running out crashes the server).", _, true, 32.0, true, 1024.0);
 	g_cvPropLimit = CreateConVar("cm_max_player_props", "160", "Maxiumum number of props a player is allowed to spawn.");
 	g_cvOverlayPath = CreateConVar("cm_overlay_material_path", "celmod/cm_overlay2.vmt", "Default CelMod overlay path.");
 	CreateConVar("cm_version", CEL_VERSION, "The version of the plugin the server is running.");
@@ -762,9 +764,12 @@ public Action Event_Death(Event eEvent, const char[] sName, bool bDontBroadcast)
 	{
 		int iRagdoll = GetEntPropEnt(iClient, Prop_Send, "m_hRagdoll");
 		
-		IgniteEntity(iRagdoll, 3.0);
-		
-		CreateTimer(2.0, Timer_DisRemove, EntIndexToEntRef(iRagdoll));
+		if (iRagdoll > MaxClients && IsValidEntity(iRagdoll))
+		{
+			IgniteEntity(iRagdoll, 3.0);
+			
+			CreateTimer(2.0, Timer_DisRemove, EntIndexToEntRef(iRagdoll));
+		}
 	}
 	
 	return Plugin_Handled;
@@ -918,12 +923,24 @@ public int Native_CheckCelCount(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
 	
+	if (Cel_EdictsLow(8))
+	{
+		NotifySpawnRefused(iClient, "The server is nearly out of entity slots, so nothing more can be spawned right now. Delete some props first.");
+		return false;
+	}
+	
 	return (Cel_GetCelCount(iClient) >= Cel_GetCelLimit()) ? false : true;
 }
 
 public int Native_CheckPropCount(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
+	
+	if (Cel_EdictsLow(8))
+	{
+		NotifySpawnRefused(iClient, "The server is nearly out of entity slots, so nothing more can be spawned right now. Delete some props first.");
+		return false;
+	}
 	
 	return (Cel_GetPropCount(iClient) >= Cel_GetPropLimit()) ? false : true;
 }
@@ -1297,6 +1314,16 @@ public int Native_SetPropLimit(Handle hPlugin, int iNumParams)
 	return true;
 }
 
+void NotifySpawnRefused(int iClient, const char[] sMessage)
+{
+	if (iClient > 0 && iClient <= MaxClients && IsClientInGame(iClient) && GetGameTime() >= g_fNextSpawnRefusal[iClient])
+	{
+		g_fNextSpawnRefusal[iClient] = GetGameTime() + 2.0;
+		
+		Cel_PrintToChat(iClient, sMessage);
+	}
+}
+
 public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 {
 	char sAlias[64], sModel[PLATFORM_MAX_PATH], sEntityType[64];
@@ -1332,6 +1359,20 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	{
 		bNoPhysics = true;
 		strcopy(sEntityType, sizeof(sEntityType), "prop_dynamic_override");
+	}
+	
+	//Crash guards: never use up the server's last entity slots, and never overflow the model precache table.
+	if (Cel_EdictsLow())
+	{
+		NotifySpawnRefused(iClient, "The server is nearly out of entity slots, so nothing more can be spawned right now. Delete some props first.");
+		return -1;
+	}
+	
+	if (Cel_ModelTableFull(sModel))
+	{
+		NotifySpawnRefused(iClient, "This map can't load any more new models. Try a prop that is already in use, or wait for the next map.");
+		LogMessage("|CelMod| Model precache table is full: refused '%s'.", sModel);
+		return -1;
 	}
 	
 	int iProp = CreateEntityByName(sEntityType);

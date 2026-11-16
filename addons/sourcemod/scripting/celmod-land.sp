@@ -26,6 +26,7 @@ float g_fMaxLandSize;
 
 Handle g_hGettingTop[MAXPLAYERS+1];
 Handle g_hLandTimer[MAXPLAYERS+1];
+int g_iLandRef[MAXPLAYERS+1] = { INVALID_ENT_REFERENCE, ... }; //the land trigger, as a reference: the raw index can be reused by another entity
 
 int g_iBeam = -1;
 int g_iCurrentLandEntity[MAXPLAYERS + 1];
@@ -453,11 +454,13 @@ public void OnClientDisconnect(int iClient)
 	if(g_hGettingTop[iClient] != INVALID_HANDLE)
 	{
 		CloseHandle(g_hGettingTop[iClient]);
+		g_hGettingTop[iClient] = INVALID_HANDLE;
 	}
 	
 	if(g_hLandTimer[iClient] != INVALID_HANDLE)
 	{
 		CloseHandle(g_hLandTimer[iClient]);
+		g_hLandTimer[iClient] = INVALID_HANDLE;
 	}
 }
 
@@ -909,6 +912,7 @@ public int Native_CreateLand(Handle hPlugin, int iNumParams)
 	
 	g_iLandEntOwner[iEnt] = iClient;
 	g_liLand[iClient].iLandEntity = iEnt;
+	g_iLandRef[iClient] = EntIndexToEntRef(iEnt);
 	g_liLand[iClient].iLandOwner = iClient;
 	
 	g_liLand[iClient].bModeCoop = false;
@@ -934,10 +938,15 @@ public int Native_ClearLand(Handle hPlugin, int iNumParams)
 	g_liLand[iClient].bModeDeathmatch = false;
 	g_liLand[iClient].bModeShop = false;
 	
-	if(Cel_IsLandCreated(iClient))
+	//Only the land's own trigger is removed: if it is already gone, its old index may now be another entity.
+	int iLandEnt = EntRefToEntIndex(g_iLandRef[iClient]);
+	
+	if (g_iLandRef[iClient] != INVALID_ENT_REFERENCE && iLandEnt != INVALID_ENT_REFERENCE && iLandEnt > MaxClients)
 	{
-		AcceptEntityInput(g_liLand[iClient].iLandEntity, "kill");
+		AcceptEntityInput(iLandEnt, "kill");
 	}
+	
+	g_iLandRef[iClient] = INVALID_ENT_REFERENCE;
 	
 	g_liLand[iClient].bLandCreated = false;
 	

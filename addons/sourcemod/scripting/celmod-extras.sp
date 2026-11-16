@@ -33,6 +33,10 @@ int g_iLastLandIn[MAXPLAYERS + 1];
 bool g_bOutsideKnown[MAXPLAYERS + 1];
 float g_fLastOutside[MAXPLAYERS + 1][3];
 float g_fNextBlockNotice[MAXPLAYERS + 1];
+int g_iLandFee[MAXPLAYERS + 1]; //!fee: what it costs other players to walk into this player's land (0 = free)
+bool g_bFeePaid[MAXPLAYERS + 1][MAXPLAYERS + 1]; //[owner][visitor]: paid until either leaves or the fee changes
+int g_iFeeAsked[MAXPLAYERS + 1]; //the owner whose fee this player was last stopped by, for !fee pay
+ConVar g_cvLandFeeMax;
 
 char g_sMessage[MAXENTITIES + 1][192];
 char g_sSound[MAXENTITIES + 1][PLATFORM_MAX_PATH];
@@ -103,6 +107,7 @@ public void OnPluginStart()
 	g_cvDoubleJump = CreateConVar("cm_double_jump", "1", "Double jumping (jump again in the air): 0 turns it off. Never in event areas.", _, true, 0.0);
 	g_cvDoubleJumpHeight = CreateConVar("cm_double_jump_height", "24.0", "How high a double jump goes, in units (a normal jump is about 21).", _, true, 1.0, true, 512.0);
 	
+	g_cvLandFeeMax = CreateConVar("cm_land_fee_max", "100000", "Highest entry fee a player can set on their land with !fee.", _, true, 0.0);
 	g_cvHoopieBounce = CreateConVar("cm_hoopie_bounce", "650", "How hard a hoopie bounces players off it.", _, true, 0.0, true, 3000.0);
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
@@ -128,6 +133,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_block", Command_Block, "|CelMod| Stops you from entering a player's land (use again to allow it). With no name, lists who you have blocked.");
 	RegConsoleCmd("v_unblock", Command_Unblock, "|CelMod| Lets you enter a player's land again.");
 	CreateTimer(0.1, Timer_BlockLands, _, TIMER_REPEAT);
+	RegConsoleCmd("v_fee", Command_Fee, "|CelMod| Charges other players a fee to enter your land: !fee <amount> (0 = free). Visitors type !fee pay.");
 	RegConsoleCmd("v_landban", Command_LandBan, "|CelMod| Bans a player from your land.");
 	RegConsoleCmd("v_landunban", Command_LandUnban, "|CelMod| Lets a banned player back into your land.");
 	RegConsoleCmd("v_buildmessage", Command_BuildMessage, "|CelMod| Sets the message players see when they walk into your build (off to remove it).");
@@ -176,6 +182,16 @@ public void OnClientPutInServer(int iClient)
 		g_bBlockLand[i][iClient] = false;
 	}
 	g_fNextBlockNotice[iClient] = 0.0;
+	g_iLandFee[iClient] = 0;
+	g_iFeeAsked[iClient] = 0;
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_iFeeAsked[i] == iClient)
+		{
+			g_iFeeAsked[i] = 0;
+		}
+	}
 	
 	g_alUndo[iClient].Clear();
 	
@@ -185,6 +201,8 @@ public void OnClientPutInServer(int iClient)
 		g_bHide[i][iClient] = false;
 		g_bLandBan[iClient][i] = false;
 		g_bLandBan[i][iClient] = false;
+		g_bFeePaid[iClient][i] = false;
+		g_bFeePaid[i][iClient] = false;
 		g_fLandKickUntil[iClient][i] = 0.0;
 		g_fLandKickUntil[i][iClient] = 0.0;
 	}
@@ -550,7 +568,9 @@ public Action Timer_BlockLands(Handle hTimer)
 		
 		int iOwner = Cel_GetLandOwnerFromPosition(fCheck);
 		
-		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || !g_bBlockLand[i][iOwner] || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
+		bool bFee = (iOwner >= 1 && iOwner <= MaxClients && iOwner != i && g_iLandFee[iOwner] > 0 && !g_bFeePaid[iOwner][i] && IsClientInGame(iOwner) && !Cel_IsOnBuildTeam(iOwner, i));
+		
+		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || (!g_bBlockLand[i][iOwner] && !bFee) || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
 		{
 			g_fLastOutside[i] = fOrigin;
 			g_bOutsideKnown[i] = true;
@@ -567,6 +587,14 @@ public Action Timer_BlockLands(Handle hTimer)
 		if (GetGameTime() >= g_fNextBlockNotice[i])
 		{
 			g_fNextBlockNotice[i] = GetGameTime() + 3.0;
+			
+			if (!g_bBlockLand[i][iOwner])
+			{
+				g_iFeeAsked[i] = iOwner;
+				
+				Cel_PrintToChat(i, "{green}%N{default}'s land has an entry fee of {green}%d CL{default}. Type {green}[tag]fee pay{default} to pay it and go in.", iOwner, g_iLandFee[iOwner]);
+				continue;
+			}
 			
 			Cel_PrintToChat(i, "You blocked yourself from {green}%N{default}'s land. Type {green}[tag]block %N{default} to undo it.", iOwner, iOwner);
 		}
@@ -1348,7 +1376,7 @@ public Action Command_Weld(int iClient, int iArgs)
 	
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
 	
-	if (iFirst == iProp || GetEntPropEnt(iProp, Prop_Data, "m_hMoveParent") == iFirst)
+	if (iFirst == iProp || ParentLoops(iFirst, iProp))
 	{
 		Cel_ReplyToCommand(iClient, "Weld cancelled.");
 		return Plugin_Handled;
@@ -1362,6 +1390,25 @@ public Action Command_Weld(int iClient, int iArgs)
 	Cel_ReplyToCommandEntity(iClient, iFirst, "Welded your [type]. It now moves with the other entity. ");
 	
 	return Plugin_Handled;
+}
+
+//True when parenting iChild to iParent would make a loop (iChild is already above iParent): the engine
+//crashes on a parent loop. Also refuses parenting to players.
+bool ParentLoops(int iChild, int iParent)
+{
+	int iWalk = iParent;
+	
+	for (int iDepth = 0; iDepth < 64 && iWalk > 0; iDepth++)
+	{
+		if (iWalk == iChild || iWalk <= MaxClients)
+		{
+			return true;
+		}
+		
+		iWalk = GetEntPropEnt(iWalk, Prop_Data, "m_hMoveParent");
+	}
+	
+	return (iWalk > 0);
 }
 
 public Action Command_Release(int iClient, int iArgs)
@@ -1396,6 +1443,101 @@ public Action Command_Release(int iClient, int iArgs)
 	Cel_ChangeBeam(iClient, iProp);
 	
 	Cel_ReplyToCommandEntity(iClient, iProp, "Released your [type] from its weld.");
+	
+	return Plugin_Handled;
+}
+
+public Action Command_Fee(int iClient, int iArgs)
+{
+	char sArg[32];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sArg, sizeof(sArg));
+	
+	if (iArgs < 1)
+	{
+		if (g_iLandFee[iClient] > 0)
+		{
+			Cel_ReplyToCommand(iClient, "Your land's entry fee is {green}%d CL{default}. {green}[tag]fee 0{default} makes it free.", g_iLandFee[iClient]);
+		} else {
+			Cel_ReplyToCommand(iClient, "Your land is free to enter. Usage: {green}[tag]fee{default} <amount>, or {green}[tag]fee pay{default} to pay another land's fee.");
+		}
+		
+		return Plugin_Handled;
+	}
+	
+	if (StrEqual(sArg, "pay", false))
+	{
+		int iOwner = g_iFeeAsked[iClient];
+		
+		if (iOwner < 1 || iOwner > MaxClients || !IsClientInGame(iOwner) || g_iLandFee[iOwner] <= 0)
+		{
+			Cel_ReplyToCommand(iClient, "There is no land fee to pay. Walk up to a land with a fee first.");
+			return Plugin_Handled;
+		}
+		
+		if (g_bFeePaid[iOwner][iClient])
+		{
+			Cel_ReplyToCommand(iClient, "You already paid to enter {green}%N{default}'s land.", iOwner);
+			return Plugin_Handled;
+		}
+		
+		int iFee = g_iLandFee[iOwner];
+		
+		if (!Cel_CheckClientBalance(iClient, iFee))
+		{
+			Cel_ReplyToCommand(iClient, "You need {green}%d CL{default} to enter {green}%N{default}'s land.", iFee, iOwner);
+			return Plugin_Handled;
+		}
+		
+		Cel_SubFromClientBalance(iClient, iFee);
+		Cel_AddToClientBalance(iOwner, iFee);
+		
+		g_bFeePaid[iOwner][iClient] = true;
+		
+		Cel_ReplyToCommand(iClient, "You paid {green}%d CL{default}: you can enter {green}%N{default}'s land until one of you leaves.", iFee, iOwner);
+		Cel_PrintToChat(iOwner, "{green}%N{default} paid your {green}%d CL{default} land fee.", iClient, iFee);
+		
+		return Plugin_Handled;
+	}
+	
+	if (StrEqual(sArg, "off", false))
+	{
+		strcopy(sArg, sizeof(sArg), "0");
+	}
+	
+	int iFee = StringToInt(sArg);
+	
+	if ((iFee == 0 && !StrEqual(sArg, "0")) || iFee < 0)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]fee{default} <amount> (0 = free), or {green}[tag]fee pay{default}.");
+		return Plugin_Handled;
+	}
+	
+	if (iFee > g_cvLandFeeMax.IntValue)
+	{
+		Cel_ReplyToCommand(iClient, "The highest land fee is {green}%d CL{default}.", g_cvLandFeeMax.IntValue);
+		return Plugin_Handled;
+	}
+	
+	g_iLandFee[iClient] = iFee;
+	
+	//A new fee: everyone pays again (people already inside are moved out by the land check).
+	for (int i = 0; i <= MAXPLAYERS; i++)
+	{
+		g_bFeePaid[iClient][i] = false;
+	}
+	
+	if (iFee > 0)
+	{
+		Cel_ReplyToCommand(iClient, "Players now pay {green}%d CL{default} to enter your land (your build team gets in free).", iFee);
+	} else {
+		Cel_ReplyToCommand(iClient, "Your land is free to enter again.");
+	}
 	
 	return Plugin_Handled;
 }
@@ -2275,6 +2417,11 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 			}
 			case 1:
 			{
+				if (iOther == iEntity || ParentLoops(iEntity, iOther))
+				{
+					continue;
+				}
+				
 				SetVariantString("!activator");
 				AcceptEntityInput(iEntity, "SetParent", iOther, iEntity);
 			}

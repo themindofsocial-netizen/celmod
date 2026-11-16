@@ -382,3 +382,10 @@
 		   copper 0.25%, silver 0.15%, gold 0.08%, emerald 0.04%, ruby 0.03% and diamond 0.01% (cm_dig_ore_chances).
 		 - The Beacon is called the Vial again, and it is really rare: 2.5% of finds (cm_dig_vial_share), just a
 		   little more common than a Black or White emblem. It still senses a buried emblem nearby, with a cooldown.
+		 - !fee <amount> charges other players to walk into your land (0 or off makes it free again). Visitors are
+		   stopped at the edge and type !fee pay; your build team gets in free. cm_land_fee_max caps it.
+		 - Internet cels stop their video or music when you close the viewer or walk away from the cel.
+		 - Crash fixes: the server keeps 256 entity slots free (cm_edict_reserve), so spawning, !text and loading
+		   builds stop before the 2048 entity limit is hit; loading a build now checks your prop limit; new props
+		   can't overflow the map's model list; !weld can't make a parent loop; a land's trigger is only removed if
+		   it is still the land's own entity.
