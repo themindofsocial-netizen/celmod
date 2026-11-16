@@ -252,7 +252,12 @@ public void OnEntityDestroyed(int iEntity)
 	{
 		if(Cel_IsPlayer(Cel_GetOwner(iEntity)))
 		{
-			(Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_PROP)) ? Cel_SubFromPropCount(Cel_GetOwner(iEntity)) : Cel_SubFromCelCount(Cel_GetOwner(iEntity));
+			if (Cel_IsBankItem(iEntity))
+			{
+				Cel_SubFromItemCount(Cel_GetOwner(iEntity));
+			} else {
+				(Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_PROP)) ? Cel_SubFromPropCount(Cel_GetOwner(iEntity)) : Cel_SubFromCelCount(Cel_GetOwner(iEntity));
+			}
 		}
 		
 		Call_StartForward(g_hOnEntityRemove);
@@ -2951,7 +2956,11 @@ public int Native_SetOwner(Handle hPlugin, int iNumParams)
 	//An entity changing hands between two players (sale, trade, gift or admin command).
 	if (bValidOwner && iOldOwner > 0 && iOldOwner != iClient && Cel_IsPlayer(iOldOwner))
 	{
-		if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_PROP))
+		if (Cel_IsBankItem(iEntity))
+		{
+			Cel_SubFromItemCount(iOldOwner);
+			Cel_AddToItemCount(iClient);
+		} else if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_PROP))
 		{
 			Cel_SubFromPropCount(iOldOwner);
 			Cel_AddToPropCount(iClient);

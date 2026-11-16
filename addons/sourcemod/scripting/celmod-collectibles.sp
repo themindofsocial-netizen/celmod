@@ -3789,6 +3789,12 @@ bool IsItemEntity(int iEntity)
 
 int SpawnItemEntity(int iClient, int iItem, float fOrigin[3], float fAngles[3])
 {
+	if (IsRealClient(iClient) && !Cel_CheckItemCount(iClient))
+	{
+		Cel_PrintToChat(iClient, "You have {green}%d{default} bank items out, the most you can. Put some away with {green}!bank add{default} first.", Cel_GetItemCount(iClient));
+		return -1;
+	}
+
 	int iEntity = CreateEntityByName("prop_physics_override");
 
 	if (iEntity == -1 || iEntity > MAXENTITIES)
@@ -3828,6 +3834,9 @@ int SpawnItemEntity(int iClient, int iItem, float fOrigin[3], float fAngles[3])
 	Cel_SetRenderFX(iEntity, RENDERFX_NONE);
 	Cel_SetBreakable(iEntity, false);
 	Cel_SetPropName(iEntity, g_Items[iItem].sName);
+
+	// Out of the bank: counted as a bank item (its own limit), not toward the cel limit.
+	Cel_MarkBankItem(iEntity);
 
 	SDKHook(iEntity, SDKHook_UsePost, Hook_ItemUse);
 

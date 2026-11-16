@@ -37,6 +37,9 @@ int g_iPhys;
 int g_iPropCount[MAXPLAYERS + 1];
 int g_iPropLimit;
 float g_fNextSpawnRefusal[MAXPLAYERS + 1];
+int g_iItemCount[MAXPLAYERS + 1]; //bank items out in the world (their own limit, cm_max_items)
+bool g_bBankItem[MAXENTITIES + 1];
+ConVar g_cvItemLimit;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
@@ -53,6 +56,12 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_CheckSpawnDB", Native_CheckSpawnDB);
 	CreateNative("Cel_CheckShopProp", Native_CheckShopProp);
 	CreateNative("Cel_RecountClientEntities", Native_RecountClientEntities);
+	CreateNative("Cel_MarkBankItem", Native_MarkBankItem);
+	CreateNative("Cel_IsBankItem", Native_IsBankItem);
+	CreateNative("Cel_CheckItemCount", Native_CheckItemCount);
+	CreateNative("Cel_GetItemCount", Native_GetItemCount);
+	CreateNative("Cel_SubFromItemCount", Native_SubFromItemCount);
+	CreateNative("Cel_AddToItemCount", Native_AddToItemCount);
 	CreateNative("Cel_DownloadClientFiles", Native_DownloadClientFiles);
 	CreateNative("Cel_GetAuthID", Native_GetAuthID);
 	CreateNative("Cel_GetBeamMaterial", Native_GetBeamMaterial);
@@ -169,6 +178,7 @@ public void OnPluginStart()
 	CreateConVar("celmod", "1", "Notifies the server that the plugin is running.");
 	g_cvCelLimit = CreateConVar("cm_max_player_cels", "20", "Maxiumum number of cel entities a client is allowed.");
 	g_cvDownloadPath = CreateConVar("cm_download_list_path", "data/celmod/downloads.txt", "Path for the download list for clients.");
+	g_cvItemLimit = CreateConVar("cm_max_items", "50", "Maximum number of bank items (emblems, hats, celweps, shop props, hobos) a player can have out at once. They don't count toward the prop or cel limit.", _, true, 0.0);
 	CreateConVar("cm_admin_shop_props", "0", "1: root admins can spawn any shop prop, any number of times (for displays). 0: admins need to own copies like everyone.", _, true, 0.0, true, 1.0);
 	CreateConVar("cm_edict_reserve", "256", "Entity slots kept free for the game: players can't spawn or load anything once the server is this close to its 2048 entity limit (running out crashes the server).", _, true, 32.0, true, 1024.0);
 	g_cvPropLimit = CreateConVar("cm_max_props", "200", "Maximum number of props a player is allowed to spawn (the server still keeps cm_edict_reserve entity slots free).");
@@ -231,6 +241,7 @@ public void OnClientPutInServer(int iClient)
 	Cel_SetNoKill(iClient, false);
 	Cel_SetPlayer(iClient, true);
 	Cel_SetPropCount(iClient, 0);
+	g_iItemCount[iClient] = 0;
 	
 	g_bIsFlying[iClient] = false;
 	
@@ -250,6 +261,7 @@ public void OnClientDisconnect(int iClient)
 	Cel_SetNoKill(iClient, false);
 	Cel_SetPlayer(iClient, false);
 	Cel_SetPropCount(iClient, 0);
+	g_iItemCount[iClient] = 0;
 	
 	g_bIsFlying[iClient] = false;
 	
@@ -550,13 +562,14 @@ public Action Command_Spawn(int iClient, int iArgs)
 	GetCmdArg(1, sAlias, sizeof(sAlias));
 	GetCmdArg(2, sOption, sizeof(sOption));
 	
-	if (!Cel_CheckPropCount(iClient))
+	int iShopProp = Cel_CheckShopProp(iClient, sAlias, sSpawnString, sizeof(sSpawnString));
+	
+	//Shop props are bank items, with their own limit (checked when it spawns), not the prop limit.
+	if (iShopProp != 1 && !StrEqual(sAlias, "hobo", false) && !Cel_CheckPropCount(iClient))
 	{
 		Cel_ReplyToCommand(iClient, "%t", "MaxPropLimit", Cel_GetPropCount(iClient));
 		return Plugin_Handled;
 	}
-	
-	int iShopProp = Cel_CheckShopProp(iClient, sAlias, sSpawnString, sizeof(sSpawnString));
 	
 	if (iShopProp == -1)
 	{
@@ -684,7 +697,7 @@ public Action Handle_Spawn(int iClient, char[] sCommand, int iArgs)
 			iOption = 0;
 		}
 		
-		if (!Cel_CheckPropCount(iClient))
+		if (iShopProp != 1 && !Cel_CheckPropCount(iClient))
 		{
 			Cel_ReplyToCommand(iClient, "%t", "MaxPropLimit", Cel_GetPropCount(iClient));
 			return Plugin_Handled;
@@ -941,7 +954,7 @@ void RecountClientEntities(int iClient)
 		return;
 	}
 	
-	int iProps = 0, iCels = 0;
+	int iProps = 0, iCels = 0, iItems = 0;
 	
 	for (int i = MaxClients + 1; i < GetMaxEntities(); i++)
 	{
@@ -950,7 +963,10 @@ void RecountClientEntities(int iClient)
 			continue;
 		}
 		
-		if (Cel_CheckEntityCatagory(i, ENTCATAGORY_PROP))
+		if (g_bBankItem[i])
+		{
+			iItems++;
+		} else if (Cel_CheckEntityCatagory(i, ENTCATAGORY_PROP))
 		{
 			iProps++;
 		} else {
@@ -965,6 +981,7 @@ void RecountClientEntities(int iClient)
 	
 	g_iPropCount[iClient] = iProps;
 	g_iCelCount[iClient] = iCels;
+	g_iItemCount[iClient] = iItems;
 }
 
 public int Native_RecountClientEntities(Handle hPlugin, int iNumParams)
@@ -1409,6 +1426,109 @@ public void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
 	LogMessage("|CelMod| %L gave a %s to %L.", iOldOwner, sName, iNewOwner);
 }
 
+//Bank items that go through Cel_SpawnProp: shop props and hobos.
+bool IsBankItemAlias(const char[] sAlias)
+{
+	char sLower[64], sSpawn[256];
+	
+	strcopy(sLower, sizeof(sLower), sAlias);
+	StringToLower(sLower);
+	
+	return (StrEqual(sLower, "hobo") || g_smShopProps.GetString(sLower, sSpawn, sizeof(sSpawn)));
+}
+
+public void OnEntityCreated(int iEntity, const char[] sClassname)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		g_bBankItem[iEntity] = false;
+	}
+}
+
+//Moves an entity that was just counted as a prop or cel over to its owner's bank item count.
+public int Native_MarkBankItem(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1);
+	
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || g_bBankItem[iEntity] || !Cel_IsEntity(iEntity))
+	{
+		return 0;
+	}
+	
+	int iOwner = Cel_GetOwner(iEntity);
+	
+	g_bBankItem[iEntity] = true;
+	
+	if (iOwner > 0 && iOwner <= MaxClients)
+	{
+		if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_PROP))
+		{
+			g_iPropCount[iOwner]--;
+		} else {
+			g_iCelCount[iOwner]--;
+		}
+		
+		g_iItemCount[iOwner]++;
+	}
+	
+	return 0;
+}
+
+public int Native_IsBankItem(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1);
+	
+	return (iEntity > 0 && iEntity <= MAXENTITIES && g_bBankItem[iEntity]);
+}
+
+public int Native_CheckItemCount(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1);
+	
+	if (iClient < 1 || iClient > MaxClients)
+	{
+		return true;
+	}
+	
+	if (g_iItemCount[iClient] >= g_cvItemLimit.IntValue)
+	{
+		RecountClientEntities(iClient);
+	}
+	
+	return g_iItemCount[iClient] < g_cvItemLimit.IntValue;
+}
+
+public int Native_GetItemCount(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1);
+	
+	return (iClient > 0 && iClient <= MaxClients) ? g_iItemCount[iClient] : 0;
+}
+
+public int Native_SubFromItemCount(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1);
+	
+	if (iClient > 0 && iClient <= MaxClients && g_iItemCount[iClient] > 0)
+	{
+		g_iItemCount[iClient]--;
+	}
+	
+	return 0;
+}
+
+public int Native_AddToItemCount(Handle hPlugin, int iNumParams)
+{
+	int iClient = GetNativeCell(1);
+	
+	if (iClient > 0 && iClient <= MaxClients)
+	{
+		g_iItemCount[iClient]++;
+	}
+	
+	return 0;
+}
+
 //Shop props are finite for everyone, admins included. cm_admin_shop_props 1 lets root admins spawn any number
 //of any shop prop, e.g. to set up displays.
 bool AdminShopPropsUnlimited(int iClient)
@@ -1532,6 +1652,18 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 		return -1;
 	}
 	
+	//Shop props and hobos are bank items: they have their own limit instead of the prop limit.
+	bool bBankItem = IsBankItemAlias(sAlias);
+	
+	if (bBankItem && iClient > 0 && iClient <= MaxClients && !Cel_CheckItemCount(iClient))
+	{
+		char sMessage[192];
+		
+		FormatEx(sMessage, sizeof(sMessage), "You have {green}%d{default} bank items out, the most you can. Put some away with {green}!bank add{default} first.", g_iItemCount[iClient]);
+		NotifySpawnRefused(iClient, sMessage);
+		return -1;
+	}
+	
 	int iProp = CreateEntityByName(sEntityType);
 	
 	if (iProp == -1)
@@ -1590,6 +1722,11 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	Cel_SetSolid(iProp, true);
 	
 	Cel_SetBreakable(iProp, false);
+	
+	if (bBankItem)
+	{
+		Cel_MarkBankItem(iProp);
+	}
 	
 	return iProp;
 }

@@ -253,7 +253,9 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		//server's entity slots: running out of those crashes the whole server.
 		Cel_RecountClientEntities(iClient);
 		
-		int iRoom = (Cel_GetPropLimit() - Cel_GetPropCount(iClient)) + (Cel_GetCelLimit() - Cel_GetCelCount(iClient));
+		ConVar cvItems = FindConVar("cm_max_items");
+		int iRoom = (Cel_GetPropLimit() - Cel_GetPropCount(iClient)) + (Cel_GetCelLimit() - Cel_GetCelCount(iClient))
+			+ (cvItems != null ? cvItems.IntValue - Cel_GetItemCount(iClient) : 0);
 		
 		if (iEntries > iRoom)
 		{

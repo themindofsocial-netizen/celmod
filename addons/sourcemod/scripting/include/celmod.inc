@@ -1056,6 +1056,17 @@ native int Cel_GetPropCount(int iClient);
 native void Cel_RecountClientEntities(int iClient);
 
 /**
+ * Bank items out in the world (emblems, hats and celweps, shop props, hobos) have their own count and limit
+ * (cm_max_items) instead of counting toward the prop or cel limit.
+ */
+native void Cel_MarkBankItem(int iEntity);
+native bool Cel_IsBankItem(int iEntity);
+native bool Cel_CheckItemCount(int iClient);
+native int Cel_GetItemCount(int iClient);
+native void Cel_SubFromItemCount(int iClient);
+native void Cel_AddToItemCount(int iClient);
+
+/**
  * Retrieves the maximum allowed number of props.
  *
  * @return The maximum limit of props a client can spawn.

@@ -443,3 +443,5 @@
 		   Enemies from spawn pads don't count.
 		 - +move and +copy don't work in dungeons, events or other restricted areas: they're refused there, and a prop
 		   you're carrying is let go when you walk into one (or carry it into one). Admins with !zonebypass are exempt.
+		 - Bank items out in the world (emblems, hats and celweps, shop props, hobos) no longer count toward the prop or
+		   cel limit: they have their own limit of 50 (cm_max_items). The prop limit is 200.
