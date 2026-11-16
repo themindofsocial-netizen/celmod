@@ -3905,8 +3905,8 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 			g_iOrigWeaponSkin[iClient] = GetEntProp(iWeapon, Prop_Send, "m_nSkin");
 			SetEntProp(iWeapon, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
 
-			SetEntityRenderMode(iWeapon, RENDER_NORMAL);
-			SetEntityRenderColor(iWeapon, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
+			// The emblem's colour, see-through ones (Phantom) included.
+			ApplyItemColor(iWeapon, iItem);
 
 			return;
 		}
