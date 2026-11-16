@@ -863,6 +863,11 @@ public Action Command_MoveTo(int iClient, int iArgs)
 	
 	g_iMoveToRef[iClient] = INVALID_ENT_REFERENCE;
 	
+	if (Cel_RefusePerm(iClient, iMoving))
+	{
+		return Plugin_Handled;
+	}
+	
 	if (iMoving == iProp)
 	{
 		Cel_ReplyToCommand(iClient, "Move cancelled.");
@@ -1377,6 +1382,12 @@ public Action Command_Weld(int iClient, int iArgs)
 	}
 	
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
+	
+	//The welded prop is the one that gets carried: a perm prop stays put. (Welding onto a perm prop is fine.)
+	if (Cel_RefusePerm(iClient, iFirst))
+	{
+		return Plugin_Handled;
+	}
 	
 	if (iFirst == iProp || ParentLoops(iFirst, iProp))
 	{

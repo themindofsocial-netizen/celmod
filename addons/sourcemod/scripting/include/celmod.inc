@@ -1142,6 +1142,13 @@ native bool Cel_IsLandCreated(int iClient);
 native bool Cel_IsLocked(int iEntity);
 
 /**
+ * Perm (!perm): a prop that stays exactly where it is. It is frozen and can't be unfrozen, picked up with the
+ * gravity gun, moved, turned, dropped or deleted on its own (!delall still removes everything) until !unperm.
+ */
+native bool Cel_IsPerm(int iEntity);
+native void Cel_SetPerm(int iEntity, bool bPerm);
+
+/**
  * Checks if a client is a valid player.
  *
  * @param iClient  The client index.
@@ -1820,6 +1827,19 @@ stock void Cel_SetCyclerAnim(int iEntity, int iSequence, float fCycle, bool bPau
 		
 		SetEntPropFloat(iEntity, Prop_Data, "m_flPlaybackRate", 0.0);
 	}
+}
+
+// Refuses a move, turn or delete on a perm prop, with a message. Returns true when refused.
+stock bool Cel_RefusePerm(int iClient, int iEntity)
+{
+	if (iEntity <= MaxClients || GetFeatureStatus(FeatureType_Native, "Cel_IsPerm") != FeatureStatus_Available || !Cel_IsPerm(iEntity))
+	{
+		return false;
+	}
+	
+	Cel_ReplyToCommand(iClient, "That prop is {green}perm{default}: it can't be moved, turned or deleted. Type {green}[tag]unperm{default} while looking at it first.");
+	
+	return true;
 }
 
 stock int Cel_EdictReserve()

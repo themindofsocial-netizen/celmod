@@ -395,6 +395,11 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 				Entity_SetSkin(iProp, kvLoadBuild.GetNum("skin"));
 				Cel_SetMotion(iProp, view_as<bool>(kvLoadBuild.GetNum("motion")));
 				Cel_SetSolid(iProp, view_as<bool>(kvLoadBuild.GetNum("solid")));
+				
+				if (kvLoadBuild.GetNum("perm", 0) == 1)
+				{
+					Cel_SetPerm(iProp, true);
+				}
 				Cel_SetRenderFX(iProp, view_as<RenderFx>(kvLoadBuild.GetNum("renderfx")));
 				Cel_SetOwner(iClient, iProp);
 				
@@ -548,6 +553,7 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 					kvSaveBuild.SetNum("motion", view_as<int>(Cel_GetMotion(i)));
 					kvSaveBuild.SetNum("renderfx", view_as<int>(Cel_GetRenderFX(i)));
 					kvSaveBuild.SetNum("solid", view_as<int>(Cel_IsSolid(i)));
+					kvSaveBuild.SetNum("perm", view_as<int>(Cel_IsPerm(i)));
 					
 					kvSaveBuild.SetNum("c1", iColor[0]);
 					kvSaveBuild.SetNum("c2", iColor[1]);

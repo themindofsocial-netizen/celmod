@@ -422,3 +422,7 @@
 		 - !stack copies always match the prop's rotation: a prop's angles were read from a cached value that is
 		   only refreshed later, so right after turning a prop the copies could come out at its old angle. Saved
 		   builds, spawn pads and hoopie bounces read angles the same fixed way.
+		 - !perm makes the prop you are looking at perm, so your house can't be wrecked by accident: it is frozen, the
+		   gravity gun can't pick it up, and it can't be moved, turned, dropped, unfrozen, replaced or deleted on its
+		   own until !unperm (or !perm again). !delall still removes everything. Perm is kept by !stack, +copy and
+		   saved builds.

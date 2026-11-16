@@ -17,9 +17,10 @@ bool g_bHasCopyEntity[MAXPLAYERS + 1];
 bool g_bIsFading[MAXENTITIES + 1];
 bool g_bRainbow[MAXENTITIES + 1];
 bool g_bSolid[MAXENTITIES + 1];
+bool g_bPerm[MAXENTITIES + 1];
 
 char g_sColorDB[PLATFORM_MAX_PATH];
-char g_sCopyBuffer[MAXPLAYERS + 1][25][128];
+char g_sCopyBuffer[MAXPLAYERS + 1][26][128];
 char g_sPropName[MAXENTITIES + 1][64];
 
 float g_fCopyOrigin[MAXPLAYERS + 1][3];
@@ -74,6 +75,8 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_IsEntity", Native_IsEntity);
 	CreateNative("Cel_IsFading", Native_IsFading);
 	CreateNative("Cel_IsLocked", Native_IsLocked);
+	CreateNative("Cel_IsPerm", Native_IsPerm);
+	CreateNative("Cel_SetPerm", Native_SetPerm);
 	CreateNative("Cel_IsRainbow", Native_IsRainbow);
 	CreateNative("Cel_IsSolid", Native_IsSolid);
 	CreateNative("Cel_LockEntity", Native_LockEntity);
@@ -170,6 +173,19 @@ public void OnPluginStart()
 	RegConsoleCmd("v_unfreeze", Command_UnfreezeIt, "|CelMod| Unfreezes the prop you are looking at.");
 	RegConsoleCmd("v_unfreezeit", Command_UnfreezeIt, "|CelMod| Unfreezes the prop you are looking at.");
 	RegConsoleCmd("v_unlock", Command_Unlock, "|CelMod| Unlocks the cel you are looking at.");
+	RegConsoleCmd("v_perm", Command_Perm, "|CelMod| Makes the prop you are looking at perm (it can't be moved, turned or deleted), or not perm again.");
+	RegConsoleCmd("v_unperm", Command_Unperm, "|CelMod| Lets the perm prop you are looking at be moved, turned and deleted again.");
+	
+	//Everything that moves, turns or deletes the one prop being looked at is refused on a perm prop, whichever
+	//plugin the command is in.
+	static const char sPermBlocked[][] = { "+move", "v_del", "v_delete", "v_remove", "v_drop", "v_flip", "v_r", "v_roll",
+		"v_rotate", "v_smove", "v_pmove", "v_stand", "v_straight", "v_straighten", "v_unfreeze", "v_unfreezeit", "v_turn",
+		"v_replace", "v_model" };
+	
+	for (int i = 0; i < sizeof(sPermBlocked); i++)
+	{
+		AddCommandListener(Listener_PermBlocked, sPermBlocked[i]);
+	}
 }
 
 public void OnClientPutInServer(int iClient)
@@ -224,6 +240,11 @@ public void OnMapEnd()
 
 public void OnEntityDestroyed(int iEntity)
 {
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		g_bPerm[iEntity] = false;
+	}
+	
 	if(Cel_IsEntity(iEntity))
 	{
 		if(Cel_IsPlayer(Cel_GetOwner(iEntity)))
@@ -976,6 +997,94 @@ public Action Command_HookRoll(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+public Action Command_Perm(int iClient, int iArgs)
+{
+	return SetPermCommand(iClient, -1);
+}
+
+public Action Command_Unperm(int iClient, int iArgs)
+{
+	return SetPermCommand(iClient, 0);
+}
+
+//iWant: 0 = not perm, -1 = switch it.
+Action SetPermCommand(int iClient, int iWant)
+{
+	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (iProp == -1)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CanEdit(iClient, iProp))
+	{
+		Cel_NotYours(iClient, iProp);
+		return Plugin_Handled;
+	}
+	
+	bool bPerm = (iWant == -1) ? !g_bPerm[iProp] : false;
+	
+	Cel_SetPerm(iProp, bPerm);
+	
+	Cel_ChangeBeam(iClient, iProp);
+	
+	if (bPerm)
+	{
+		Cel_ReplyToCommandEntity(iClient, iProp, "This [type] is now {green}perm{default}: frozen, and it can't be moved, turned or deleted until you type {green}[tag]unperm{default}.");
+	} else {
+		Cel_ReplyToCommandEntity(iClient, iProp, "This [type] is no longer perm.");
+	}
+	
+	return Plugin_Handled;
+}
+
+public Action Listener_PermBlocked(int iClient, const char[] sCommand, int iArgc)
+{
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient))
+	{
+		return Plugin_Continue;
+	}
+	
+	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (iProp > MaxClients && iProp <= MAXENTITIES && g_bPerm[iProp])
+	{
+		Cel_RefusePerm(iClient, iProp);
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
+}
+
+public int Native_IsPerm(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1);
+	
+	return (iEntity > 0 && iEntity <= MAXENTITIES) ? g_bPerm[iEntity] : false;
+}
+
+public int Native_SetPerm(Handle hPlugin, int iNumParams)
+{
+	int iEntity = GetNativeCell(1);
+	bool bPerm = view_as<bool>(GetNativeCell(2));
+	
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity))
+	{
+		return 0;
+	}
+	
+	g_bPerm[iEntity] = bPerm;
+	
+	if (bPerm)
+	{
+		Cel_SetMotion(iEntity, false);
+	}
+	
+	return 0;
+}
+
 public Action Command_Lock(int iClient, int iArgs)
 {
 	if (Cel_GetClientAimTarget(iClient) == -1)
@@ -1474,6 +1583,7 @@ public Action Command_Stack(int iClient, int iArgs)
 		Cel_SetRenderFX(iNewProp, Cel_GetRenderFX(iProp));
 		Cel_SetColorFade(iNewProp, Cel_IsFading(iProp), g_iFadeColor[iProp][0], g_iFadeColor[iProp][1], g_iFadeColor[iProp][2], g_iFadeColor[iProp][3], g_iFadeColor[iProp][4], g_iFadeColor[iProp][5]);
 		Cel_SetRainbow(iNewProp, Cel_IsRainbow(iProp));
+		Cel_SetPerm(iNewProp, g_bPerm[iProp]);
 		
 		iStacked++;
 	}
@@ -2036,6 +2146,8 @@ public int Native_CopyProp(Handle hPlugin, int iNumParams)
 	IntToString(g_iFadeColor[iEntity][5], g_sCopyBuffer[iClient][19], sizeof(g_sCopyBuffer[iClient][]));
 	
 	Cel_GetPropName(iEntity, g_sCopyBuffer[iClient][20], sizeof(g_sCopyBuffer[iClient][]));
+	
+	IntToString(view_as<int>(g_bPerm[iEntity]), g_sCopyBuffer[iClient][25], sizeof(g_sCopyBuffer[iClient][]));
 	
 	//A cycler's animation, frame and paused state.
 	g_sCopyBuffer[iClient][22][0] = '\0';
@@ -2628,6 +2740,11 @@ public int Native_PasteProp(Handle hPlugin, int iNumParams)
 	Cel_SetSolid(iEntity, view_as<bool>(StringToInt(g_sCopyBuffer[iClient][6])));
 	Cel_SetBreakable(iEntity, view_as<bool>(StringToInt(g_sCopyBuffer[iClient][21])));
 	
+	if (StringToInt(g_sCopyBuffer[iClient][25]) == 1)
+	{
+		Cel_SetPerm(iEntity, true);
+	}
+	
 	if (bCycler && g_sCopyBuffer[iClient][22][0] != '\0')
 	{
 		Cel_SetCyclerAnim(iEntity, StringToInt(g_sCopyBuffer[iClient][22]), StringToFloat(g_sCopyBuffer[iClient][23]), StringToInt(g_sCopyBuffer[iClient][24]) == 1);
@@ -2732,6 +2849,12 @@ public int Native_SetMotion(Handle hPlugin, int iNumParams)
 {
 	int iEntity = GetNativeCell(1);
 	bool bMotion = view_as<bool>(GetNativeCell(2));
+	
+	//A perm prop stays frozen (so the gravity gun can't pick it up either).
+	if (bMotion && iEntity > 0 && iEntity <= MAXENTITIES && g_bPerm[iEntity])
+	{
+		bMotion = false;
+	}
 	
 	//A welded (parented) prop stays frozen: physics moving it while its parent carries it is a crash risk.
 	if (bMotion && IsValidEntity(iEntity) && HasEntProp(iEntity, Prop_Data, "m_hMoveParent") && GetEntPropEnt(iEntity, Prop_Data, "m_hMoveParent") != -1)
