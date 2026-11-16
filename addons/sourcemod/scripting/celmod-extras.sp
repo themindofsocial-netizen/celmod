@@ -23,6 +23,7 @@ StringMap g_smLoadIds[MAXPLAYERS + 1];
 bool g_bHide[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bHideHooked[MAXENTITIES + 1];
 bool g_bLandBan[MAXPLAYERS + 1][MAXPLAYERS + 1];
+bool g_bNoFly[MAXPLAYERS + 1]; //!nofly: other players can't noclip inside this player's land
 bool g_bNoWeps[MAXPLAYERS + 1]; //!weps: other players' weapons don't work in this player's land
 int g_iNoWepsOwner[MAXPLAYERS + 1]; //the owner of the no-weapons land a player is standing in (0 = none)
 float g_fNextNoWepsNotice[MAXPLAYERS + 1];
@@ -157,6 +158,9 @@ public void OnPluginStart()
 	RegConsoleCmd("v_noclip", Command_NoClip, "|CelMod| Enables/disables noclip on the player.");
 	RegConsoleCmd("v_stuck", Command_Stuck, "|CelMod| Respawns you.");
 	RegConsoleCmd("v_turn", Command_Turn, "|CelMod| Rotates the prop you are looking at.");
+	RegConsoleCmd("v_nofly", Command_LandNoFly, "|CelMod| Turns noclip off (or back on) for other players inside your land.");
+	RegConsoleCmd("v_landnoclip", Command_LandNoFly, "|CelMod| Turns noclip off (or back on) for other players inside your land (same as !nofly).");
+	AddCommandListener(Listener_NoFly, "v_fly");
 	RegConsoleCmd("v_weps", Command_LandWeps, "|CelMod| Turns other players' weapons off (or back on) inside your land.");
 	RegConsoleCmd("v_text", Command_Text, "|CelMod| Writes words in the world out of text screens where you aim: !text <words> (^ in front for small text).");
 	RegConsoleCmd("v_arsenal", Command_Arsenal, "|CelMod| Gives you every weapon (bought in the shop: !buy arsenal).");
@@ -168,6 +172,7 @@ public void OnClientPutInServer(int iClient)
 	g_iLastLandIn[iClient] = 0;
 	g_iNoWepsOwner[iClient] = 0;
 	g_bNoWeps[iClient] = false;
+	g_bNoFly[iClient] = false;
 	g_iMoveToRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iWeldRef[iClient] = INVALID_ENT_REFERENCE;
 	g_iTeleportRef[iClient] = INVALID_ENT_REFERENCE;
@@ -376,6 +381,7 @@ public void OnClientPostAdminCheck(int iClient)
 	char sId[32];
 	
 	g_bNoWeps[iClient] = (Cel_GetClientSettingInt(iClient, "land-noweps") == 1);
+	g_bNoFly[iClient] = (Cel_GetClientSettingInt(iClient, "land-nofly") == 1);
 	
 	Cel_GetClientSettingString(iClient, "blockedlands", g_sBlockIds[iClient], sizeof(g_sBlockIds[]));
 	
@@ -627,6 +633,14 @@ public Action Timer_LandBans(Handle hTimer)
 		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
 		{
 			continue;
+		}
+		
+		//!nofly: flying into the land puts the player back on their feet.
+		if (g_bNoFly[iOwner] && GetEntityMoveType(i) == MOVETYPE_NOCLIP && NoFlyOwnerAt(i) == iOwner)
+		{
+			SetEntityMoveType(i, MOVETYPE_WALK);
+			
+			Cel_PrintToChat(i, "{green}%N{default} has turned noclip off in their land.", iOwner);
 		}
 		
 		//Remembered here (twice a second) so the weapon block below doesn't look up lands every frame.
@@ -895,6 +909,66 @@ public Action Command_Stuck(int iClient, int iArgs)
 	}
 	
 	return Plugin_Handled;
+}
+
+//!nofly: other players can't noclip inside your land: turning it on there is refused, and anyone flying in is put
+//back on their feet. You, your build team and admins with !zonebypass can still fly. Remembered.
+public Action Command_LandNoFly(int iClient, int iArgs)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	g_bNoFly[iClient] = !g_bNoFly[iClient];
+	
+	Cel_SetClientSettingInt(iClient, "land-nofly", g_bNoFly[iClient] ? 1 : 0);
+	
+	if (g_bNoFly[iClient])
+	{
+		Cel_ReplyToCommand(iClient, "Noclip is now {green}off{default} for other players in your land. Type {green}[tag]nofly{default} to allow it again.");
+	} else {
+		Cel_ReplyToCommand(iClient, "Other players can noclip in your land again.");
+	}
+	
+	return Plugin_Handled;
+}
+
+//The land owner whose !nofly stops this player flying where they stand (0 = none).
+int NoFlyOwnerAt(int iClient)
+{
+	float fOrigin[3];
+	
+	GetClientAbsOrigin(iClient, fOrigin);
+	fOrigin[2] += 16.0;
+	
+	int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+	
+	if (iOwner < 1 || iOwner > MaxClients || iOwner == iClient || !g_bNoFly[iOwner] || !IsClientInGame(iOwner) || !Cel_IsLandCreated(iOwner)
+		|| Cel_IsOnBuildTeam(iOwner, iClient) || Cel_ZoneExempt(iClient))
+	{
+		return 0;
+	}
+	
+	return iOwner;
+}
+
+public Action Listener_NoFly(int iClient, const char[] sCommand, int iArgc)
+{
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || !IsPlayerAlive(iClient) || GetEntityMoveType(iClient) == MOVETYPE_NOCLIP)
+	{
+		return Plugin_Continue;
+	}
+	
+	int iOwner = NoFlyOwnerAt(iClient);
+	
+	if (iOwner != 0)
+	{
+		Cel_PrintToChat(iClient, "{green}%N{default} has turned noclip off in their land.", iOwner);
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
 }
 
 //!weps: other players' weapons stop working inside your land (they can still use the gravity gun). Remembered.

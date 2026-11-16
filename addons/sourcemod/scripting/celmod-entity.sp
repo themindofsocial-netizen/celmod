@@ -152,6 +152,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_fadecolor", Command_FadeColor, "|CelMod| Fades the prop you are looking at between two colors.");
 	RegConsoleCmd("v_flip", Command_HookFlip, "|CelMod| Flips the prop you are looking at.");
 	RegConsoleCmd("v_freeze", Command_FreezeIt, "|CelMod| Freezes the prop you are looking at.");
+	RegConsoleCmd("v_freezeall", Command_FreezeAll, "|CelMod| Freezes every prop you own.");
+	RegConsoleCmd("v_unfreezeall", Command_UnfreezeAll, "|CelMod| Unfreezes every prop you own (perm and welded props stay frozen).");
 	RegConsoleCmd("v_freezeit", Command_FreezeIt, "|CelMod| Freezes the prop you are looking at.");
 	RegConsoleCmd("v_god", Command_God, "|CelMod| Enables/disables breakability on the prop you are looking at.");
 	RegConsoleCmd("v_lock", Command_Lock, "|CelMod| Locks the cel you are looking at.");
@@ -894,6 +896,54 @@ public Action Command_FreezeIt(int iClient, int iArgs)
 	} else {
 		Cel_NotYours(iClient, iProp);
 		return Plugin_Handled;
+	}
+	
+	return Plugin_Handled;
+}
+
+public Action Command_FreezeAll(int iClient, int iArgs)
+{
+	return SetMotionAll(iClient, false);
+}
+
+public Action Command_UnfreezeAll(int iClient, int iArgs)
+{
+	return SetMotionAll(iClient, true);
+}
+
+//Freezes or unfreezes every prop the player owns. Bits (buttons, triggers) are left alone, and perm or welded props
+//always stay frozen (Native_SetMotion keeps them that way).
+Action SetMotionAll(int iClient, bool bMotion)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	int iChanged = 0, iKept = 0;
+	
+	for (int i = MaxClients + 1; i < GetMaxEntities(); i++)
+	{
+		if (!IsValidEntity(i) || !Cel_IsEntity(i) || Cel_GetOwner(i) != iClient || Cel_CheckEntityCatagory(i, ENTCATAGORY_BIT))
+		{
+			continue;
+		}
+		
+		if (bMotion && (g_bPerm[i] || (HasEntProp(i, Prop_Data, "m_hMoveParent") && GetEntPropEnt(i, Prop_Data, "m_hMoveParent") != -1)))
+		{
+			iKept++;
+			continue;
+		}
+		
+		Cel_SetMotion(i, bMotion);
+		iChanged++;
+	}
+	
+	if (bMotion)
+	{
+		Cel_ReplyToCommand(iClient, "Unfroze {green}%d{default} of your props.%s", iChanged, iKept > 0 ? " Perm and welded props stay frozen." : "");
+	} else {
+		Cel_ReplyToCommand(iClient, "Froze {green}%d{default} of your props.", iChanged);
 	}
 	
 	return Plugin_Handled;

@@ -444,14 +444,14 @@ public void OnPluginStart()
 	g_cvNukeWrecks = CreateConVar("cm_nuke_wrecks_builds", "1", "1: the Nuke emblem unfreezes and scatters props where it lands, as on the original server. 0: builds are safe.", _, true, 0.0, true, 1.0);
 	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
 	g_cvDigChance = CreateConVar("cm_dig_chance", "0.35", "Chance a shovel hit on the ground digs something up.", _, true, 0.0, true, 1.0);
-	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_chance", "0.02", "Share of finds that are a Black or White emblem (0.02 = 2%).", _, true, 0.0, true, 1.0);
+	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_share", "0.0001", "Share of finds that are a Black or White emblem (0.0001 = 0.01%, 1 in 10,000).", _, true, 0.0, true, 1.0);
 	// New names, so a saved config's old (more generous) values don't carry over.
 	g_cvDigMoneyChance = CreateConVar("cm_dig_money_share", "0.05", "Share of finds that are a money box (0.05 = 5%). The rest is junk.", _, true, 0.0, true, 1.0);
 	g_cvDigHoboChance = CreateConVar("cm_dig_hobo_chance", "0.02", "Share of finds that are a hobo (an idle, brown Eli).", _, true, 0.0, true, 1.0);
 	g_cvDigOreChances = CreateConVar("cm_dig_ore_chances", "1 0.6 0.4 0.25 0.15 0.08 0.04 0.03 0.01", "Percent chance per junk find of each rock, in order: turd coal iron copper silver gold emerald ruby diamond.");
 	g_cvDigOreChances.AddChangeHook(OnOreChancesChanged);
 	ParseOreChances();
-	g_cvDigVialChance = CreateConVar("cm_dig_vial_share", "0.025", "Share of finds that are a Vial (0.025 = 2.5%, a little more common than a Black or White emblem). It senses a buried emblem close by.", _, true, 0.0, true, 1.0);
+	g_cvDigVialChance = CreateConVar("cm_dig_vial_share", "0.025", "Share of finds that are a Vial (0.025 = 2.5%). It senses a buried emblem close by.", _, true, 0.0, true, 1.0);
 	g_cvVialFindChance = CreateConVar("cm_beacon_emblem_chance", "0.03", "Chance a diggable emblem (Black or White) is buried near a spot a Vial checks for the first time. Very rare.", _, true, 0.0, true, 1.0);
 	g_cvBeaconRange = CreateConVar("cm_beacon_range", "64.0", "How far around itself a Vial senses (and how close the buried emblem is).", _, true, 16.0, true, 512.0);
 	g_cvBeaconCooldown = CreateConVar("cm_beacon_cooldown", "20.0", "Seconds before the same player can use a Vial again.", _, true, 0.0);

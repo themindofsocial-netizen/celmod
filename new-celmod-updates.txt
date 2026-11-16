@@ -445,3 +445,8 @@
 		   you're carrying is let go when you walk into one (or carry it into one). Admins with !zonebypass are exempt.
 		 - Bank items out in the world (emblems, hats and celweps, shop props, hobos) no longer count toward the prop or
 		   cel limit: they have their own limit of 50 (cm_max_items). The prop limit is 200.
+		 - Digging up a Black or White emblem is a 0.01% chance (1 in 10,000 finds): cm_dig_emblem_share replaces
+		   cm_dig_emblem_chance.
+		 - !freezeall and !unfreezeall freeze or unfreeze every prop you own (perm and welded props stay frozen).
+		 - !nofly (or !landnoclip) turns noclip off for other players in your land: they can't turn it on there, and
+		   anyone flying in is put back on their feet. You, your build team and admins with !zonebypass still can.

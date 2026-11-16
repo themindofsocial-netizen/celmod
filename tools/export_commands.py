@@ -28,12 +28,12 @@ CATEGORIES = [
 
 CATEGORY = {}
 for cat, names in {
-    'building': 'spawn p s save load saves builds clear copy paste +copy +move freeze freezeit unfreeze unfreezeit del delete remove delall deleteall removeall undo '
+    'building': 'spawn p s save load saves builds clear copy paste +copy +move freeze freezeit freezeall unfreeze unfreezeit unfreezeall del delete remove delall deleteall removeall undo '
                 'r rotate flip roll turn stand straight straighten smove pmove drop moveto weld release stack stackinfo axis mark marker '
                 'replace model skin color paint palette fadecolor alpha amt renderfx solid god lock unlock perm unperm owner',
     'cels': 'text door light ladder internet seturl fire effect emitter message music celmusic sound teleport spawnpoint button link setpass pass wep ammo ammocrate charger',
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
-            'fee landban landunban landkick kick landslay weps buildmessage block unblock hide show zones',
+            'fee landban landunban landkick kick landslay weps nofly landnoclip buildmessage block unblock hide show zones',
     'money': 'bank balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
     'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid spawnpad spawnpads npckills tacticlvl tacticxp',
     'player': 'fly noclip nokill stuck switch feed pmute punmute timeleft',
