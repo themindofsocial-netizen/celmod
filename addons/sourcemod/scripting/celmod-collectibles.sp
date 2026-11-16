@@ -167,6 +167,8 @@ int g_iPuntHeldRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the grav
 //Emblem boxes that have been held, by box: who held it last, when, and which emblem it holds. Kept outside the entity,
 //because when the map ends the box itself may already be gone. [userid, item, time]
 StringMap g_smBoxHolds;
+// Flicker test switches: each turns one thing an enabled emblem does off, live (sm_cvar ... 0).
+ConVar g_cvTestHoldModel, g_cvTestPuntHold, g_cvTestPowers;
 bool g_bRealLeave[MAXPLAYERS + 1]; //a player_disconnect event came first: really leaving, not a map change
 ConVar g_cvDropPerPlayer;
 ConVar g_cvDropEndMinutes;
@@ -509,6 +511,10 @@ public void OnPluginStart()
 	HookEvent("player_death", Event_Death, EventHookMode_Post);
 	HookEvent("player_spawn", Event_Spawn, EventHookMode_Post);
 	HookEvent("player_disconnect", Event_PlayerLeft, EventHookMode_Pre);
+	
+	g_cvTestHoldModel = CreateConVar("cm_test_emblem_model", "1", "Test switch: 0 shows nothing extra for an emblem in hand (the plain gravity gun, untouched).", _, true, 0.0, true, 1.0);
+	g_cvTestPuntHold = CreateConVar("cm_test_emblem_punt", "1", "Test switch: 0 never holds back the gravity gun's punt while an emblem is in hand.", _, true, 0.0, true, 1.0);
+	g_cvTestPowers = CreateConVar("cm_test_emblem_powers", "1", "Test switch: 0 turns off emblem powers in hand (speed, tint, cloak, gravity, regen...).", _, true, 0.0, true, 1.0);
 
 	CreateTimer(0.2, Timer_Think, _, TIMER_REPEAT);
 	CreateTimer(60.0, Timer_Minute, _, TIMER_REPEAT);
@@ -2644,13 +2650,13 @@ public Action Timer_Think(Handle hTimer)
 
 		// Third person model: other players see the emblem in this player's hand in place of the
 		// gravity gun. The player's own first person view model is never touched.
-		int iShow = (g_bHoldingGravGun[i] && iItem != -1) ? iItem : -1;
+		int iShow = (g_bHoldingGravGun[i] && iItem != -1 && g_cvTestHoldModel.BoolValue) ? iItem : -1;
 
 		// With an emblem that has a power, the left click is the emblem's: the gravity gun's own punt (its electric
 		// shock on enemies and players) is held back. Throwing a prop the gravity gun is holding still works.
 		// It's held back with one change when that starts and undone once when it stops: changing the gun's
 		// (networked, predicted) next-attack time every frame made the gun and the player's animations stutter.
-		bool bHoldPunt = (g_bHoldingGravGun[i] && iItem != -1 && !StrEqual(g_Items[iItem].sPower, "none")
+		bool bHoldPunt = (g_cvTestPuntHold.BoolValue && g_bHoldingGravGun[i] && iItem != -1 && !StrEqual(g_Items[iItem].sPower, "none")
 			&& !(HasEntProp(iWeapon, Prop_Send, "m_bActive") && GetEntProp(iWeapon, Prop_Send, "m_bActive")));
 
 		if (bHoldPunt)
@@ -2729,6 +2735,11 @@ public Action Timer_Think(Handle hTimer)
 				SetEntityRenderMode(iWeapon, RENDER_NORMAL);
 				SetEntityRenderColor(iWeapon, 255, 255, 255, 255);
 			}
+		}
+
+		if (!g_cvTestPowers.BoolValue)
+		{
+			iItem = -1;
 		}
 
 		// Movement speed: slowed by a blizzard emblem, or boosted by the player's own speed emblem.
@@ -3920,8 +3931,8 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 	AttachShimmer(iHand, iItem, iClient);
 
-	// The gun is simply not drawn (a see-through gun would still be drawn, in the see-through pass).
-	SetEntityRenderMode(iWeapon, RENDER_NONE);
+	SetEntityRenderMode(iWeapon, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(iWeapon, 255, 255, 255, 0);
 }
 
 // A nearly invisible emblem (Invisible: "nearalpha") gets a faint copy of itself that only players right up close
