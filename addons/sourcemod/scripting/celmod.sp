@@ -168,6 +168,7 @@ public void OnPluginStart()
 	CreateConVar("celmod", "1", "Notifies the server that the plugin is running.");
 	g_cvCelLimit = CreateConVar("cm_max_player_cels", "20", "Maxiumum number of cel entities a client is allowed.");
 	g_cvDownloadPath = CreateConVar("cm_download_list_path", "data/celmod/downloads.txt", "Path for the download list for clients.");
+	CreateConVar("cm_admin_shop_props", "0", "1: root admins can spawn any shop prop, any number of times (for displays). 0: admins need to own copies like everyone.", _, true, 0.0, true, 1.0);
 	CreateConVar("cm_edict_reserve", "256", "Entity slots kept free for the game: players can't spawn or load anything once the server is this close to its 2048 entity limit (running out crashes the server).", _, true, 32.0, true, 1024.0);
 	g_cvPropLimit = CreateConVar("cm_max_player_props", "160", "Maxiumum number of props a player is allowed to spawn.");
 	g_cvOverlayPath = CreateConVar("cm_overlay_material_path", "celmod/cm_overlay2.vmt", "Default CelMod overlay path.");
@@ -1000,7 +1001,7 @@ public int Native_CheckShopProp(Handle hPlugin, int iNumParams)
 	FormatEx(sKey, sizeof(sKey), "prop_%s", sAlias);
 	
 	// Root admins can always spawn them, e.g. to set up displays.
-	if (!Cel_CheckClientPurchase(iClient, sKey) && !CheckCommandAccess(iClient, "celmod_shop_props", ADMFLAG_ROOT))
+	if (!Cel_CheckClientPurchase(iClient, sKey) && !AdminShopPropsUnlimited(iClient))
 	{
 		return -1;
 	}
@@ -1326,11 +1327,20 @@ public int Native_SetPropLimit(Handle hPlugin, int iNumParams)
 	return true;
 }
 
+//Shop props are finite for everyone, admins included. cm_admin_shop_props 1 lets root admins spawn any number
+//of any shop prop, e.g. to set up displays.
+bool AdminShopPropsUnlimited(int iClient)
+{
+	ConVar cvAdmin = FindConVar("cm_admin_shop_props");
+	
+	return (cvAdmin != null && cvAdmin.BoolValue && CheckCommandAccess(iClient, "celmod_shop_props", ADMFLAG_ROOT));
+}
+
 bool ShopPropCopyAllowed(int iClient, const char[] sAlias)
 {
 	char sLower[64], sSpawn[256], sKey[80], sName[64];
 	
-	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || CheckCommandAccess(iClient, "celmod_shop_props", ADMFLAG_ROOT))
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || AdminShopPropsUnlimited(iClient))
 	{
 		return true;
 	}
