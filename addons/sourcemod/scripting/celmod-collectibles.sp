@@ -190,7 +190,8 @@ ArrayList g_alMarkedHammer;
 ArrayList g_alTrashSpots; // spots marked with !trashcan on a map's static props (not entities), [x, y, z]
 ConVar g_cvDigHoboChance;
 ConVar g_cvDigVialChance;
-ConVar g_cvDigRockChance;
+ConVar g_cvDigOreChances;
+float g_fOreChances[9];
 
 // Rocks dug up with the shovel: thrown in a trash can, each pays more than junk. Rarer ones pay more.
 // Every rock is models/props_junk/rock001a.mdl, coloured.
@@ -200,7 +201,6 @@ static const int g_iRockColors[][3] =
 {
 	{ 92, 58, 26 }, { 40, 40, 40 }, { 160, 140, 130 }, { 205, 120, 60 }, { 215, 220, 230 }, { 255, 200, 40 }, { 40, 200, 90 }, { 220, 30, 50 }, { 160, 240, 255 }
 };
-static const int g_iRockWeights[] = { 30, 22, 16, 12, 8, 5, 3, 3, 1 };
 static const int g_iRockPayMin[] = { 0, 4, 5, 6, 8, 12, 18, 18, 30 };
 static const int g_iRockPayMax[] = { 0, 6, 7, 9, 12, 18, 24, 24, 45 };
 ConVar g_cvVialFindChance;
@@ -442,11 +442,13 @@ public void OnPluginStart()
 	// New names, so a saved config's old (more generous) values don't carry over.
 	g_cvDigMoneyChance = CreateConVar("cm_dig_money_share", "0.05", "Share of finds that are a money box (0.05 = 5%). The rest is junk.", _, true, 0.0, true, 1.0);
 	g_cvDigHoboChance = CreateConVar("cm_dig_hobo_chance", "0.02", "Share of finds that are a hobo (an idle, brown Eli).", _, true, 0.0, true, 1.0);
-	g_cvDigRockChance = CreateConVar("cm_dig_rock_chance", "0.3", "Share of junk finds that are a rock instead (a turd, coal, iron, copper, silver, gold, emerald, ruby or diamond), worth more in a trash can.", _, true, 0.0, true, 1.0);
-	g_cvDigVialChance = CreateConVar("cm_dig_vial_chance", "0.05", "Share of finds that are a Beacon (it senses a buried emblem close by).", _, true, 0.0, true, 1.0);
-	g_cvVialFindChance = CreateConVar("cm_beacon_emblem_chance", "0.03", "Chance a diggable emblem (Black or White) is buried near a spot a Beacon checks for the first time. Very rare.", _, true, 0.0, true, 1.0);
-	g_cvBeaconRange = CreateConVar("cm_beacon_range", "64.0", "How far around itself a Beacon senses (and how close the buried emblem is).", _, true, 16.0, true, 512.0);
-	g_cvBeaconCooldown = CreateConVar("cm_beacon_cooldown", "20.0", "Seconds before the same player can use a Beacon again.", _, true, 0.0);
+	g_cvDigOreChances = CreateConVar("cm_dig_ore_chances", "1 0.6 0.4 0.25 0.15 0.08 0.04 0.03 0.01", "Percent chance per junk find of each rock, in order: turd coal iron copper silver gold emerald ruby diamond.");
+	g_cvDigOreChances.AddChangeHook(OnOreChancesChanged);
+	ParseOreChances();
+	g_cvDigVialChance = CreateConVar("cm_dig_vial_share", "0.025", "Share of finds that are a Vial (0.025 = 2.5%, a little more common than a Black or White emblem). It senses a buried emblem close by.", _, true, 0.0, true, 1.0);
+	g_cvVialFindChance = CreateConVar("cm_beacon_emblem_chance", "0.03", "Chance a diggable emblem (Black or White) is buried near a spot a Vial checks for the first time. Very rare.", _, true, 0.0, true, 1.0);
+	g_cvBeaconRange = CreateConVar("cm_beacon_range", "64.0", "How far around itself a Vial senses (and how close the buried emblem is).", _, true, 16.0, true, 512.0);
+	g_cvBeaconCooldown = CreateConVar("cm_beacon_cooldown", "20.0", "Seconds before the same player can use a Vial again.", _, true, 0.0);
 	g_cvTrashMin = CreateConVar("cm_trash_pay_min", "1", "Least cleers for putting dug up junk in a trash can.", _, true, 0.0);
 	g_cvTrashMax = CreateConVar("cm_trash_pay_max", "3", "Most cleers for putting dug up junk in a trash can.", _, true, 0.0);
 	g_cvDigMoneyMin = CreateConVar("cm_dig_money_min", "100", "Least cleers in a dug up money box.", _, true, 0.0);
@@ -8248,41 +8250,52 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 		SpawnVial(fSpot);
 		ThrowOutOfGround(EntRefToEntIndex(g_iLastVial));
 
-		Cel_PrintToChat(iClient, "You dug up a {green}Beacon{default}! Press {green}E{default} on it to sense whether a rare emblem is buried right around it.");
+		Cel_PrintToChat(iClient, "You dug up a {green}Vial{default}! Press {green}E{default} on it to sense whether a rare emblem is buried right around it.");
 		return;
 	}
 
-	if (GetRandomFloat(0.0, 1.0) < g_cvDigRockChance.FloatValue)
+	float fOre = GetRandomFloat(0.0, 100.0);
+
+	for (int i = 0; i < sizeof(g_fOreChances); i++)
 	{
-		DigUpRock(iClient, fSpot);
-		return;
+		if (fOre < g_fOreChances[i])
+		{
+			DigUpRock(iClient, fSpot, i);
+			return;
+		}
+
+		fOre -= g_fOreChances[i];
 	}
 
 	SpawnDugUp(g_sJunkModels[GetRandomInt(0, sizeof(g_sJunkModels) - 1)], fSpot, 0);
 }
 
-void DigUpRock(int iClient, float fSpot[3])
+void OnOreChancesChanged(ConVar cvConVar, const char[] sOld, const char[] sNew)
 {
-	int iTotal = 0, iRock = 0;
+	ParseOreChances();
+}
 
-	for (int i = 0; i < sizeof(g_iRockWeights); i++)
+// Reads cm_dig_ore_chances ("turd coal ... diamond", percent each) into g_fOreChances.
+void ParseOreChances()
+{
+	char sValue[128], sParts[sizeof(g_fOreChances)][16];
+	g_cvDigOreChances.GetString(sValue, sizeof(sValue));
+
+	int iCount = ExplodeString(sValue, " ", sParts, sizeof(sParts), sizeof(sParts[]));
+
+	for (int i = 0; i < sizeof(g_fOreChances); i++)
 	{
-		iTotal += g_iRockWeights[i];
-	}
+		g_fOreChances[i] = (i < iCount) ? StringToFloat(sParts[i]) : 0.0;
 
-	int iRoll = GetRandomInt(1, iTotal);
-
-	for (int i = 0; i < sizeof(g_iRockWeights); i++)
-	{
-		iRoll -= g_iRockWeights[i];
-
-		if (iRoll <= 0)
+		if (g_fOreChances[i] < 0.0)
 		{
-			iRock = i;
-			break;
+			g_fOreChances[i] = 0.0;
 		}
 	}
+}
 
+void DigUpRock(int iClient, float fSpot[3], int iRock)
+{
 	if (SpawnRock(iRock, fSpot) == -1)
 	{
 		return;
@@ -8339,7 +8352,7 @@ void DigUpTreasure(int iClient, int iItem, float fSpot[3])
 	}
 
 	EmitSoundToAll(SOUND_REWARD, iClient);
-	Cel_PrintToChat(iClient, "The Beacon was right: you dug up a {green}%s{default} emblem!", g_Items[iFound].sName);
+	Cel_PrintToChat(iClient, "The Vial was right: you dug up a {green}%s{default} emblem!", g_Items[iFound].sName);
 }
 
 // A hobo: an idle Eli, coloured brown, who belongs to whoever dug him up.
@@ -8411,7 +8424,7 @@ public void Hook_VialUse(int iVial, int iActivator, int iCaller, UseType utType,
 	// Each player waits cm_beacon_cooldown between uses, whichever Beacon they use.
 	if (GetGameTime() < g_fNextBeacon[iActivator])
 	{
-		Cel_PrintToChat(iActivator, "The Beacon is recharging: {green}%d{default} seconds left.", RoundToCeil(g_fNextBeacon[iActivator] - GetGameTime()));
+		Cel_PrintToChat(iActivator, "The Vial is recharging: {green}%d{default} seconds left.", RoundToCeil(g_fNextBeacon[iActivator] - GetGameTime()));
 		g_fNextVial[iVial] = GetGameTime() + 1.0;
 		return;
 	}
@@ -8458,7 +8471,7 @@ public void Hook_VialUse(int iVial, int iActivator, int iCaller, UseType utType,
 
 	EmitSoundToAll(bFound ? "buttons/blip1.wav" : "buttons/button10.wav", iVial);
 
-	Cel_PrintToChat(iActivator, bFound ? "The Beacon glows {green}green{default}: a rare emblem is buried right here. Dig inside the ring!" : "The Beacon glows red: no emblem is buried here.");
+	Cel_PrintToChat(iActivator, bFound ? "The Vial glows {green}green{default}: a rare emblem is buried right here. Dig inside the ring!" : "The Vial glows red: no emblem is buried here.");
 }
 
 // Decides what's buried near a spot: a find (on the ground somewhere close) or nothing.
@@ -10458,7 +10471,7 @@ public int Native_StartEmblemDrop(Handle hPlugin, int iNumParams)
 //The bank (!bank): a menu in the ESC menu, like the banks of HL2DM roleplay servers.
 //  Celweps / Emblems: what you own; picking one spawns it, as !weapon / !emblem do.
 //  CelItems: shop props you've bought (picking one spawns it where you aim), and finds put in the bank with
-//  "Deposit what I'm looking at": hobos, ores and turds, and Beacons. Each kind is counted; taking one out spawns
+//  "Deposit what I'm looking at": hobos, ores and turds, and Vials. Each kind is counted; taking one out spawns
 //  it where you aim.
 #define BANK_HOBO 0
 #define BANK_BEACON 1
@@ -10487,7 +10500,7 @@ void BankName(int iKind, char[] sName, int iMaxLength)
 	{
 		strcopy(sName, iMaxLength, "Hobo");
 	} else if (iKind == BANK_BEACON) {
-		strcopy(sName, iMaxLength, "Beacon");
+		strcopy(sName, iMaxLength, "Vial");
 	} else {
 		strcopy(sName, iMaxLength, g_sRockNames[iKind - BANK_ROCK]);
 	}
@@ -10975,7 +10988,7 @@ void BankDeposit(int iClient)
 
 	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity))
 	{
-		Cel_PrintToChat(iClient, "Look at a hobo, ore, turd or Beacon you dug up, then pick Deposit.");
+		Cel_PrintToChat(iClient, "Look at a hobo, ore, turd or Vial you dug up, then pick Deposit.");
 		return;
 	}
 
@@ -11007,7 +11020,7 @@ void BankDeposit(int iClient)
 
 	if (iKind == -1)
 	{
-		Cel_PrintToChat(iClient, "Only finds go in the bank: hobos, ores, turds and Beacons.");
+		Cel_PrintToChat(iClient, "Only finds go in the bank: hobos, ores, turds and Vials.");
 		return;
 	}
 

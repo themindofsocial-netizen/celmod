@@ -378,3 +378,7 @@
 		   loads that item, and !bank add puts what you're looking at in your bank.
 		 - Players no longer flicker while holding an emblem. Gravity-gun shaped emblems now recolour the player's own
 		   gravity gun instead of adding a second model, and no held emblem is bone-merged onto the player any more.
+		 - Turds and ores are much rarer: each junk find has a 1% chance of a turd, then coal 0.6%, iron 0.4%,
+		   copper 0.25%, silver 0.15%, gold 0.08%, emerald 0.04%, ruby 0.03% and diamond 0.01% (cm_dig_ore_chances).
+		 - The Beacon is called the Vial again, and it is really rare: 2.5% of finds (cm_dig_vial_share), just a
+		   little more common than a Black or White emblem. It still senses a buried emblem nearby, with a cooldown.
