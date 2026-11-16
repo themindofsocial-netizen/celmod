@@ -181,6 +181,8 @@ void LoadCatalog()
 			ResetItem(eItem, TYPE_PROP, sKey, "Rare Props");
 			strcopy(eItem.sTarget, sizeof(eItem.sTarget), sValue);
 			ReadCommonKeys(kvShop, eItem);
+			// A prop is a finite CelItem: each purchase is one more copy of it (see Cel_AddClientPurchase).
+			eItem.bRepeatable = view_as<bool>(kvShop.GetNum("repeatable", 1));
 			AddItem(eItem);
 		} while (kvShop.GotoNextKey());
 	}
@@ -644,10 +646,15 @@ int Deliver(int iClient, const char[] sKey, int iMaxPrice, char[] sError, int iE
 
 	switch (eItem.iType)
 	{
-		case TYPE_COMMAND, TYPE_PROP:
+		case TYPE_COMMAND:
 		{
 			strcopy(sPurchase, sizeof(sPurchase), eItem.sKey);
 			Cel_SaveClientPurchase(iClient, sPurchase, true);
+		}
+		case TYPE_PROP:
+		{
+			strcopy(sPurchase, sizeof(sPurchase), eItem.sKey);
+			Cel_AddClientPurchase(iClient, sPurchase, 1);
 		}
 		case TYPE_MODEL:
 		{

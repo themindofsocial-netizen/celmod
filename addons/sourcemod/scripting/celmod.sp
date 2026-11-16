@@ -1314,6 +1314,53 @@ public int Native_SetPropLimit(Handle hPlugin, int iNumParams)
 	return true;
 }
 
+bool ShopPropCopyAllowed(int iClient, const char[] sAlias)
+{
+	char sLower[64], sSpawn[256], sKey[80], sName[64];
+	
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || CheckCommandAccess(iClient, "celmod_shop_props", ADMFLAG_ROOT))
+	{
+		return true;
+	}
+	
+	strcopy(sLower, sizeof(sLower), sAlias);
+	StringToLower(sLower);
+	
+	if (!g_smShopProps.GetString(sLower, sSpawn, sizeof(sSpawn)))
+	{
+		return true;
+	}
+	
+	FormatEx(sKey, sizeof(sKey), "prop_%s", sLower);
+	
+	int iOwned = Cel_GetClientPurchaseCount(iClient, sKey), iOut = 0;
+	
+	for (int i = MaxClients + 1; i < GetMaxEntities(); i++)
+	{
+		if (IsValidEntity(i) && Cel_IsEntity(i) && Cel_GetOwner(i) == iClient)
+		{
+			Cel_GetPropName(i, sName, sizeof(sName));
+			
+			if (StrEqual(sName, sLower, false))
+			{
+				iOut++;
+			}
+		}
+	}
+	
+	if (iOut >= iOwned)
+	{
+		char sMessage[192];
+		
+		FormatEx(sMessage, sizeof(sMessage), "You own {green}%d{default} %s and %s out. Delete one or put it back with {green}!bank add{default}, or buy another.", iOwned, sLower, iOwned == 1 ? "it is" : "they are all");
+		NotifySpawnRefused(iClient, sMessage);
+		
+		return false;
+	}
+	
+	return true;
+}
+
 void NotifySpawnRefused(int iClient, const char[] sMessage)
 {
 	if (iClient > 0 && iClient <= MaxClients && IsClientInGame(iClient) && GetGameTime() >= g_fNextSpawnRefusal[iClient])
@@ -1372,6 +1419,12 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	{
 		NotifySpawnRefused(iClient, "This map can't load any more new models. Try a prop that is already in use, or wait for the next map.");
 		LogMessage("|CelMod| Model precache table is full: refused '%s'.", sModel);
+		return -1;
+	}
+	
+	//Shop props are finite CelItems: only as many copies can be out as the player has bought.
+	if (!ShopPropCopyAllowed(iClient, sAlias))
+	{
 		return -1;
 	}
 	

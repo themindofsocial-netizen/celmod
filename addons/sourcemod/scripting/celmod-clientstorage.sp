@@ -26,6 +26,8 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetClientSettingString", Native_GetClientSettingString);
 	CreateNative("Cel_RemoveClientPurchase", Native_RemoveClientPurchase);
 	CreateNative("Cel_SaveClientPurchase", Native_SaveClientPurchase);
+	CreateNative("Cel_GetClientPurchaseCount", Native_GetClientPurchaseCount);
+	CreateNative("Cel_AddClientPurchase", Native_AddClientPurchase);
 	CreateNative("Cel_SetClientSettingFloat", Native_SetClientSettingFloat);
 	CreateNative("Cel_SetClientSettingInt", Native_SetClientSettingInt);
 	CreateNative("Cel_SetClientSettingString", Native_SetClientSettingString);
@@ -141,7 +143,7 @@ public any Native_CheckClientPurchase(Handle hPlugin, int iNumParams)
 	
 	g_kvClientPurchases[iClient].JumpToKey("Purchases");
 	
-	bool bHasPurchase = (g_kvClientPurchases[iClient].GetNum(sPurchase, 0) == 1);
+	bool bHasPurchase = (g_kvClientPurchases[iClient].GetNum(sPurchase, 0) >= 1);
 	
 	g_kvClientPurchases[iClient].Rewind();
 	
@@ -437,4 +439,61 @@ public void Native_SetClientSettingString(Handle hPlugin, int iNumParams)
 	g_kvClientSettings[iClient].ExportToFile(g_sClientSettings[iClient]);
 	
 	g_kvClientSettings[iClient].Close();
+}
+
+//A purchase's value is how many the player owns (shop props are finite CelItems: one per purchase).
+public int Native_GetClientPurchaseCount(Handle hPlugin, int iNumParams)
+{
+	char sPurchase[64];
+	int iClient = GetNativeCell(1);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		return 0;
+	}
+	
+	GetNativeString(2, sPurchase, sizeof(sPurchase));
+	
+	KeyValues kvPurchases = new KeyValues("Vault");
+	
+	kvPurchases.ImportFromFile(g_sClientPurchases[iClient]);
+	
+	int iCount = kvPurchases.JumpToKey("Purchases") ? kvPurchases.GetNum(sPurchase, 0) : 0;
+	
+	delete kvPurchases;
+	
+	return iCount < 0 ? 0 : iCount;
+}
+
+public int Native_AddClientPurchase(Handle hPlugin, int iNumParams)
+{
+	char sPurchase[64];
+	int iClient = GetNativeCell(1), iAdd = GetNativeCell(3);
+	
+	if (!EnsureClientFiles(iClient))
+	{
+		return 0;
+	}
+	
+	GetNativeString(2, sPurchase, sizeof(sPurchase));
+	
+	KeyValues kvPurchases = new KeyValues("Vault");
+	
+	kvPurchases.ImportFromFile(g_sClientPurchases[iClient]);
+	kvPurchases.JumpToKey("Purchases", true);
+	
+	int iCount = kvPurchases.GetNum(sPurchase, 0) + iAdd;
+	
+	if (iCount < 0)
+	{
+		iCount = 0;
+	}
+	
+	kvPurchases.SetNum(sPurchase, iCount);
+	kvPurchases.Rewind();
+	kvPurchases.ExportToFile(g_sClientPurchases[iClient]);
+	
+	delete kvPurchases;
+	
+	return iCount;
 }

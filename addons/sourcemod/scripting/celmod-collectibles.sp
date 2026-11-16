@@ -2705,7 +2705,7 @@ public Action Timer_Think(Handle hTimer)
 		} else if (g_bHeldShown[i])
 		{
 			RestoreWeapon(i);
-		} else if (g_bHoldingGravGun[i] && iWeapon > MaxClients && GetEntityRenderMode(iWeapon) == RENDER_TRANSCOLOR)
+		} else if (g_bHoldingGravGun[i] && iWeapon > MaxClients && (GetEntityRenderMode(iWeapon) == RENDER_TRANSCOLOR || GetEntityRenderMode(iWeapon) == RENDER_NONE))
 		{
 			// No emblem in hand, but the gravity gun is still see-through (the emblem was turned off while it was the
 			// one being hidden): it's made visible again, whatever path left it hidden.
@@ -2713,7 +2713,7 @@ public Action Timer_Think(Handle hTimer)
 
 			GetEntityRenderColor(iWeapon, iR, iG, iB, iA);
 
-			if (iA < 255)
+			if (iA < 255 || GetEntityRenderMode(iWeapon) == RENDER_NONE)
 			{
 				SetEntityRenderMode(iWeapon, RENDER_NORMAL);
 				SetEntityRenderColor(iWeapon, 255, 255, 255, 255);
@@ -3854,12 +3854,10 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 	if (StrEqual(sHeld, GRAVGUN_WORLDMODEL, false))
 	{
-		ApplyItemColor(iWeapon, iItem);
-
-		if (g_Items[iItem].bGlow)
-		{
-			SetEntityRenderFx(iWeapon, RENDERFX_GLOWSHELL);
-		}
+		// Colour only: the gun is drawn with the player's skeleton, and a see-through or glow-shell gun is drawn
+		// in a separate pass, which recalculates the skeleton at another moment and makes the player flicker.
+		SetEntityRenderMode(iWeapon, RENDER_NORMAL);
+		SetEntityRenderColor(iWeapon, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
 		return;
 	}
@@ -3896,26 +3894,14 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	SetVariantString("!activator");
 	AcceptEntityInput(iHand, "SetParent", iClient, iHand);
 
-	// Never bone-merged onto the player: that made the player's own animations flicker for everyone watching.
-	if (LookupEntityAttachment(iWeapon, "core") > 0) {
-		// Held exactly like the gravity gun: attached to the (hidden) gun's own centre, which the game keeps in the
-		// player's hand through every animation, aim and stance.
-		AcceptEntityInput(iHand, "ClearParent");
-		SetVariantString("!activator");
-		AcceptEntityInput(iHand, "SetParent", iWeapon, iHand);
-		SetVariantString("core");
-		AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
+	// Fixed to the player's own hand, never to the gun: the gun is glued to the player's skeleton by the game, and
+	// anything attached to it (or bone-merged) makes the skeleton recalculate at odd moments, so the player, their
+	// hat and the emblem flicker for everyone watching.
+	SetVariantString("anim_attachment_RH");
+	AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
 
-		SetLocalOffset(iHand, g_Items[iItem].fGunOffset, g_Items[iItem].fGunAngles);
-
-		g_bHeldOnGun[iClient] = true;
-	} else {
-		SetVariantString("anim_attachment_RH");
-		AcceptEntityInput(iHand, "SetParentAttachment", iHand, iHand);
-
-		// Once parented to the attachment these are relative to the player's right hand.
-		SetLocalOffset(iHand, g_Items[iItem].fHandOffset, g_Items[iItem].fHandAngles);
-	}
+	// Once parented to the attachment these are relative to the player's right hand.
+	SetLocalOffset(iHand, g_Items[iItem].fHandOffset, g_Items[iItem].fHandAngles);
 
 	g_iHandEntRef[iClient] = EntIndexToEntRef(iHand);
 
@@ -3923,8 +3909,8 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 	AttachShimmer(iHand, iItem, iClient);
 
-	SetEntityRenderMode(iWeapon, RENDER_TRANSCOLOR);
-	SetEntityRenderColor(iWeapon, 255, 255, 255, 0);
+	// The gun is simply not drawn (a see-through gun would still be drawn, in the see-through pass).
+	SetEntityRenderMode(iWeapon, RENDER_NONE);
 }
 
 // A nearly invisible emblem (Invisible: "nearalpha") gets a faint copy of itself that only players right up close
@@ -10638,7 +10624,8 @@ void BuildBankList(int iClient, ArrayList alInfo, ArrayList alNames)
 			{
 				FormatEx(sInfo, sizeof(sInfo), "prop:%s", sTarget);
 				alInfo.PushString(sInfo);
-				alNames.PushString(sTitle);
+				FormatEx(sName, sizeof(sName), "%s x%d", sTitle, ShopPropCount(iClient, sTarget));
+				alNames.PushString(sName);
 			}
 		}
 	}
@@ -10854,6 +10841,18 @@ int CountOwnedShopProps(int iClient)
 	return iCount;
 }
 
+//How many copies of a shop prop the player owns (each purchase is one).
+int ShopPropCount(int iClient, const char[] sAlias)
+{
+	char sKey[80];
+
+	FormatEx(sKey, sizeof(sKey), "prop_%s", sAlias);
+
+	int iCount = Cel_GetClientPurchaseCount(iClient, sKey);
+
+	return iCount < 1 ? 1 : iCount;
+}
+
 void ShowBankItems(int iClient)
 {
 	char sInfo[72], sLine[96], sName[64], sKey[64], sCat[32], sDesc[8], sType[16], sTarget[64], sSpawn[256];
@@ -10890,7 +10889,8 @@ void ShowBankItems(int iClient)
 				&& Cel_CheckShopProp(iClient, sTarget, sSpawn, sizeof(sSpawn)) == 1)
 			{
 				FormatEx(sInfo, sizeof(sInfo), "prop:%s", sTarget);
-				mList.AddItem(sInfo, sName);
+				FormatEx(sLine, sizeof(sLine), "%s x%d", sName, ShopPropCount(iClient, sTarget));
+				mList.AddItem(sInfo, sLine);
 			}
 		}
 	}

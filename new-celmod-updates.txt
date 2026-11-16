@@ -391,3 +391,8 @@
 		   it is still the land's own entity.
 		 - The bank takes every CelItem, not just finds: emblems, celweps and shop or event props (Christmas trees,
 		   Delaware, SBC, Hoopie...) you have out can be deposited with !bank add, which puts them back away.
+		 - Held emblems no longer make the player (and their hat) flicker: the gravity gun is never drawn see-through
+		   or with a glow shell, and emblem models are held in the player's hand instead of being fixed to the gun.
+		 - Shop props are finite CelItems: each purchase is one copy, and only as many as you own can be out at once
+		   (spawning, loading builds and pasting all count). Props can be bought again for more copies; the bank
+		   shows how many of each you have. Props bought before this update count as one.

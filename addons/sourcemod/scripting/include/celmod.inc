@@ -1280,6 +1280,16 @@ native void Cel_SaveBuild(int iClient, const char[] sSaveName);
 native void Cel_SaveClientPurchase(int iClient, char[] sPurchase, bool bPurchased);
 
 /**
+ * How many of a purchase the client owns (shop props: one copy per purchase; older purchases count as 1).
+ */
+native int Cel_GetClientPurchaseCount(int iClient, const char[] sPurchase);
+
+/**
+ * Adds (or with a negative number takes away) copies of a purchase. Returns the new count.
+ */
+native int Cel_AddClientPurchase(int iClient, const char[] sPurchase, int iAdd);
+
+/**
  * Sends a HUD message to a client with specific positioning, color, and effects.
  *
  * @param iClient   The client index of the player.
