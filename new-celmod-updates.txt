@@ -389,3 +389,5 @@
 		   builds stop before the 2048 entity limit is hit; loading a build now checks your prop limit; new props
 		   can't overflow the map's model list; !weld can't make a parent loop; a land's trigger is only removed if
 		   it is still the land's own entity.
+		 - The bank takes every CelItem, not just finds: emblems, celweps and shop or event props (Christmas trees,
+		   Delaware, SBC, Hoopie...) you have out can be deposited with !bank add, which puts them back away.

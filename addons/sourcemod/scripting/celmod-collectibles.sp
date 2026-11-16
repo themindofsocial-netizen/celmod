@@ -10471,7 +10471,7 @@ public int Native_StartEmblemDrop(Handle hPlugin, int iNumParams)
 //The bank (!bank): a menu in the ESC menu, like the banks of HL2DM roleplay servers.
 //  Celweps / Emblems: what you own; picking one spawns it, as !weapon / !emblem do.
 //  CelItems: shop props you've bought (picking one spawns it where you aim), and finds put in the bank with
-//  "Deposit what I'm looking at": hobos, ores and turds, and Vials. Each kind is counted; taking one out spawns
+//  "Deposit what I'm looking at": finds (hobos, ores, turds, Vials) and CelItems, emblems and celweps that are out. Each kind is counted; taking one out spawns
 //  it where you aim.
 #define BANK_HOBO 0
 #define BANK_BEACON 1
@@ -10988,7 +10988,7 @@ void BankDeposit(int iClient)
 
 	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity))
 	{
-		Cel_PrintToChat(iClient, "Look at a hobo, ore, turd or Vial you dug up, then pick Deposit.");
+		Cel_PrintToChat(iClient, "Look at one of your CelItems, emblems or celweps (a find, a shop prop like a Christmas tree, an event item), then pick Deposit or type {green}[tag]bank add{default}.");
 		return;
 	}
 
@@ -11018,9 +11018,52 @@ void BankDeposit(int iClient)
 		}
 	}
 
+	//Emblems, celweps and shop props (Christmas trees, Delaware, SBC, Hoopie...) are already kept in the bank:
+	//depositing one just puts the copy that is out back away.
 	if (iKind == -1)
 	{
-		Cel_PrintToChat(iClient, "Only finds go in the bank: hobos, ores, turds and Vials.");
+		char sTitle[96], sSpawn[256];
+		bool bStored = false;
+		
+		if (IsItemEntity(iEntity))
+		{
+			int iItem = g_iEntItem[iEntity];
+			
+			if (Cel_GetOwner(iEntity) != iClient || GetOwned(iClient, iItem) < 1)
+			{
+				Cel_PrintToChat(iClient, "That isn't yours to bank.");
+				return;
+			}
+			
+			FormatEx(sTitle, sizeof(sTitle), g_Items[iItem].iKind == KIND_EMBLEM ? "%s emblem" : "%s", g_Items[iItem].sName);
+			bStored = true;
+		} else if (Cel_IsEntity(iEntity) && sProp[0] != '\0' && Cel_CheckShopProp(iClient, sProp, sSpawn, sizeof(sSpawn)) != 0) {
+			if (!Cel_CheckOwner(iClient, iEntity) || Cel_CheckShopProp(iClient, sProp, sSpawn, sizeof(sSpawn)) != 1)
+			{
+				Cel_PrintToChat(iClient, "That isn't yours to bank.");
+				return;
+			}
+			
+			strcopy(sTitle, sizeof(sTitle), sProp);
+			bStored = true;
+		}
+		
+		if (!bStored)
+		{
+			Cel_PrintToChat(iClient, "That can't go in the bank. The bank holds CelItems (finds, shop and event props), emblems and celweps.");
+			return;
+		}
+		
+		if (GetVectorDistanceToEntity(iClient, iEntity) > 250.0)
+		{
+			Cel_PrintToChat(iClient, "Get closer to it first.");
+			return;
+		}
+		
+		AcceptEntityInput(iEntity, "kill");
+		
+		EmitSoundToClient(iClient, SOUND_REWARD);
+		Cel_PrintToChat(iClient, "Put your {green}%s{default} back in your bank. Take it out again with {green}[tag]bank{default}.", sTitle);
 		return;
 	}
 
