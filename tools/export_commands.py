@@ -34,7 +34,7 @@ for cat, names in {
     'cels': 'text door light ladder internet seturl fire effect emitter message music celmusic sound teleport spawnpoint button link setpass pass wep ammo ammocrate charger',
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
             'landban landunban landkick kick landslay weps buildmessage block unblock hide show zones',
-    'money': 'balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
+    'money': 'bank balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
     'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid spawnpad spawnpads tacticlvl tacticxp',
     'player': 'fly noclip nokill stuck switch feed pmute punmute timeleft',
     'help': 'news reportbug dispute motd rules cmds commands commandlist colors colorlist props proplist effects effectlist updates updatelist',

@@ -373,3 +373,4 @@
 		 - tools/fix_customgun_poses.sh sets how each celwep is held in its Custom Guns script: the Melon Launcher like the
 		   RPG, the Blade Bow like the crossbow, the melee celweps like the crowbar, and the Saw Gun like the gravity gun.
 		 - !saves (or !builds) lists your saved builds, newest first, with how many entities each holds and when it was saved.
+		 - !text screens face you (their fronts were turned to the surface).

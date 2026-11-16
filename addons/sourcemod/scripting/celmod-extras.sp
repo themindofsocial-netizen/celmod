@@ -938,7 +938,7 @@ public Action Command_Text(int iClient, int iArgs)
 	// centred on the crosshair. Text "up" is the world's up on walls and slopes; on a floor it points the way the player
 	// faces, and on a ceiling back towards them, so it always reads upright and left to right from where they stand.
 	float fWidth = bSmall ? 10.0 : 22.0;
-	float fNormal[3], fUp[3], fForward[3], fInto[3], fRow[3], fFlat[3], fPropAngles[3];
+	float fNormal[3], fUp[3], fForward[3], fRow[3], fFlat[3], fPropAngles[3];
 	
 	GetClientEyePosition(iClient, fEyes);
 	GetClientEyeAngles(iClient, fAngles);
@@ -987,15 +987,12 @@ public Action Command_Text(int iClient, int iArgs)
 	GetVectorCrossProduct(fUp, fNormal, fRow);
 	NormalizeVector(fRow, fRow);
 	
-	// The screen's front is its local -X: so its +X points into the surface, and its up (local +Z) is fUp, with the roll
-	// worked out from the up vector the pitch and yaw alone would give.
+	// The screen's front is its local +X (measured in game: pointed into the surface, players saw the backs), so +X
+	// points out of the surface, and its up (local +Z) is fUp, with the roll worked out from the up vector the pitch
+	// and yaw alone would give.
 	float fRight0[3], fUp0[3];
 	
-	NegateVector(fNormal);
-	fInto = fNormal;
-	NegateVector(fNormal);
-	
-	GetVectorAngles(fInto, fPropAngles);
+	GetVectorAngles(fNormal, fPropAngles);
 	fPropAngles[2] = 0.0;
 	GetAngleVectors(fPropAngles, NULL_VECTOR, fRight0, fUp0);
 	fPropAngles[2] = RadToDeg(ArcTangent2(GetVectorDotProduct(fUp, fRight0), GetVectorDotProduct(fUp, fUp0)));
