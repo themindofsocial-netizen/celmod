@@ -28,7 +28,7 @@ CATEGORIES = [
 
 CATEGORY = {}
 for cat, names in {
-    'building': 'spawn p s save load clear copy paste +copy +move freeze freezeit unfreeze unfreezeit del delete remove delall deleteall removeall undo '
+    'building': 'spawn p s save load saves builds clear copy paste +copy +move freeze freezeit unfreeze unfreezeit del delete remove delall deleteall removeall undo '
                 'r rotate flip roll turn stand straight straighten smove pmove drop moveto weld release stack stackinfo axis mark marker '
                 'replace model skin color paint palette fadecolor alpha amt renderfx solid god lock unlock owner',
     'cels': 'text door light ladder internet seturl fire effect emitter message music celmusic sound teleport spawnpoint button link setpass pass wep ammo ammocrate charger',

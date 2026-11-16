@@ -52,6 +52,8 @@ public void OnPluginStart()
 	
 	RegConsoleCmd("v_load", Command_LoadBuild, "|CelMod| Loads entities from a save file.");
 	RegConsoleCmd("v_save", Command_SaveBuild, "|CelMod| Saves all server entities that are in your land.");
+	RegConsoleCmd("v_saves", Command_ListSaves, "|CelMod| Lists your saved builds.");
+	RegConsoleCmd("v_builds", Command_ListSaves, "|CelMod| Lists your saved builds.");
 }
 
 public void OnClientPutInServer(int iClient)
@@ -669,4 +671,125 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 	Cel_ReplyToCommand(iClient, "%t", "SavedBuild", sSaveName);
 	
 	return true;
+}
+
+//!saves: your saved builds, newest first, with how many entities each holds and when it was saved. The first ten go to
+//chat; all of them to the console when there are more.
+public Action Command_ListSaves(int iClient, int iArgs)
+{
+	char sAuthID[64], sDir[PLATFORM_MAX_PATH], sEntry[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH], sName[PLATFORM_MAX_PATH], sWhen[32];
+	FileType ftType;
+
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Your saves can't be found until Steam has confirmed who you are. Try again in a moment.");
+		return Plugin_Handled;
+	}
+
+	BuildPath(Path_SM, sDir, sizeof(sDir), "data/celmod/users/%s/saves", sAuthID);
+
+	DirectoryListing dlSaves = OpenDirectory(sDir);
+
+	if (dlSaves == null)
+	{
+		Cel_ReplyToCommand(iClient, "You don't have any saved builds yet. Save your land with {green}[tag]save <name>{default}.");
+		return Plugin_Handled;
+	}
+
+	// [time saved, entities] for each save, sorted newest first with the names alongside.
+	ArrayList alSaves = new ArrayList(2);
+	ArrayList alNames = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+
+	while (dlSaves.GetNext(sEntry, sizeof(sEntry), ftType))
+	{
+		int iLength = strlen(sEntry);
+
+		if (ftType != FileType_File || iLength < 5 || !StrEqual(sEntry[iLength - 4], ".txt", false))
+		{
+			continue;
+		}
+
+		FormatEx(sFile, sizeof(sFile), "%s/%s", sDir, sEntry);
+
+		// Each entity in a save is its own numbered section.
+		int iEntities = 0;
+		KeyValues kvSave = new KeyValues("Vault");
+
+		if (kvSave.ImportFromFile(sFile) && kvSave.GotoFirstSubKey())
+		{
+			do
+			{
+				iEntities++;
+			}
+			while (kvSave.GotoNextKey());
+		}
+
+		delete kvSave;
+
+		int iTime = GetFileTime(sFile, FileTime_LastChange);
+		int iAt = 0;
+
+		while (iAt < alSaves.Length && alSaves.Get(iAt, 0) >= iTime)
+		{
+			iAt++;
+		}
+
+		strcopy(sName, sizeof(sName), sEntry);
+		sName[iLength - 4] = '\0';
+
+		if (iAt >= alSaves.Length)
+		{
+			int iRow = alSaves.Push(iTime);
+
+			alSaves.Set(iRow, iEntities, 1);
+			alNames.PushString(sName);
+		} else {
+			alSaves.ShiftUp(iAt);
+			alSaves.Set(iAt, iTime, 0);
+			alSaves.Set(iAt, iEntities, 1);
+			alNames.ShiftUp(iAt);
+			alNames.SetString(iAt, sName);
+		}
+	}
+
+	delete dlSaves;
+
+	int iCount = alSaves.Length;
+
+	if (iCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "You don't have any saved builds yet. Save your land with {green}[tag]save <name>{default}.");
+	} else {
+		Cel_ReplyToCommand(iClient, "Your saved builds ({green}%d{default}), newest first. Load one with {green}[tag]load <name>{default}:", iCount);
+
+		for (int i = 0; i < iCount; i++)
+		{
+			alNames.GetString(i, sName, sizeof(sName));
+			FormatTime(sWhen, sizeof(sWhen), "%m/%d/%Y", alSaves.Get(i, 0));
+
+			int iEntities = alSaves.Get(i, 1);
+
+			if (i < 10)
+			{
+				Cel_PrintToChat(iClient, "{green}%s{default} - %d entit%s, saved %s", sName, iEntities, iEntities == 1 ? "y" : "ies", sWhen);
+			}
+
+			PrintToConsole(iClient, "%-32s %5d entities   saved %s", sName, iEntities, sWhen);
+		}
+
+		if (iCount > 10)
+		{
+			Cel_PrintToChat(iClient, "...and {green}%d{default} more: the full list is in your console.", iCount - 10);
+		}
+	}
+
+	delete alSaves;
+	delete alNames;
+
+	return Plugin_Handled;
 }
