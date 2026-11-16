@@ -1777,6 +1777,51 @@ stock void Cel_ShortCleers(int iAmount, char[] sBuffer, int iMaxLength)
 	IntToString(iAmount, sBuffer, iMaxLength);
 }
 
+// Cyclers (cel_doll): NPC models that change animation when shot (+use pauses / plays them). Their animation,
+// frame and paused state are what a build saves and a copy keeps, for scenes.
+stock bool Cel_IsCycler(int iEntity)
+{
+	char sClass[32];
+	
+	return (iEntity > MaxClients && IsValidEntity(iEntity) && GetEntityClassname(iEntity, sClass, sizeof(sClass)) && StrEqual(sClass, "cel_doll", false));
+}
+
+stock void Cel_GetCyclerAnim(int iEntity, int &iSequence, float &fCycle, bool &bPaused)
+{
+	iSequence = GetEntProp(iEntity, Prop_Send, "m_nSequence");
+	fCycle = GetEntPropFloat(iEntity, Prop_Data, "m_flCycle");
+	bPaused = HasEntProp(iEntity, Prop_Data, "m_animate") ? (GetEntProp(iEntity, Prop_Data, "m_animate") == 0) : false;
+}
+
+stock void Cel_SetCyclerAnim(int iEntity, int iSequence, float fCycle, bool bPaused)
+{
+	char sSequence[16];
+	
+	// The cycler's own SetSequence input (it only works while playing).
+	if (HasEntProp(iEntity, Prop_Data, "m_animate"))
+	{
+		SetEntProp(iEntity, Prop_Data, "m_animate", 1);
+	}
+	
+	SetEntPropFloat(iEntity, Prop_Data, "m_flPlaybackRate", 1.0);
+	
+	IntToString(iSequence, sSequence, sizeof(sSequence));
+	SetVariantString(sSequence);
+	AcceptEntityInput(iEntity, "SetSequence");
+	
+	SetEntPropFloat(iEntity, Prop_Data, "m_flCycle", fCycle);
+	
+	if (bPaused)
+	{
+		if (HasEntProp(iEntity, Prop_Data, "m_animate"))
+		{
+			SetEntProp(iEntity, Prop_Data, "m_animate", 0);
+		}
+		
+		SetEntPropFloat(iEntity, Prop_Data, "m_flPlaybackRate", 0.0);
+	}
+}
+
 stock int Cel_EdictReserve()
 {
 	ConVar cvReserve = FindConVar("cm_edict_reserve");

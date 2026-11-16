@@ -414,3 +414,7 @@
 		 - Crash fix (the second crash dump named the physics engine's collision code): making a prop solid or not
 		   solid (!solid, spawning, loading builds) no longer overwrites the entity's solid type after it has
 		   spawned; it only switches the engine's "not solid" flag and tells the physics engine.
+		 - Cyclers (the NPC models in the spawn list, like !spawn alyx or !spawn combine1) work as cyclers again: shoot
+		   one to step to its next animation, press E on it to pause or play. They were spawned unshootable, so
+		   shots did nothing. Saving a build keeps each cycler's animation, its frame and whether it is paused, and
+		   +copy keeps them too (a copied cycler used to be pasted as a plain physics prop).

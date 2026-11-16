@@ -304,7 +304,10 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 						
 						iProp = Cel_SpawnProp(iClient, sPropName, "cycler", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
 						
-						Entity_SetAnimSequence(iProp, kvLoadBuild.GetNum("animsequence"));
+						if (iProp != -1)
+						{
+							Cel_SetCyclerAnim(iProp, kvLoadBuild.GetNum("animsequence"), kvLoadBuild.GetFloat("animcycle"), kvLoadBuild.GetNum("animpaused") == 1);
+						}
 					}
 					case ENTTYPE_DOOR:
 					{
@@ -577,7 +580,15 @@ public int Native_SaveBuild(Handle hPlugin, int iNumParams)
 							
 							kvSaveBuild.SetString("propname", sPropName);
 							
-							kvSaveBuild.SetNum("animsequence", Entity_GetAnimSequence(i));
+							int iSequence;
+							float fCycle;
+							bool bPaused;
+							
+							Cel_GetCyclerAnim(i, iSequence, fCycle, bPaused);
+							
+							kvSaveBuild.SetNum("animsequence", iSequence);
+							kvSaveBuild.SetFloat("animcycle", fCycle);
+							kvSaveBuild.SetNum("animpaused", view_as<int>(bPaused));
 						}
 						case ENTTYPE_DOOR:
 						{

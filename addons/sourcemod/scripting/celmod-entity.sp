@@ -19,7 +19,7 @@ bool g_bRainbow[MAXENTITIES + 1];
 bool g_bSolid[MAXENTITIES + 1];
 
 char g_sColorDB[PLATFORM_MAX_PATH];
-char g_sCopyBuffer[MAXPLAYERS + 1][22][128];
+char g_sCopyBuffer[MAXPLAYERS + 1][25][128];
 char g_sPropName[MAXENTITIES + 1][64];
 
 float g_fCopyOrigin[MAXPLAYERS + 1][3];
@@ -2037,6 +2037,22 @@ public int Native_CopyProp(Handle hPlugin, int iNumParams)
 	
 	Cel_GetPropName(iEntity, g_sCopyBuffer[iClient][20], sizeof(g_sCopyBuffer[iClient][]));
 	
+	//A cycler's animation, frame and paused state.
+	g_sCopyBuffer[iClient][22][0] = '\0';
+	
+	if (Cel_IsCycler(iEntity))
+	{
+		int iSequence;
+		float fCycle;
+		bool bPaused;
+		
+		Cel_GetCyclerAnim(iEntity, iSequence, fCycle, bPaused);
+		
+		IntToString(iSequence, g_sCopyBuffer[iClient][22], sizeof(g_sCopyBuffer[iClient][]));
+		FloatToString(fCycle, g_sCopyBuffer[iClient][23], sizeof(g_sCopyBuffer[iClient][]));
+		IntToString(view_as<int>(bPaused), g_sCopyBuffer[iClient][24], sizeof(g_sCopyBuffer[iClient][]));
+	}
+	
 	return true;
 }
 
@@ -2593,7 +2609,16 @@ public int Native_PasteProp(Handle hPlugin, int iNumParams)
 		return Cel_SpawnEffect(iClient, fOrigin, etCopy, true, StringToInt(g_sCopyBuffer[iClient][8]), StringToInt(g_sCopyBuffer[iClient][9]), StringToInt(g_sCopyBuffer[iClient][10]), StringToInt(g_sCopyBuffer[iClient][11]));
 	}
 	
-	int iEntity = Cel_SpawnProp(iClient, g_sCopyBuffer[iClient][20], "prop_physics_override", g_sCopyBuffer[iClient][2], fAngles, fOrigin, StringToInt(g_sCopyBuffer[iClient][8]), StringToInt(g_sCopyBuffer[iClient][9]), StringToInt(g_sCopyBuffer[iClient][10]), StringToInt(g_sCopyBuffer[iClient][11]));
+	//A copied cycler is pasted as a cycler (it used to come back as a physics prop with the cycler's name).
+	bool bCycler = StrEqual(g_sCopyBuffer[iClient][0], "cel_doll", false);
+	
+	int iEntity = Cel_SpawnProp(iClient, g_sCopyBuffer[iClient][20], bCycler ? "cycler" : "prop_physics_override", g_sCopyBuffer[iClient][2], fAngles, fOrigin, StringToInt(g_sCopyBuffer[iClient][8]), StringToInt(g_sCopyBuffer[iClient][9]), StringToInt(g_sCopyBuffer[iClient][10]), StringToInt(g_sCopyBuffer[iClient][11]));
+	
+	//Refused (a limit, or the server is full): nothing to set up.
+	if (iEntity == -1)
+	{
+		return -1;
+	}
 	
 	Entity_SetClassName(iEntity, g_sCopyBuffer[iClient][0]);
 	Entity_SetName(iEntity, g_sCopyBuffer[iClient][1]);
@@ -2602,6 +2627,11 @@ public int Native_PasteProp(Handle hPlugin, int iNumParams)
 	Cel_SetMotion(iEntity, view_as<bool>(StringToInt(g_sCopyBuffer[iClient][5])));
 	Cel_SetSolid(iEntity, view_as<bool>(StringToInt(g_sCopyBuffer[iClient][6])));
 	Cel_SetBreakable(iEntity, view_as<bool>(StringToInt(g_sCopyBuffer[iClient][21])));
+	
+	if (bCycler && g_sCopyBuffer[iClient][22][0] != '\0')
+	{
+		Cel_SetCyclerAnim(iEntity, StringToInt(g_sCopyBuffer[iClient][22]), StringToFloat(g_sCopyBuffer[iClient][23]), StringToInt(g_sCopyBuffer[iClient][24]) == 1);
+	}
 	
 	Cel_SetColorFade(iEntity, view_as<bool>(StringToInt(g_sCopyBuffer[iClient][12])), StringToInt(g_sCopyBuffer[iClient][14]), StringToInt(g_sCopyBuffer[iClient][15]), StringToInt(g_sCopyBuffer[iClient][16]), StringToInt(g_sCopyBuffer[iClient][17]), StringToInt(g_sCopyBuffer[iClient][18]), StringToInt(g_sCopyBuffer[iClient][19]));
 	Cel_SetRainbow(iEntity, view_as<bool>(StringToInt(g_sCopyBuffer[iClient][13])));
@@ -2614,7 +2644,18 @@ public int Native_SetBreakable(Handle hPlugin, int iNumParams)
 	bool bBreakable = view_as<bool>(GetNativeCell(2));
 	int iEntity = GetNativeCell(1);
 	
-	bBreakable ? SetEntProp(iEntity, Prop_Data, "m_takedamage", 2, 1) : SetEntProp(iEntity, Prop_Data, "m_takedamage", 0, 1);
+	//A cycler always takes shots: that is what changes its animation, and a cycler never dies (80000 health, and it
+	//takes no damage). The hobo stays the idle hobo.
+	char sHoboCheck[16];
+	
+	Cel_GetPropName(iEntity, sHoboCheck, sizeof(sHoboCheck));
+	
+	if (Cel_IsCycler(iEntity) && !StrEqual(sHoboCheck, "hobo", false))
+	{
+		SetEntProp(iEntity, Prop_Data, "m_takedamage", 2, 1);
+	} else {
+		bBreakable ? SetEntProp(iEntity, Prop_Data, "m_takedamage", 2, 1) : SetEntProp(iEntity, Prop_Data, "m_takedamage", 0, 1);
+	}
 	
 	g_bBreakable[iEntity] = bBreakable;
 	
