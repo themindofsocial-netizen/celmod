@@ -374,3 +374,5 @@
 		   RPG, the Blade Bow like the crossbow, the melee celweps like the crowbar, and the Saw Gun like the gravity gun.
 		 - !saves (or !builds) lists your saved builds, newest first, with how many entities each holds and when it was saved.
 		 - !text screens face you (their fronts were turned to the surface).
+		 - The original bank commands: !bank lists your bank with numbers (and opens it in the ESC menu), !bank <number>
+		   loads that item, and !bank add puts what you're looking at in your bank.

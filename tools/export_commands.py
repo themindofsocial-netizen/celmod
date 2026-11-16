@@ -53,7 +53,7 @@ USAGE = {
     'charger': '<health or suit>', 'gravity': '<amount>', 'landskin': '<1-26 or off>', 'landcolor': '<color>',
     'addteam': '<player>', 'delteam': '<player>', 'landban': '<player>', 'landunban': '<player>', 'landkick': '<player>', 'kick': '<player>',
     'landslay': '<player or #all>', 'buildmessage': '<message or off>', 'block': '<player>', 'unblock': '<player>', 'hide': '<player>', 'show': '<player>',
-    'cl': '[amount]', 'buy': '[item]', 'sell': '<price>', 'give': '<player>', 'trade': '<player> <price>', 'buymodel': '<model>', 'playermodel': '<model or off>',
+    'cl': '[amount]', 'buy': '[item]', 'bank': '[number or add]', 'sell': '<price>', 'give': '<player>', 'trade': '<player> <price>', 'buymodel': '<model>', 'playermodel': '<model or off>',
     'emblem': '<emblem or off>', 'hat': '<hat or off>', 'weapon': '<celwep or off>', 'wrap': '<item> <player>', 'guess': '<1, 2 or 3>', 'bid': '<amount>',
     'spawnpad': '[enemy]', 'pmute': '<player>', 'punmute': '<player>', 'reportbug': '<what happened>',
     'setbalance': '<player> <amount>', 'givemoney': '<player> <amount>', 'takemoney': '<player> <amount>', 'giveitem': '<player> <kind> <item>',

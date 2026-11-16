@@ -500,7 +500,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_wrap", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
 	RegConsoleCmd("v_gift", Command_Wrap, "|CelMod| Christmas only: wraps an emblem, hat or celwep of yours in a present for another player.");
 	RegConsoleCmd("v_presents", Command_Presents, "|CelMod| Lists the presents waiting for you and brings back any that are not out.");
-	RegConsoleCmd("v_bank", Command_Bank, "|CelMod| Opens your bank (in the ESC menu): your celweps, emblems and CelItems.");
+	RegConsoleCmd("v_bank", Command_Bank, "|CelMod| Your bank: !bank lists it (and opens it in the ESC menu), !bank <number> loads an item, !bank add banks what you look at.");
 	RegConsoleCmd("v_inventory", Command_Inventory, "|CelMod| Lists the emblems and hats you own.");
 
 	HookEvent("player_death", Event_Death, EventHookMode_Post);
@@ -10503,18 +10503,173 @@ void BankAdd(int iClient, int iKind, int iAmount)
 	Inv_SetInt(iClient, sKey, iCount > 0 ? iCount : 0);
 }
 
+//Like the original server's bank: !bank lists the bank with numbers, !bank <number> loads that item, and
+//!bank add puts what you're looking at in it. The list is also opened as a menu in the ESC menu.
 public Action Command_Bank(int iClient, int iArgs)
 {
+	char sArg[16];
+
 	if (!IsRealClient(iClient))
 	{
 		return Plugin_Handled;
 	}
 
+	GetCmdArg(1, sArg, sizeof(sArg));
+
+	if (StrEqual(sArg, "add", false) || StrEqual(sArg, "deposit", false))
+	{
+		BankDeposit(iClient);
+		return Plugin_Handled;
+	}
+
+	ArrayList alInfo = new ArrayList(ByteCountToCells(72));
+	ArrayList alNames = new ArrayList(ByteCountToCells(96));
+
+	BuildBankList(iClient, alInfo, alNames);
+
+	if (sArg[0] != '\0')
+	{
+		int iNumber = StringToInt(sArg);
+
+		if (iNumber < 1 || iNumber > alInfo.Length)
+		{
+			Cel_ReplyToCommand(iClient, "There's no item {green}%s{default} in your bank. Type {green}[tag]bank{default} to see the numbers.", sArg);
+		} else {
+			char sInfo[72];
+
+			alInfo.GetString(iNumber - 1, sInfo, sizeof(sInfo));
+			UseBankEntry(iClient, sInfo);
+		}
+
+		delete alInfo;
+		delete alNames;
+
+		return Plugin_Handled;
+	}
+
+	if (alInfo.Length == 0)
+	{
+		Cel_ReplyToCommand(iClient, "Your bank is empty. Bank finds with {green}[tag]bank add{default} while looking at them; props you buy and your celweps and emblems show up here too.");
+	} else {
+		char sName[96];
+
+		Cel_ReplyToCommand(iClient, "Your bank ({green}%d{default}): load one with {green}[tag]bank <number>{default}, or press {green}ESC{default} for the menu.", alInfo.Length);
+
+		for (int i = 0; i < alNames.Length; i++)
+		{
+			alNames.GetString(i, sName, sizeof(sName));
+
+			if (i < 15)
+			{
+				Cel_PrintToChat(iClient, "{green}%d.{default} %s", i + 1, sName);
+			}
+
+			PrintToConsole(iClient, "%3d. %s", i + 1, sName);
+		}
+
+		if (alNames.Length > 15)
+		{
+			Cel_PrintToChat(iClient, "...and {green}%d{default} more in your console.", alNames.Length - 15);
+		}
+	}
+
+	delete alInfo;
+	delete alNames;
+
 	ShowBankMain(iClient);
 
-	Cel_ReplyToCommand(iClient, "Your bank is open: press {green}ESC{default} to see it.");
-
 	return Plugin_Handled;
+}
+
+//Everything in a player's bank, numbered the same way every time: banked finds, shop props, celweps, emblems.
+//sInfo is "find:<kind>", "prop:<alias>" or "item:<index>".
+void BuildBankList(int iClient, ArrayList alInfo, ArrayList alNames)
+{
+	char sInfo[72], sName[96], sKey[64], sCat[32], sDesc[8], sType[16], sTarget[64], sSpawn[256], sTitle[64];
+	int iPrice, iLeft;
+	bool bRepeat;
+
+	for (int k = 0; k < BankKinds(); k++)
+	{
+		int iCount = BankCount(iClient, k);
+
+		if (iCount > 0)
+		{
+			BankName(k, sTitle, sizeof(sTitle));
+			FormatEx(sInfo, sizeof(sInfo), "find:%d", k);
+			FormatEx(sName, sizeof(sName), "%s x%d", sTitle, iCount);
+			alInfo.PushString(sInfo);
+			alNames.PushString(sName);
+		}
+	}
+
+	if (GetFeatureStatus(FeatureType_Native, "Cel_ShopGetItemCount") == FeatureStatus_Available)
+	{
+		for (int i = 0; i < Cel_ShopGetItemCount(); i++)
+		{
+			if (Cel_ShopGetItem(i, sKey, sizeof(sKey), sTitle, sizeof(sTitle), sCat, sizeof(sCat), sDesc, sizeof(sDesc), iPrice, iLeft, bRepeat)
+				&& Cel_ShopGetItemType(i, sType, sizeof(sType), sTarget, sizeof(sTarget)) && StrEqual(sType, "prop")
+				&& Cel_CheckShopProp(iClient, sTarget, sSpawn, sizeof(sSpawn)) == 1)
+			{
+				FormatEx(sInfo, sizeof(sInfo), "prop:%s", sTarget);
+				alInfo.PushString(sInfo);
+				alNames.PushString(sTitle);
+			}
+		}
+	}
+
+	for (int iKind = KIND_WEAPON; iKind >= KIND_EMBLEM; iKind -= (KIND_WEAPON - KIND_EMBLEM))
+	{
+		for (int i = 0; i < g_iItemCount; i++)
+		{
+			int iOwned = GetOwned(iClient, i);
+
+			if (g_Items[i].iKind != iKind || iOwned < 1)
+			{
+				continue;
+			}
+
+			FormatEx(sInfo, sizeof(sInfo), "item:%d", i);
+
+			if (iKind == KIND_EMBLEM)
+			{
+				FormatEx(sName, sizeof(sName), "%s emblem (%s)", g_Items[i].sName, g_sRarityName[g_Items[i].iRarity]);
+			} else {
+				FormatEx(sName, sizeof(sName), "%s (celwep)", g_Items[i].sName);
+			}
+
+			if (iOwned > 1)
+			{
+				Format(sName, sizeof(sName), "%s x%d", sName, iOwned);
+			}
+
+			alInfo.PushString(sInfo);
+			alNames.PushString(sName);
+		}
+
+		if (iKind == KIND_EMBLEM)
+		{
+			break;
+		}
+	}
+}
+
+//Loads one bank entry: a find is taken out, a prop or collectible is spawned where you aim.
+void UseBankEntry(int iClient, const char[] sInfo)
+{
+	if (StrContains(sInfo, "find:") == 0)
+	{
+		BankWithdraw(iClient, StringToInt(sInfo[5]));
+	} else if (StrContains(sInfo, "prop:") == 0) {
+		FakeClientCommand(iClient, "v_spawn %s", sInfo[5]);
+	} else if (StrContains(sInfo, "item:") == 0) {
+		int i = StringToInt(sInfo[5]);
+
+		if (i >= 0 && i < g_iItemCount)
+		{
+			FakeClientCommand(iClient, "%s %s", g_Items[i].iKind == KIND_WEAPON ? "v_weapon" : "v_emblem", g_Items[i].sId);
+		}
+	}
 }
 
 void ShowBankMain(int iClient)
