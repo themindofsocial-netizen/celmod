@@ -404,3 +404,4 @@
 		 - Phantom and Invisible are shown solid in hand (the gravity gun's own model can only be drawn solid), so they
 		   never flicker; on the ground they stay see-through.
 		 - Cleers box amounts are shortened: looking at a box shows "Contains: 20M CL" instead of 20000000.
+		 - Cleers boxes can't be moved with +move.

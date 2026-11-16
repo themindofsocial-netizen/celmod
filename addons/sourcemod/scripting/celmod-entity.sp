@@ -1646,6 +1646,13 @@ public Action Command_StartGrab(int iClient, int iArgs)
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
 	
+	//Cleers boxes are carried with the gravity gun like any loose box, never moved with +move.
+	if (Cel_GetEntityType(iProp) == ENTTYPE_CLEER)
+	{
+		Cel_ReplyToCommand(iClient, "Cleers boxes can't be moved with {green}+move{default}. Pick them up with the gravity gun.");
+		return Plugin_Handled;
+	}
+	
 	if (Cel_CanEdit(iClient, iProp))
 	{
 		Cel_GetEntityOrigin(iProp, fOrigin[0]);
