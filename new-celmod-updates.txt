@@ -431,3 +431,5 @@
 		 - !solid works again: a prop set to not solid uses the engine's debris collision group, so players walk
 		   through it (shots still hit it, and other props still rest on it). Its messages now say plainly whether the
 		   prop is solid or not.
+		 - Giving, trading or selling a shop prop (a flatscreen, a Christmas tree...) makes it the other player's for
+		   good: one copy moves from your purchases to theirs and is saved, so it's in their bank and gone from yours.

@@ -778,6 +778,12 @@ public void OnEntityDestroyed(int iEntity)
 //Forwards from other CelMod plugins:
 public void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
 {
+	// A dug-up ore or turd that is given away can be banked by its new owner.
+	if (iEntity > 0 && iEntity <= MAXENTITIES && g_bDugUp[iEntity] && IsRealClient(iNewOwner))
+	{
+		g_iDugBy[iEntity] = GetClientUserId(iNewOwner);
+	}
+
 	if (iEntity < 1 || iEntity > MAXENTITIES || g_iEntItem[iEntity] == -1 || g_bDropBox[iEntity] || g_iRewardId[iEntity] != -1)
 	{
 		return;

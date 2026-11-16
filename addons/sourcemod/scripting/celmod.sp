@@ -1327,6 +1327,34 @@ public int Native_SetPropLimit(Handle hPlugin, int iNumParams)
 	return true;
 }
 
+//A shop prop given, traded or sold to another player is theirs for good: one copy moves from the old owner's
+//purchases to the new owner's, so it is saved with them (and the old owner can't spawn it again).
+public void Cel_OnEntityOwnerChanged(int iEntity, int iOldOwner, int iNewOwner)
+{
+	char sName[64], sSpawn[256], sKey[80];
+	
+	if (!Cel_IsEntity(iEntity) || iOldOwner < 1 || iOldOwner > MaxClients || iNewOwner < 1 || iNewOwner > MaxClients
+		|| !IsClientInGame(iOldOwner) || !IsClientInGame(iNewOwner) || IsFakeClient(iOldOwner) || IsFakeClient(iNewOwner))
+	{
+		return;
+	}
+	
+	Cel_GetPropName(iEntity, sName, sizeof(sName));
+	StringToLower(sName);
+	
+	if (!g_smShopProps.GetString(sName, sSpawn, sizeof(sSpawn)))
+	{
+		return;
+	}
+	
+	FormatEx(sKey, sizeof(sKey), "prop_%s", sName);
+	
+	Cel_AddClientPurchase(iOldOwner, sKey, -1);
+	Cel_AddClientPurchase(iNewOwner, sKey, 1);
+	
+	LogMessage("|CelMod| %L gave a %s to %L.", iOldOwner, sName, iNewOwner);
+}
+
 //Shop props are finite for everyone, admins included. cm_admin_shop_props 1 lets root admins spawn any number
 //of any shop prop, e.g. to set up displays.
 bool AdminShopPropsUnlimited(int iClient)
