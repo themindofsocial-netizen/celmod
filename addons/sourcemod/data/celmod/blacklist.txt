@@ -2,7 +2,6 @@
 {
 	"Blacklist"
 	{
-		"alyx"		"blacklist"
 		"cake"		"blacklist"
 		"delaware"		"blacklist"
 		"hoopie"		"blacklist"

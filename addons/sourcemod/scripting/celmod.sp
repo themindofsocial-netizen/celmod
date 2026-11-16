@@ -594,6 +594,12 @@ public Action Command_Spawn(int iClient, int iArgs)
 		
 		int iProp = Cel_SpawnProp(iClient, sAlias, sSpawnBuffer[0], sSpawnBuffer[1], fAngles, fOrigin, 255, 255, 255, 255);
 		
+		//Refused (a limit, a full server, or a shop prop that is all out): the reason was already given.
+		if (iProp == -1)
+		{
+			return Plugin_Handled;
+		}
+		
 		Cel_FixSpawnPosition(iProp, fOrigin);
 		
 		switch(iOption)
@@ -693,6 +699,12 @@ public Action Handle_Spawn(int iClient, char[] sCommand, int iArgs)
 		Cel_GetCrosshairHitOrigin(iClient, fOrigin);
 		
 		int iProp = Cel_SpawnProp(iClient, sPropAlias, sSpawnBuffer[0], sSpawnBuffer[1], fAngles, fOrigin, 255, 255, 255, 255);
+		
+		//Refused (a limit, a full server, or a shop prop that is all out): the reason was already given.
+		if (iProp == -1)
+		{
+			return Plugin_Handled;
+		}
 		
 		Cel_FixSpawnPosition(iProp, fOrigin);
 		
