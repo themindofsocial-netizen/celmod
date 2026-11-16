@@ -376,3 +376,5 @@
 		 - !text screens face you (their fronts were turned to the surface).
 		 - The original bank commands: !bank lists your bank with numbers (and opens it in the ESC menu), !bank <number>
 		   loads that item, and !bank add puts what you're looking at in your bank.
+		 - Players no longer flicker while holding an emblem. Gravity-gun shaped emblems now recolour the player's own
+		   gravity gun instead of adding a second model, and no held emblem is bone-merged onto the player any more.

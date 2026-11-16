@@ -3844,6 +3844,24 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 		return;
 	}
 
+	// An emblem that is a gravity gun (the default emblem model) is the player's own gravity gun, recoloured: held
+	// exactly like it, and with no extra model. (A bone-merged copy on the player made their animations flicker.)
+	char sHeld[PLATFORM_MAX_PATH];
+
+	HeldModel(iItem, sHeld, sizeof(sHeld));
+
+	if (StrEqual(sHeld, GRAVGUN_WORLDMODEL, false))
+	{
+		ApplyItemColor(iWeapon, iItem);
+
+		if (g_Items[iItem].bGlow)
+		{
+			SetEntityRenderFx(iWeapon, RENDERFX_GLOWSHELL);
+		}
+
+		return;
+	}
+
 	int iHand = CreateEntityByName("prop_dynamic_override");
 
 	if (iHand == -1)
@@ -3876,15 +3894,8 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	SetVariantString("!activator");
 	AcceptEntityInput(iHand, "SetParent", iClient, iHand);
 
-	if (g_Items[iItem].bBoneMerge)
-	{
-		// Rigged to the hand bone: merged onto the player's skeleton, so it sits in the hand exactly as built and
-		// moves with every animation.
-		float fZero[3];
-
-		SetLocalOffset(iHand, fZero, fZero);
-		SetEntProp(iHand, Prop_Send, "m_fEffects", GetEntProp(iHand, Prop_Send, "m_fEffects") | EF_BONEMERGE_FLAGS);
-	} else if (LookupEntityAttachment(iWeapon, "core") > 0) {
+	// Never bone-merged onto the player: that made the player's own animations flicker for everyone watching.
+	if (LookupEntityAttachment(iWeapon, "core") > 0) {
 		// Held exactly like the gravity gun: attached to the (hidden) gun's own centre, which the game keeps in the
 		// player's hand through every animation, aim and stance.
 		AcceptEntityInput(iHand, "ClearParent");
@@ -4031,6 +4042,7 @@ void RestoreWeapon(int iClient)
 	{
 		SetEntityRenderMode(iWeapon, RENDER_NORMAL);
 		SetEntityRenderColor(iWeapon, 255, 255, 255, 255);
+		SetEntityRenderFx(iWeapon, RENDERFX_NONE);
 	}
 
 	g_bHeldShown[iClient] = false;
