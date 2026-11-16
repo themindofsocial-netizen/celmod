@@ -3891,7 +3891,9 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	// The gravity gun's own third person model is swapped for the emblem's. The game draws a carried weapon's
 	// model on the player's hand from the player's own skeleton, so it is held exactly like the gravity gun and
 	// stays in step with the body. (Any extra model attached to the player made the body flicker for viewers.)
-	if (g_cvEmblemWorldModel.BoolValue && g_Items[iItem].iKind == KIND_EMBLEM && HasEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex") && ModelHasHandBone(sHeld))
+	// Not for see-through emblems (Phantom): the gravity gun's own model is only ever drawn in the game's solid
+	// pass (CWeaponPhysCannon::DrawModel), so a see-through gun isn't drawn at all. They keep an attached model.
+	if (g_cvEmblemWorldModel.BoolValue && g_Items[iItem].iKind == KIND_EMBLEM && g_Items[iItem].iColor[3] >= 255 && HasEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex") && ModelHasHandBone(sHeld))
 	{
 		int iIndex = PrecacheModel(sHeld);
 
@@ -3905,8 +3907,8 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 			g_iOrigWeaponSkin[iClient] = GetEntProp(iWeapon, Prop_Send, "m_nSkin");
 			SetEntProp(iWeapon, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
 
-			// The emblem's colour, see-through ones (Phantom) included.
-			ApplyItemColor(iWeapon, iItem);
+			SetEntityRenderMode(iWeapon, RENDER_NORMAL);
+			SetEntityRenderColor(iWeapon, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
 			return;
 		}

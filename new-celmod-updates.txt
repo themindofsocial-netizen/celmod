@@ -401,4 +401,5 @@
 		 - Fixed players flickering while holding an emblem: the emblem now replaces the gravity gun's own model in
 		   third person (the game draws it on the hand), instead of an extra model attached to the player.
 		 - Held emblems show their skin again (the gravity gun's own skin is switched to the emblem's while held).
-		 - See-through emblems (like Phantom) are see-through in hand again.
+		 - See-through emblems (like Phantom) are see-through in hand again: they are held as an attached model, as
+		   the gravity gun's own model can only be drawn solid.
