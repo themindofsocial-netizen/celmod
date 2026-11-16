@@ -1748,6 +1748,35 @@ stock bool Cel_IsSpecialEntity(int iEntity)
 
 // Entity slots kept free for the game itself (weapons, gibs, projectiles, NPCs): running out of them crashes the
 // server, so player spawns stop this far from the limit (cm_edict_reserve).
+// A short amount of money: 999, 1.5K, 250K, 20M, 1.2B (like the website). One decimal, dropped when it is .0.
+stock void Cel_ShortCleers(int iAmount, char[] sBuffer, int iMaxLength)
+{
+	static const float fSizes[] = { 1000000000.0, 1000000.0, 1000.0 };
+	static const char sSuffixes[][] = { "B", "M", "K" };
+	
+	float fAmount = float(iAmount), fAbs = FloatAbs(fAmount);
+	
+	for (int i = 0; i < sizeof(fSizes); i++)
+	{
+		if (fAbs >= fSizes[i])
+		{
+			// Rounded down to one decimal, so 1,999,999 never shows as 2M.
+			float fValue = float(RoundToFloor(fAbs / fSizes[i] * 10.0)) / 10.0;
+			
+			if (fValue == float(RoundToFloor(fValue)))
+			{
+				FormatEx(sBuffer, iMaxLength, "%s%d%s", iAmount < 0 ? "-" : "", RoundToFloor(fValue), sSuffixes[i]);
+			} else {
+				FormatEx(sBuffer, iMaxLength, "%s%.1f%s", iAmount < 0 ? "-" : "", fValue, sSuffixes[i]);
+			}
+			
+			return;
+		}
+	}
+	
+	IntToString(iAmount, sBuffer, iMaxLength);
+}
+
 stock int Cel_EdictReserve()
 {
 	ConVar cvReserve = FindConVar("cm_edict_reserve");

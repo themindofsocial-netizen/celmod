@@ -515,7 +515,9 @@ public Action Command_Cleer(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	Cel_ReplyToCommand(iClient, "You dropped a box with {green}%s CL{default}. Only you can open it ({green}E{default}); look at it and type {green}[tag]give <player>{default} to hand it to someone.", FormatCleers(iAmount));
+	char sShort[16];
+	Cel_ShortCleers(iAmount, sShort, sizeof(sShort));
+	Cel_ReplyToCommand(iClient, "You dropped a box with {green}%s CL{default}. Only you can open it ({green}E{default}); look at it and type {green}[tag]give <player>{default} to hand it to someone.", sShort);
 	
 	return Plugin_Handled;
 }

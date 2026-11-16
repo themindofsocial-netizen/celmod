@@ -3891,9 +3891,15 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 	// The gravity gun's own third person model is swapped for the emblem's. The game draws a carried weapon's
 	// model on the player's hand from the player's own skeleton, so it is held exactly like the gravity gun and
 	// stays in step with the body. (Any extra model attached to the player made the body flicker for viewers.)
-	// Not for see-through emblems (Phantom): the gravity gun's own model is only ever drawn in the game's solid
-	// pass (CWeaponPhysCannon::DrawModel), so a see-through gun isn't drawn at all. They keep an attached model.
-	if (g_cvEmblemWorldModel.BoolValue && g_Items[iItem].iKind == KIND_EMBLEM && g_Items[iItem].iColor[3] >= 255 && HasEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex") && ModelHasHandBone(sHeld))
+	// The gravity gun's own model is only ever drawn in the game's solid pass (CWeaponPhysCannon::DrawModel), so
+	// see-through emblems (Phantom) are shown solid in hand, and Invisible (a never-drawn model) shows its
+	// visible copy.
+	if (g_Items[iItem].sNearModel[0] != '\0')
+	{
+		strcopy(sHeld, sizeof(sHeld), g_Items[iItem].sNearModel);
+	}
+
+	if (g_cvEmblemWorldModel.BoolValue && g_Items[iItem].iKind == KIND_EMBLEM && HasEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex") && ModelHasHandBone(sHeld))
 	{
 		int iIndex = PrecacheModel(sHeld);
 
@@ -8276,7 +8282,9 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 
 			EmitSoundToAll(SOUND_REWARD, iClient);
 
-			Cel_PrintToChat(iClient, "You dug up a {green}cleers box{default} with {green}%d CL{default}! Press {green}E{default} on it.", iMoney);
+			char sShort[16];
+			Cel_ShortCleers(iMoney, sShort, sizeof(sShort));
+			Cel_PrintToChat(iClient, "You dug up a {green}cleers box{default} with {green}%s CL{default}! Press {green}E{default} on it.", sShort);
 		}
 
 		return;
