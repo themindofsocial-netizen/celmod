@@ -48,6 +48,8 @@ RenderFx g_rfRenderFX[MAXENTITIES + 1];
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("EntityCollisionRulesChanged");
+	MarkNativeAsOptional("Cel_GetZoneType");
+	MarkNativeAsOptional("Cel_IsZoneExempt");
 	MarkNativeAsOptional("SetEntityCollisionGroup");
 	
 	CreateNative("Cel_ChangePositionRelativeToOrigin", Native_ChangePositionRelativeToOrigin);
@@ -1705,6 +1707,16 @@ public Action Command_StartCopy(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
+	float fAimed[3];
+	
+	Cel_GetEntityOrigin(Cel_GetClientAimTarget(iClient), fAimed);
+	
+	if (InNoMoveArea(iClient, fAimed))
+	{
+		Cel_ReplyToCommand(iClient, "You can't use {green}+copy{default} in dungeons, events or other restricted areas.");
+		return Plugin_Handled;
+	}
+	
 	if (!Cel_CheckPropCount(iClient))
 	{
 		Cel_ReplyToCommand(iClient, "%t", "MaxPropLimit", Cel_GetPropCount(iClient));
@@ -1768,6 +1780,16 @@ public Action Command_StartGrab(int iClient, int iArgs)
 	}
 	
 	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	float fAimed[3];
+	
+	Cel_GetEntityOrigin(iProp, fAimed);
+	
+	if (InNoMoveArea(iClient, fAimed))
+	{
+		Cel_ReplyToCommand(iClient, "You can't use {green}+move{default} in dungeons, events or other restricted areas.");
+		return Plugin_Handled;
+	}
 	
 	//Cleers boxes are carried with the gravity gun like any loose box, never moved with +move.
 	if (Cel_GetEntityType(iProp) == ENTTYPE_CLEER)
@@ -1949,6 +1971,14 @@ public void Frame_CopyProp(any iClient)
 		
 		AddVectors(fOrigin[0], g_fCopyOrigin[iClient], fOrigin[1]);
 		
+		//Walking into a dungeon or event area (or carrying the copy into one) lets go of it.
+		if (InNoMoveArea(iClient, fOrigin[1]))
+		{
+			Command_StopCopy(iClient, 0);
+			Cel_PrintToChat(iClient, "You let go of the copy: {green}+copy{default} doesn't work in dungeons, events or other restricted areas.");
+			return;
+		}
+		
 		TeleportEntity(g_iMoveCopyEntity[iClient], fOrigin[1], NULL_VECTOR, NULL_VECTOR);
 		
 		RequestFrame(Frame_CopyProp, iClient);
@@ -1984,6 +2014,25 @@ public void Frame_FadeColor(any iProp)
 	}	
 }
 
+//+move and +copy are off in restricted and event areas (dungeons, mazes, parkour): for the player standing in
+//one, or the prop being carried into one. Admins with !zonebypass on are the exception.
+bool InNoMoveArea(int iClient, const float fPropPos[3])
+{
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") != FeatureStatus_Available || Cel_ZoneExempt(iClient))
+	{
+		return false;
+	}
+	
+	float fFeet[3];
+	
+	GetClientAbsOrigin(iClient, fFeet);
+	fFeet[2] += 16.0;
+	
+	int iHere = Cel_GetZoneType(fFeet), iThere = Cel_GetZoneType(fPropPos);
+	
+	return (iHere == CEL_ZONE_RESTRICTED || iHere == CEL_ZONE_EVENT || iThere == CEL_ZONE_RESTRICTED || iThere == CEL_ZONE_EVENT);
+}
+
 public void Frame_MoveProp(any iClient)
 {
 	float fOrigin[2][3];
@@ -1993,6 +2042,14 @@ public void Frame_MoveProp(any iClient)
 		HoldPoint(iClient, g_fMoveDist[iClient], fOrigin[0]);
 		
 		AddVectors(fOrigin[0], g_fCopyMoveOrigin[iClient], fOrigin[1]);
+		
+		//Walking into a dungeon or event area (or carrying the prop into one) lets go of it.
+		if (InNoMoveArea(iClient, fOrigin[1]))
+		{
+			Command_StopGrab(iClient, 0);
+			Cel_PrintToChat(iClient, "You let go of the prop: {green}+move{default} doesn't work in dungeons, events or other restricted areas.");
+			return;
+		}
 		
 		TeleportEntity(g_iMoveEntity[iClient], fOrigin[1], NULL_VECTOR, NULL_VECTOR);
 		

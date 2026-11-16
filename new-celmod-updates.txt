@@ -441,3 +441,5 @@
 		 - !npckills lists your NPC kills by type, saved: !npckills zombie shows every kind of zombie, !npckills
 		   <type> <player> shows someone else's, and !npckills alone shows everything you've killed with a total.
 		   Enemies from spawn pads don't count.
+		 - +move and +copy don't work in dungeons, events or other restricted areas: they're refused there, and a prop
+		   you're carrying is let go when you walk into one (or carry it into one). Admins with !zonebypass are exempt.
