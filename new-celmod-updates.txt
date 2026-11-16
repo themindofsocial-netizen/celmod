@@ -428,3 +428,6 @@
 		   saved builds.
 		 - Shop props are finite for admins too: root admins no longer spawn them unlimited (or without owning them).
 		   cm_admin_shop_props 1 turns the old admin exception back on, for setting up displays.
+		 - !solid works again: a prop set to not solid uses the engine's debris collision group, so players walk
+		   through it (shots still hit it, and other props still rest on it). Its messages now say plainly whether the
+		   prop is solid or not.

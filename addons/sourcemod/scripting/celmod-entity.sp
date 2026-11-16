@@ -48,6 +48,7 @@ RenderFx g_rfRenderFX[MAXENTITIES + 1];
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("EntityCollisionRulesChanged");
+	MarkNativeAsOptional("SetEntityCollisionGroup");
 	
 	CreateNative("Cel_ChangePositionRelativeToOrigin", Native_ChangePositionRelativeToOrigin);
 	CreateNative("Cel_CheckColorDB", Native_CheckColorDB);
@@ -1469,7 +1470,12 @@ public Action Command_Solid(int iClient, int iArgs)
 		
 		Cel_SetSolid(iProp, !Cel_IsSolid(iProp));
 		
-		Cel_ReplyToCommandEntity(iClient, iProp, "%t", "SetSolidicity", Cel_IsSolid(iProp) ? "on" : "off");
+		if (Cel_IsSolid(iProp))
+		{
+			Cel_ReplyToCommandEntity(iClient, iProp, "This [type] is {green}solid{default} again.");
+		} else {
+			Cel_ReplyToCommandEntity(iClient, iProp, "This [type] is now {green}not solid{default}: players walk through it. Type {green}[tag]solid{default} again to undo.");
+		}
 		
 		Cel_ChangeBeam(iClient, iProp);
 	} else {
@@ -2949,6 +2955,29 @@ public int Native_SetRenderFX(Handle hPlugin, int iNumParams)
 }
 
 #define FSOLID_NOT_SOLID_FLAG 4
+#define COLLISION_GROUP_NONE_CEL 0
+#define COLLISION_GROUP_DEBRIS_CEL 1
+
+//SourceMod's SetEntityCollisionGroup (CBaseEntity::SetCollisionGroup, which tells the physics engine). If this
+//SourceMod lacks it, or it once failed on this game, the value is set directly instead.
+bool g_bGroupNativeTried = false;
+bool g_bGroupNativeWorks = false;
+
+void SetPropCollisionGroup(int iEntity, int iGroup)
+{
+	if (GetFeatureStatus(FeatureType_Native, "SetEntityCollisionGroup") == FeatureStatus_Available && (!g_bGroupNativeTried || g_bGroupNativeWorks))
+	{
+		g_bGroupNativeTried = true;
+		g_bGroupNativeWorks = false;
+		
+		SetEntityCollisionGroup(iEntity, iGroup);
+		
+		g_bGroupNativeWorks = true;
+		return;
+	}
+	
+	SetEntProp(iEntity, Prop_Send, "m_CollisionGroup", iGroup);
+}
 
 //SourceMod's EntityCollisionRulesChanged (CBaseEntity::CollisionRulesChanged). If this SourceMod doesn't have it,
 //or it once failed on this game (the line after the call is then never reached), it isn't tried again.
@@ -2975,18 +3004,26 @@ public int Native_SetSolid(Handle hPlugin, int iNumParams)
 	int iEntity = GetNativeCell(1);
 	bool bSolid = view_as<bool>(GetNativeCell(2));
 	
-	//Only the engine's "not solid" flag is changed, and the physics engine is told. (This used to overwrite the
-	//entity's solid type after it had spawned, leaving the physics engine's data out of step with the entity:
-	//the server crash dumps were the physics engine colliding two objects and finding one without valid data.)
-	if (IsValidEntity(iEntity) && HasEntProp(iEntity, Prop_Send, "m_usSolidFlags"))
+	//Not solid = the engine's "debris" collision group: players walk through it (and other physics props still
+	//rest on it). It is set with SetEntityCollisionGroup, which tells the physics engine. (Overwriting the solid
+	//type after spawning, as this used to, left the physics engine out of step with the entity: the server
+	//crash dumps were the physics engine colliding two objects and finding one without valid data.)
+	if (IsValidEntity(iEntity) && HasEntProp(iEntity, Prop_Send, "m_CollisionGroup"))
 	{
-		int iFlags = GetEntProp(iEntity, Prop_Send, "m_usSolidFlags");
-		int iNew = bSolid ? (iFlags & ~FSOLID_NOT_SOLID_FLAG) : (iFlags | FSOLID_NOT_SOLID_FLAG);
+		int iGroup = GetEntProp(iEntity, Prop_Send, "m_CollisionGroup");
 		
-		if (iNew != iFlags)
+		if (!bSolid && iGroup != COLLISION_GROUP_DEBRIS_CEL)
 		{
-			SetEntProp(iEntity, Prop_Send, "m_usSolidFlags", iNew);
-			
+			SetPropCollisionGroup(iEntity, COLLISION_GROUP_DEBRIS_CEL);
+		} else if (bSolid && iGroup == COLLISION_GROUP_DEBRIS_CEL)
+		{
+			SetPropCollisionGroup(iEntity, COLLISION_GROUP_NONE_CEL);
+		}
+		
+		//The "not solid" flag the last update set by hand is cleared (that alone didn't let players through).
+		if (HasEntProp(iEntity, Prop_Send, "m_usSolidFlags") && (GetEntProp(iEntity, Prop_Send, "m_usSolidFlags") & FSOLID_NOT_SOLID_FLAG))
+		{
+			SetEntProp(iEntity, Prop_Send, "m_usSolidFlags", GetEntProp(iEntity, Prop_Send, "m_usSolidFlags") & ~FSOLID_NOT_SOLID_FLAG);
 			NotifyCollisionRulesChanged(iEntity);
 		}
 	}
