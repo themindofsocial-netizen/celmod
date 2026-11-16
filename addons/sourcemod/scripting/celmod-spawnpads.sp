@@ -32,6 +32,22 @@ ConVar g_cvKills;
 ConVar g_cvInterval;
 
 int g_iKills[MAXPLAYERS + 1][MAX_PADTYPES];
+
+//!npckills: the NPCs whose kills are tracked, and the name shown for each. Saved per player as "npckills_<class>".
+static const char g_sNpcKillTypes[][][] = {
+	{ "npc_zombie", "Zombie" }, { "npc_fastzombie", "Fast Zombie" }, { "npc_poisonzombie", "Poison Zombie" },
+	{ "npc_zombine", "Zombine" }, { "npc_zombie_torso", "Zombie Torso" }, { "npc_fastzombie_torso", "Fast Zombie Torso" },
+	{ "npc_headcrab", "Headcrab" }, { "npc_headcrab_fast", "Fast Headcrab" }, { "npc_headcrab_black", "Poison Headcrab" },
+	{ "npc_headcrab_poison", "Poison Headcrab" }, { "npc_antlion", "Antlion" }, { "npc_antlion_worker", "Antlion Worker" },
+	{ "npc_antlionguard", "Antlion Guard" }, { "npc_combine_s", "Combine Soldier" }, { "npc_metropolice", "Metro Cop" },
+	{ "npc_manhack", "Manhack" }, { "npc_rollermine", "Rollermine" }, { "npc_cscanner", "City Scanner" },
+	{ "npc_clawscanner", "Claw Scanner" }, { "npc_turret_floor", "Floor Turret" }, { "npc_turret_ceiling", "Ceiling Turret" },
+	{ "npc_strider", "Strider" }, { "npc_hunter", "Hunter" }, { "npc_combinegunship", "Gunship" },
+	{ "npc_helicopter", "Hunter-Chopper" }, { "npc_combinedropship", "Dropship" }, { "npc_stalker", "Stalker" },
+	{ "npc_vortigaunt", "Vortigaunt" }, { "npc_ichthyosaur", "Ichthyosaur" }, { "npc_barnacle", "Barnacle" },
+	{ "npc_crow", "Crow" }, { "npc_pigeon", "Pigeon" }, { "npc_seagull", "Seagull" }, { "npc_citizen", "Citizen" },
+	{ "npc_alyx", "Alyx" }, { "npc_barney", "Barney" }, { "npc_monk", "Father Grigori" }, { "npc_dog", "Dog" }
+};
 int g_iPadType[MAXENTITIES + 1];
 int g_iSpawnedBy[MAXENTITIES + 1];
 int g_iTypeCount;
@@ -93,6 +109,14 @@ public void OnPluginStart()
 	g_cvInterval = CreateConVar("cm_spawnpad_interval", "8.0", "Seconds between a spawn pad's spawns.", _, true, 1.0);
 
 	RegConsoleCmd("v_spawnpad", Command_SpawnPad, "|CelMod| Places an enemy spawn pad you have earned, or lists your kills and pads.");
+	RegConsoleCmd("v_npckills", Command_NpcKills, "|CelMod| Your NPC kills by type: !npckills [type] [player], e.g. !npckills zombie.");
+	
+	//Every kill of these NPCs is counted for !npckills (classes a map doesn't have simply never fire).
+	for (int i = 0; i < sizeof(g_sNpcKillTypes); i++)
+	{
+		HookEntityOutput(g_sNpcKillTypes[i][0], "OnDeath", Output_NpcKill);
+	}
+	
 	RegConsoleCmd("v_spawnpads", Command_SpawnPad, "|CelMod| Lists your enemy kills and the spawn pads you have earned.");
 
 	LoadPadTypes();
@@ -271,6 +295,114 @@ int FindPadTypeBySkin(int iSkin)
 	}
 
 	return -1;
+}
+
+public void Output_NpcKill(const char[] sOutput, int iCaller, int iActivator, float fDelay)
+{
+	if (iCaller <= MaxClients || iCaller > MAXENTITIES || iActivator < 1 || iActivator > MaxClients || !IsClientInGame(iActivator) || IsFakeClient(iActivator))
+	{
+		return;
+	}
+
+	//Enemies from a spawn pad never count (they could be farmed), the same as for earning pads.
+	if (g_iSpawnedBy[iCaller] != INVALID_ENT_REFERENCE)
+	{
+		return;
+	}
+
+	char sClass[64], sSetting[80];
+
+	GetEntityClassname(iCaller, sClass, sizeof(sClass));
+
+	FormatEx(sSetting, sizeof(sSetting), "npckills_%s", sClass);
+
+	int iKills = Cel_GetClientSettingInt(iActivator, sSetting);
+
+	Cel_SetClientSettingInt(iActivator, sSetting, (iKills < 0 ? 0 : iKills) + 1);
+}
+
+public Action Command_NpcKills(int iClient, int iArgs)
+{
+	char sSearch[64], sTarget[MAX_NAME_LENGTH], sSetting[80];
+
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sSearch, sizeof(sSearch));
+
+	int iWho = iClient;
+
+	if (iArgs >= 2)
+	{
+		GetCmdArg(2, sTarget, sizeof(sTarget));
+
+		iWho = FindTarget(iClient, sTarget, true, false);
+
+		if (iWho == -1)
+		{
+			return Plugin_Handled;
+		}
+	}
+
+	//"all" or nothing: every type killed at least once.
+	bool bAll = (sSearch[0] == '\0' || StrEqual(sSearch, "all", false));
+	int iShown = 0, iTotal = 0;
+
+	for (int i = 0; i < sizeof(g_sNpcKillTypes); i++)
+	{
+		FormatEx(sSetting, sizeof(sSetting), "npckills_%s", g_sNpcKillTypes[i][0]);
+
+		int iKills = Cel_GetClientSettingInt(iWho, sSetting);
+
+		if (iKills < 0)
+		{
+			iKills = 0;
+		}
+
+		iTotal += iKills;
+
+		//A type matches by its name or class, in part: "zombie" shows every kind of zombie.
+		bool bMatch = bAll ? (iKills > 0) : (StrContains(g_sNpcKillTypes[i][1], sSearch, false) != -1 || StrContains(g_sNpcKillTypes[i][0][4], sSearch, false) != -1);
+
+		if (!bMatch)
+		{
+			continue;
+		}
+
+		if (iShown == 0)
+		{
+			if (iWho == iClient)
+			{
+				Cel_ReplyToCommand(iClient, "Your NPC kills:");
+			} else {
+				Cel_ReplyToCommand(iClient, "{green}%N{default}'s NPC kills:", iWho);
+			}
+		}
+
+		Cel_ReplyToCommand(iClient, "  {green}%s{default}: %d", g_sNpcKillTypes[i][1], iKills);
+		iShown++;
+	}
+
+	if (iShown == 0)
+	{
+		if (bAll)
+		{
+			Cel_ReplyToCommand(iClient, "%s no NPC kills yet.", iWho == iClient ? "You have" : "That player has");
+		} else {
+			Cel_ReplyToCommand(iClient, "No NPC type matches {green}%s{default}. Try {green}[tag]npckills{default} to see all of them.", sSearch);
+		}
+
+		return Plugin_Handled;
+	}
+
+	if (bAll)
+	{
+		Cel_ReplyToCommand(iClient, "  Total: {green}%d{default}. Spawn pad enemies don't count.", iTotal);
+	}
+
+	return Plugin_Handled;
 }
 
 public void Output_EnemyDeath(const char[] sOutput, int iCaller, int iActivator, float fDelay)

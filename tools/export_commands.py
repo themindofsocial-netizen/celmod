@@ -35,7 +35,7 @@ for cat, names in {
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
             'fee landban landunban landkick kick landslay weps buildmessage block unblock hide show zones',
     'money': 'bank balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
-    'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid spawnpad spawnpads tacticlvl tacticxp',
+    'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid spawnpad spawnpads npckills tacticlvl tacticxp',
     'player': 'fly noclip nokill stuck switch feed pmute punmute timeleft',
     'help': 'news reportbug dispute motd rules cmds commands commandlist colors colorlist props proplist effects effectlist updates updatelist',
 }.items():
@@ -51,7 +51,7 @@ USAGE = {
     'seturl': '<url>', 'text': '<words> (^ in front for small text)', 'effect': '<effect name>', 'message': '<text>', 'music': '<song>', 'sound': '<sound name>',
     'setpass': '<passcode or off>', 'pass': '<passcode>', 'wep': '<weapon>', 'ammo': '<ammo type>', 'ammocrate': '<smg, ar2, rpg, grenade or cball>',
     'charger': '<health or suit>', 'gravity': '<amount>', 'landskin': '<1-26 or off>', 'landcolor': '<color>',
-    'addteam': '<player>', 'delteam': '<player>', 'fee': '<amount> | pay', 'landban': '<player>', 'landunban': '<player>', 'landkick': '<player>', 'kick': '<player>',
+    'addteam': '<player>', 'delteam': '<player>', 'fee': '<amount> | pay', 'npckills': '[type] [player]', 'landban': '<player>', 'landunban': '<player>', 'landkick': '<player>', 'kick': '<player>',
     'landslay': '<player or #all>', 'buildmessage': '<message or off>', 'block': '<player>', 'unblock': '<player>', 'hide': '<player>', 'show': '<player>',
     'cl': '[amount]', 'buy': '[item]', 'bank': '[number or add]', 'sell': '<price>', 'give': '<player>', 'trade': '<player> <price>', 'buymodel': '<model>', 'playermodel': '<model or off>',
     'emblem': '<emblem or off>', 'hat': '<hat or off>', 'weapon': '<celwep or off>', 'wrap': '<item> <player>', 'guess': '<1, 2 or 3>', 'bid': '<amount>',

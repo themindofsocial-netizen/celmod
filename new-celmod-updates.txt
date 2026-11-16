@@ -438,3 +438,6 @@
 		 - The prop limit is 200 (was 160): cm_max_props replaces cm_max_player_props.
 		 - !del works on dug-up finds (Vials, ores, turds, junk) for the player who dug them up or took them out of the
 		   bank, and for admins. They aren't owned props, so !del didn't see them before.
+		 - !npckills lists your NPC kills by type, saved: !npckills zombie shows every kind of zombie, !npckills
+		   <type> <player> shows someone else's, and !npckills alone shows everything you've killed with a total.
+		   Enemies from spawn pads don't count.
