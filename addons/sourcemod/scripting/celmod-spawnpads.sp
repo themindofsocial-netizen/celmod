@@ -686,7 +686,7 @@ void SpawnEnemy(int iPad, int iType)
 	float fOrigin[3], fAngles[3];
 
 	GetEntPropVector(iPad, Prop_Data, "m_vecAbsOrigin", fOrigin);
-	GetEntPropVector(iPad, Prop_Data, "m_angAbsRotation", fAngles);
+	Cel_GetEntityAngles(iPad, fAngles);
 
 	fOrigin[2] += 16.0;
 

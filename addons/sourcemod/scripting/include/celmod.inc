@@ -2346,7 +2346,16 @@ stock void Cel_FixSpawnPosition(int iEntity, float fOrigin[3])
  */
 stock void Cel_GetEntityAngles(int iEntity, float fAngles[3])
 {
-	GetEntPropVector(iEntity, Prop_Data, "m_angAbsRotation", fAngles);
+	// The entity's own rotation is always current. The cached world rotation (m_angAbsRotation) is only brought
+	// up to date when the engine next needs it, so right after a prop is turned it can still hold the old angles
+	// (stacked copies and saved builds then came out rotated wrong). A welded prop's own rotation is relative to
+	// what it is welded to, so for it the world rotation is the right one.
+	if (HasEntProp(iEntity, Prop_Data, "m_hMoveParent") && GetEntPropEnt(iEntity, Prop_Data, "m_hMoveParent") != -1)
+	{
+		GetEntPropVector(iEntity, Prop_Data, "m_angAbsRotation", fAngles);
+	} else {
+		GetEntPropVector(iEntity, Prop_Data, "m_angRotation", fAngles);
+	}
 }
 
 /**

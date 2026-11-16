@@ -419,3 +419,6 @@
 		   shots did nothing. Saving a build keeps each cycler's animation, its frame and whether it is paused, and
 		   +copy keeps them too (a copied cycler used to be pasted as a plain physics prop).
 		 - !spawn alyx works: Alyx was on the spawn blacklist.
+		 - !stack copies always match the prop's rotation: a prop's angles were read from a cached value that is
+		   only refreshed later, so right after turning a prop the copies could come out at its old angle. Saved
+		   builds, spawn pads and hoopie bounces read angles the same fixed way.

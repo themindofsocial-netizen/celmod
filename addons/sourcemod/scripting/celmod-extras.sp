@@ -2207,7 +2207,7 @@ public void Hook_HoopieTouch(int iEntity, int iOther)
 	
 	float fAngles[3], fUp[3], fPropOrigin[3], fPlayerOrigin[3], fToPlayer[3], fVelocity[3];
 	
-	GetEntPropVector(iEntity, Prop_Data, "m_angAbsRotation", fAngles);
+	Cel_GetEntityAngles(iEntity, fAngles);
 	GetAngleVectors(fAngles, NULL_VECTOR, NULL_VECTOR, fUp);
 	
 	Cel_GetEntityOrigin(iEntity, fPropOrigin);
