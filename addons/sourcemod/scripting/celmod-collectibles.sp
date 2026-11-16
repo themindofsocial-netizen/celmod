@@ -170,6 +170,7 @@ StringMap g_smBoxHolds;
 // Flicker test switches: each turns one thing an enabled emblem does off, live (sm_cvar ... 0).
 ConVar g_cvTestHoldModel, g_cvTestPuntHold, g_cvTestPowers;
 ConVar g_cvEmblemWorldModel;
+int g_iOrigWeaponSkin[MAXPLAYERS + 1];
 int g_iOrigWorldModel[MAXPLAYERS + 1] = { -1, ... }; //the gravity gun's own third person model while an emblem replaces it
 bool g_bRealLeave[MAXPLAYERS + 1]; //a player_disconnect event came first: really leaving, not a map change
 ConVar g_cvDropPerPlayer;
@@ -3900,6 +3901,10 @@ void ShowHeldEmblem(int iClient, int iItem, int iWeapon)
 
 			SetEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex", iIndex);
 
+			// The weapon's own skin is the one its world model is drawn with.
+			g_iOrigWeaponSkin[iClient] = GetEntProp(iWeapon, Prop_Send, "m_nSkin");
+			SetEntProp(iWeapon, Prop_Send, "m_nSkin", g_Items[iItem].iSkin);
+
 			SetEntityRenderMode(iWeapon, RENDER_NORMAL);
 			SetEntityRenderColor(iWeapon, g_Items[iItem].iColor[0], g_Items[iItem].iColor[1], g_Items[iItem].iColor[2], 255);
 
@@ -4080,6 +4085,7 @@ void RestoreWeapon(int iClient)
 		if (g_iOrigWorldModel[iClient] > 0 && HasEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex"))
 		{
 			SetEntProp(iWeapon, Prop_Send, "m_iWorldModelIndex", g_iOrigWorldModel[iClient]);
+			SetEntProp(iWeapon, Prop_Send, "m_nSkin", g_iOrigWeaponSkin[iClient]);
 		}
 	}
 
