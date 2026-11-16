@@ -46,6 +46,8 @@ RenderFx g_rfRenderFX[MAXENTITIES + 1];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("EntityCollisionRulesChanged");
+	
 	CreateNative("Cel_ChangePositionRelativeToOrigin", Native_ChangePositionRelativeToOrigin);
 	CreateNative("Cel_CheckColorDB", Native_CheckColorDB);
 	CreateNative("Cel_CheckEntityCatagory", Native_CheckEntityCatagory);
@@ -2782,12 +2784,48 @@ public int Native_SetRenderFX(Handle hPlugin, int iNumParams)
 	return true;
 }
 
+#define FSOLID_NOT_SOLID_FLAG 4
+
+//SourceMod's EntityCollisionRulesChanged (CBaseEntity::CollisionRulesChanged). If this SourceMod doesn't have it,
+//or it once failed on this game (the line after the call is then never reached), it isn't tried again.
+bool g_bRulesNativeTried = false;
+bool g_bRulesNativeWorks = false;
+
+void NotifyCollisionRulesChanged(int iEntity)
+{
+	if (GetFeatureStatus(FeatureType_Native, "EntityCollisionRulesChanged") != FeatureStatus_Available || (g_bRulesNativeTried && !g_bRulesNativeWorks))
+	{
+		return;
+	}
+	
+	g_bRulesNativeTried = true;
+	g_bRulesNativeWorks = false;
+	
+	EntityCollisionRulesChanged(iEntity);
+	
+	g_bRulesNativeWorks = true;
+}
+
 public int Native_SetSolid(Handle hPlugin, int iNumParams)
 {
 	int iEntity = GetNativeCell(1);
 	bool bSolid = view_as<bool>(GetNativeCell(2));
 	
-	bSolid ? DispatchKeyValue(iEntity, "solid", "6") : DispatchKeyValue(iEntity, "solid", "4");
+	//Only the engine's "not solid" flag is changed, and the physics engine is told. (This used to overwrite the
+	//entity's solid type after it had spawned, leaving the physics engine's data out of step with the entity:
+	//the server crash dumps were the physics engine colliding two objects and finding one without valid data.)
+	if (IsValidEntity(iEntity) && HasEntProp(iEntity, Prop_Send, "m_usSolidFlags"))
+	{
+		int iFlags = GetEntProp(iEntity, Prop_Send, "m_usSolidFlags");
+		int iNew = bSolid ? (iFlags & ~FSOLID_NOT_SOLID_FLAG) : (iFlags | FSOLID_NOT_SOLID_FLAG);
+		
+		if (iNew != iFlags)
+		{
+			SetEntProp(iEntity, Prop_Send, "m_usSolidFlags", iNew);
+			
+			NotifyCollisionRulesChanged(iEntity);
+		}
+	}
 	
 	g_bSolid[iEntity] = bSolid;
 	

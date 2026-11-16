@@ -411,3 +411,6 @@
 		   collision changes now tell the physics engine (and only happen when the group really changes), Guess Booth
 		   displays have no physics at all instead of a physics prop made non-solid afterwards, and welded props are
 		   frozen and can't be unfrozen while welded.
+		 - Crash fix (the second crash dump named the physics engine's collision code): making a prop solid or not
+		   solid (!solid, spawning, loading builds) no longer overwrites the entity's solid type after it has
+		   spawned; it only switches the engine's "not solid" flag and tells the physics engine.
