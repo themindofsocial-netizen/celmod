@@ -142,7 +142,7 @@ def main():
                  'as you own, and !give, !trade or selling one makes it the other player\'s for good. Buy them in the\n'
                  '<a href="../shop.php">shop</a> or in game with <span class="highlight">!buy prop_&lt;name&gt;</span>.\n'
                  'Seasonal props are only sold in their season.</p>\n'
-                 '<table class="cmtable">\n<tr><th>Prop</th><th>Spawn with</th><th>Category</th><th>Price</th><th>Sold</th></tr>\n%s\n</table>\n'
+                 '<div class="table-scroll"><table class="cmtable">\n<tr><th>Prop</th><th>Spawn with</th><th>Category</th><th>Price</th><th>Sold</th></tr>\n%s\n</table></div>\n'
                  '<div class="btngrid"><a href="./">Back to Props List</a></div>\n<?php cm_page_end(); ?>\n') % '\n'.join(rows)
     open(os.path.join(out_dir, 'shop.php'), 'w').write(shop_page)
 
