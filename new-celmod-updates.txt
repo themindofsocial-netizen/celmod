@@ -433,3 +433,6 @@
 		   prop is solid or not.
 		 - Giving, trading or selling a shop prop (a flatscreen, a Christmas tree...) makes it the other player's for
 		   good: one copy moves from your purchases to theirs and is saved, so it's in their bank and gone from yours.
+		 - Fixed "prop limit reached" while you had far fewer props out: the count could drift (!replace took one off
+		   twice, among others), so it is now checked against your real props before you're refused, and corrected.
+		 - The prop limit is 200 (was 160): cm_max_props replaces cm_max_player_props.

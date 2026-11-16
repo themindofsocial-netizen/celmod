@@ -1051,6 +1051,11 @@ native int Cel_GetPhysicsMaterial();
 native int Cel_GetPropCount(int iClient);
 
 /**
+ * Counts the props and cels a client really has out and corrects their counts (which can drift).
+ */
+native void Cel_RecountClientEntities(int iClient);
+
+/**
  * Retrieves the maximum allowed number of props.
  *
  * @return The maximum limit of props a client can spawn.

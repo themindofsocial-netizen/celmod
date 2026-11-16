@@ -251,6 +251,8 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		
 		//A build is spawned all at once, so it has to fit in the player's limits, and in what is left of the
 		//server's entity slots: running out of those crashes the whole server.
+		Cel_RecountClientEntities(iClient);
+		
 		int iRoom = (Cel_GetPropLimit() - Cel_GetPropCount(iClient)) + (Cel_GetCelLimit() - Cel_GetCelCount(iClient));
 		
 		if (iEntries > iRoom)

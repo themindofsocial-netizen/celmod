@@ -52,6 +52,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_CheckPropCount", Native_CheckPropCount);
 	CreateNative("Cel_CheckSpawnDB", Native_CheckSpawnDB);
 	CreateNative("Cel_CheckShopProp", Native_CheckShopProp);
+	CreateNative("Cel_RecountClientEntities", Native_RecountClientEntities);
 	CreateNative("Cel_DownloadClientFiles", Native_DownloadClientFiles);
 	CreateNative("Cel_GetAuthID", Native_GetAuthID);
 	CreateNative("Cel_GetBeamMaterial", Native_GetBeamMaterial);
@@ -170,7 +171,7 @@ public void OnPluginStart()
 	g_cvDownloadPath = CreateConVar("cm_download_list_path", "data/celmod/downloads.txt", "Path for the download list for clients.");
 	CreateConVar("cm_admin_shop_props", "0", "1: root admins can spawn any shop prop, any number of times (for displays). 0: admins need to own copies like everyone.", _, true, 0.0, true, 1.0);
 	CreateConVar("cm_edict_reserve", "256", "Entity slots kept free for the game: players can't spawn or load anything once the server is this close to its 2048 entity limit (running out crashes the server).", _, true, 32.0, true, 1024.0);
-	g_cvPropLimit = CreateConVar("cm_max_player_props", "160", "Maxiumum number of props a player is allowed to spawn.");
+	g_cvPropLimit = CreateConVar("cm_max_props", "200", "Maximum number of props a player is allowed to spawn (the server still keeps cm_edict_reserve entity slots free).");
 	g_cvOverlayPath = CreateConVar("cm_overlay_material_path", "celmod/cm_overlay2.vmt", "Default CelMod overlay path.");
 	CreateConVar("cm_version", CEL_VERSION, "The version of the plugin the server is running.");
 
@@ -932,6 +933,47 @@ public int Native_CheckBlacklistDB(Handle hPlugin, int iNumParams)
 	return (StrEqual(sSpawnString, "null")) ? false : true;
 }
 
+//Counts the props and cels a player really has out and puts the counters right.
+void RecountClientEntities(int iClient)
+{
+	if (iClient < 1 || iClient > MaxClients)
+	{
+		return;
+	}
+	
+	int iProps = 0, iCels = 0;
+	
+	for (int i = MaxClients + 1; i < GetMaxEntities(); i++)
+	{
+		if (!IsValidEntity(i) || !Cel_IsEntity(i) || Cel_GetOwner(i) != iClient)
+		{
+			continue;
+		}
+		
+		if (Cel_CheckEntityCatagory(i, ENTCATAGORY_PROP))
+		{
+			iProps++;
+		} else {
+			iCels++;
+		}
+	}
+	
+	if (iProps != g_iPropCount[iClient] || iCels != g_iCelCount[iClient])
+	{
+		LogMessage("|CelMod| Entity count for %L corrected: props %d -> %d, cels %d -> %d.", iClient, g_iPropCount[iClient], iProps, g_iCelCount[iClient], iCels);
+	}
+	
+	g_iPropCount[iClient] = iProps;
+	g_iCelCount[iClient] = iCels;
+}
+
+public int Native_RecountClientEntities(Handle hPlugin, int iNumParams)
+{
+	RecountClientEntities(GetNativeCell(1));
+	
+	return 0;
+}
+
 public int Native_CheckCelCount(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
@@ -940,6 +982,13 @@ public int Native_CheckCelCount(Handle hPlugin, int iNumParams)
 	{
 		NotifySpawnRefused(iClient, "The server is nearly out of entity slots, so nothing more can be spawned right now. Delete some props first.");
 		return false;
+	}
+	
+	//The count is kept by adding and subtracting, which can drift: it is checked against the real entities
+	//before anyone is told they're at the limit.
+	if (Cel_GetCelCount(iClient) >= Cel_GetCelLimit())
+	{
+		RecountClientEntities(iClient);
 	}
 	
 	return (Cel_GetCelCount(iClient) >= Cel_GetCelLimit()) ? false : true;
@@ -953,6 +1002,11 @@ public int Native_CheckPropCount(Handle hPlugin, int iNumParams)
 	{
 		NotifySpawnRefused(iClient, "The server is nearly out of entity slots, so nothing more can be spawned right now. Delete some props first.");
 		return false;
+	}
+	
+	if (Cel_GetPropCount(iClient) >= Cel_GetPropLimit())
+	{
+		RecountClientEntities(iClient);
 	}
 	
 	return (Cel_GetPropCount(iClient) >= Cel_GetPropLimit()) ? false : true;

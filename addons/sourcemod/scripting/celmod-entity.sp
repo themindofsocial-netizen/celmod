@@ -1204,9 +1204,14 @@ public Action Command_Replace(int iClient, int iArgs)
 			
 			Cel_GetEntityOrigin(iProp, fOrigin);
 			
-			Cel_SubFromPropCount(iClient);
-			
+			//(The old prop is taken off the count when it is removed below.)
 			int iReplaceProp = Cel_SpawnProp(iClient, sAlias, sSpawnBuffer[0], sSpawnBuffer[1], fAngles, fOrigin, iColor[0], iColor[1], iColor[2], iColor[3]);
+			
+			//Refused (the server is full, or a shop prop with every copy out): the old prop stays as it is.
+			if (iReplaceProp == -1)
+			{
+				return Plugin_Handled;
+			}
 			
 			Entity_SetSpawnFlags(iReplaceProp, Entity_GetSpawnFlags(iProp));
 			Entity_SetSkin(iReplaceProp, Entity_GetSkin(iProp));
