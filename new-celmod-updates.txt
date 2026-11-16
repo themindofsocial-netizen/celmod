@@ -436,3 +436,5 @@
 		 - Fixed "prop limit reached" while you had far fewer props out: the count could drift (!replace took one off
 		   twice, among others), so it is now checked against your real props before you're refused, and corrected.
 		 - The prop limit is 200 (was 160): cm_max_props replaces cm_max_player_props.
+		 - !del works on dug-up finds (Vials, ores, turds, junk) for the player who dug them up or took them out of the
+		   bank, and for admins. They aren't owned props, so !del didn't see them before.

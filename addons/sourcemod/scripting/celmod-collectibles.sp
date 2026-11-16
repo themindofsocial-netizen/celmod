@@ -515,6 +515,11 @@ public void OnPluginStart()
 	HookEvent("player_spawn", Event_Spawn, EventHookMode_Post);
 	HookEvent("player_disconnect", Event_PlayerLeft, EventHookMode_Pre);
 	
+	// Dug-up finds (Vials, ores, turds, junk) aren't owned props, so !del doesn't see them: it is handled here.
+	AddCommandListener(Listener_DeleteFind, "v_del");
+	AddCommandListener(Listener_DeleteFind, "v_delete");
+	AddCommandListener(Listener_DeleteFind, "v_remove");
+	
 	g_cvTestHoldModel = CreateConVar("cm_test_emblem_model", "1", "Test switch: 0 shows nothing extra for an emblem in hand (the plain gravity gun, untouched).", _, true, 0.0, true, 1.0);
 	g_cvTestPuntHold = CreateConVar("cm_test_emblem_punt", "1", "Test switch: 0 never holds back the gravity gun's punt while an emblem is in hand.", _, true, 0.0, true, 1.0);
 	g_cvEmblemWorldModel = CreateConVar("cm_emblem_worldmodel", "1", "1: an emblem in hand replaces the gravity gun's own third person model (drawn on the hand by the game, no flicker). 0: an extra model attached to the hand.", _, true, 0.0, true, 1.0);
@@ -8465,6 +8470,7 @@ void SpawnVial(float fSpot[3])
 	SetEntProp(iVial, Prop_Data, "m_takedamage", 0, 1);
 
 	g_bVial[iVial] = true;
+	g_iDugBy[iVial] = g_iDigger;
 	g_iLastVial = EntIndexToEntRef(iVial);
 
 	SDKHook(iVial, SDKHook_UsePost, Hook_VialUse);
@@ -9616,6 +9622,41 @@ public void OnMapEnd()
 // Each box goes to whoever held it last, if they were still holding it when the map ended. The end-of-map
 // scoreboard (mp_chattime) comes first, and the gravity gun lets go during it, so that time is allowed for.
 // iOnly limits it to one player (0 = everyone). Claimed boxes are taken off the list.
+// !del on a dug-up find: the player who dug it up (or took it out of their bank) removes it, and so can admins.
+// A find nobody is tied to any more (they left) can be removed by anyone.
+public Action Listener_DeleteFind(int iClient, const char[] sCommand, int iArgc)
+{
+	if (!IsRealClient(iClient) || iArgc > 0)
+	{
+		return Plugin_Continue;
+	}
+
+	int iFind = GetClientAimTarget(iClient, false);
+
+	if (iFind <= MaxClients || iFind > MAXENTITIES || !IsValidEntity(iFind) || (!g_bDugUp[iFind] && !g_bVial[iFind]))
+	{
+		return Plugin_Continue;
+	}
+
+	int iDigger = GetClientOfUserId(g_iDugBy[iFind]);
+
+	if (iDigger != iClient && iDigger != 0 && !CheckCommandAccess(iClient, "celmod_delete_finds", ADMFLAG_SLAY))
+	{
+		Cel_PrintToChat(iClient, "That was dug up by {green}%N{default}: only they can delete it.", iDigger);
+		return Plugin_Handled;
+	}
+
+	g_bDugUp[iFind] = false;
+	g_iDugRock[iFind] = 0;
+	g_bVial[iFind] = false;
+
+	AcceptEntityInput(iFind, "kill");
+
+	Cel_PrintToChat(iClient, "Deleted the find you were looking at.");
+
+	return Plugin_Handled;
+}
+
 public Action Event_PlayerLeft(Event eEvent, const char[] sName, bool bDontBroadcast)
 {
 	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
