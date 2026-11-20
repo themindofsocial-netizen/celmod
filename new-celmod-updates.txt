@@ -493,3 +493,5 @@
 		   killed it with, crowbar and stunstick included.
 		 - Loading a build no longer freezes the server: it spawns a batch at a time (cm_load_batch, 25 per tick),
 		   so a 200 prop build takes under half a second and nobody else notices.
+		 - !stack and +copy on an emblem, hat or celwep take more copies out of your bank if you own spare ones
+		   (!stack 0 0 20 3 lays out three more).

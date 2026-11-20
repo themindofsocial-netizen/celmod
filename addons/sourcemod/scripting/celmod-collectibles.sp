@@ -523,6 +523,11 @@ public void OnPluginStart()
 	AddCommandListener(Listener_DeleteFind, "v_del");
 	AddCommandListener(Listener_DeleteFind, "v_delete");
 	AddCommandListener(Listener_DeleteFind, "v_remove");
+
+	// !stack and +copy on an emblem, hat or celwep take more copies out of your bank (if you own spare ones).
+	AddCommandListener(Listener_ItemFromBank, "v_stack");
+	AddCommandListener(Listener_ItemFromBank, "+copy");
+	AddCommandListener(Listener_ItemCopyRelease, "-copy");
 	
 	g_cvTestHoldModel = CreateConVar("cm_test_emblem_model", "1", "Test switch: 0 shows nothing extra for an emblem in hand (the plain gravity gun, untouched).", _, true, 0.0, true, 1.0);
 	g_cvTestPuntHold = CreateConVar("cm_test_emblem_punt", "1", "Test switch: 0 never holds back the gravity gun's punt while an emblem is in hand.", _, true, 0.0, true, 1.0);
@@ -3773,6 +3778,104 @@ void ReportEmblemsOwned(int iClient)
 	}
 
 	Cel_SetStat(iClient, "emblems_owned", iTotal);
+}
+
+bool g_bItemCopied[MAXPLAYERS + 1];
+
+public Action Listener_ItemCopyRelease(int iClient, const char[] sCommand, int iArgc)
+{
+	if (iClient > 0 && iClient <= MaxClients && g_bItemCopied[iClient])
+	{
+		g_bItemCopied[iClient] = false;
+		return Plugin_Handled;
+	}
+
+	return Plugin_Continue;
+}
+
+public Action Listener_ItemFromBank(int iClient, const char[] sCommand, int iArgc)
+{
+	if (!IsRealClient(iClient) || !IsPlayerAlive(iClient))
+	{
+		return Plugin_Continue;
+	}
+
+	int iEntity = GetClientAimTarget(iClient, false);
+
+	if (!IsItemEntity(iEntity) || !Cel_CheckOwner(iClient, iEntity))
+	{
+		return Plugin_Continue;
+	}
+
+	int iItem = g_iEntItem[iEntity];
+	int iSpare = GetOwned(iClient, iItem) - CountSpawned(iClient, iItem);
+
+	if (iSpare < 1)
+	{
+		Cel_PrintToChat(iClient, "All your {green}%s{default} copies are already out. Get more to stack or copy it.", g_Items[iItem].sName);
+		return Plugin_Handled;
+	}
+
+	float fOrigin[3], fAngles[3], fOffset[3];
+	int iWant = 1;
+
+	GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+	GetEntPropVector(iEntity, Prop_Data, "m_angRotation", fAngles);
+
+	if (StrEqual(sCommand, "v_stack", false))
+	{
+		char sArg[16];
+
+		if (iArgc < 3)
+		{
+			Cel_PrintToChat(iClient, "Usage: {green}[tag]stack{default} <x> <y> <z> [copies]: takes more copies of this out of your bank.");
+			return Plugin_Handled;
+		}
+
+		for (int i = 0; i < 3; i++)
+		{
+			GetCmdArg(i + 1, sArg, sizeof(sArg));
+			fOffset[i] = StringToFloat(sArg);
+		}
+
+		if (iArgc >= 4)
+		{
+			GetCmdArg(4, sArg, sizeof(sArg));
+			iWant = StringToInt(sArg);
+		}
+	} else {
+		// +copy: the copy goes right above the original. The key's release (-copy) is swallowed.
+		fOffset[2] = 16.0;
+		g_bItemCopied[iClient] = true;
+	}
+
+	iWant = iWant < 1 ? 1 : (iWant > 10 ? 10 : iWant);
+
+	if (iWant > iSpare)
+	{
+		iWant = iSpare;
+	}
+
+	int iMade = 0;
+
+	for (int n = 0; n < iWant; n++)
+	{
+		AddVectors(fOrigin, fOffset, fOrigin);
+
+		if (SpawnItemEntity(iClient, iItem, fOrigin, fAngles) == -1)
+		{
+			break;
+		}
+
+		iMade++;
+	}
+
+	if (iMade > 0)
+	{
+		Cel_PrintToChat(iClient, "Took {green}%d{default} more {green}%s{default} out of your bank ({green}%d{default} left in it).", iMade, g_Items[iItem].sName, iSpare - iMade);
+	}
+
+	return Plugin_Handled;
 }
 
 int CountSpawned(int iClient, int iItem)
