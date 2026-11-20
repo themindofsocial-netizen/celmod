@@ -466,3 +466,9 @@
 		 - Health and suit chargers, the map's and charger bits, never run out.
 		 - You can't build in another player's land unless they add you with !addteam: spawning, stacking, pasting
 		   and loading builds there are refused, and a prop carried in with +move or +copy is let go.
+		 - !rotate, !flip, !r and !roll turn a prop around its own axes, so a roll one way is exactly undone by the same
+		   roll the other way, at any angle.
+		 - !straight shows the same ring and sound as !rotate.
+		 - !skin with no number tells you how many skins the prop you're looking at has, and which one it's on.
+		 - !del on a Vial or other dug-up find works even if the find isn't seen as a prop.
+		 - The level-up sound uses a sound HL2DM has (buttons/bell1.wav doesn't exist there).

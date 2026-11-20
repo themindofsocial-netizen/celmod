@@ -371,6 +371,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	MarkNativeAsOptional("Cel_GetZoneType");
 	MarkNativeAsOptional("Cel_IsZoneExempt");
 	CreateNative("Cel_GetRewardLabel", Native_GetRewardLabel);
+	CreateNative("Cel_DeleteFind", Native_DeleteFind);
 	MarkNativeAsOptional("CG_ClearInventory");
 	MarkNativeAsOptional("CG_PlayActivity");
 	MarkNativeAsOptional("CG_SetPlayerAnimation");
@@ -9671,6 +9672,11 @@ public void OnMapEnd()
 // iOnly limits it to one player (0 = everyone). Claimed boxes are taken off the list.
 // !del on a dug-up find: the player who dug it up (or took it out of their bank) removes it, and so can admins.
 // A find nobody is tied to any more (they left) can be removed by anyone.
+public int Native_DeleteFind(Handle hPlugin, int iNumParams)
+{
+	return (Listener_DeleteFind(GetNativeCell(1), "v_del", 0) == Plugin_Handled);
+}
+
 public Action Listener_DeleteFind(int iClient, const char[] sCommand, int iArgc)
 {
 	if (!IsRealClient(iClient) || iArgc > 0)

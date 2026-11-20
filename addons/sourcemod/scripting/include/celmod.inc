@@ -1059,6 +1059,10 @@ native void Cel_RecountClientEntities(int iClient);
  * Bank items out in the world (emblems, hats and celweps, shop props, hobos) have their own count and limit
  * (cm_max_items) instead of counting toward the prop or cel limit.
  */
+/**
+ * Deletes the dug-up find (Vial, ore, turd, junk) the client is looking at, if they may. True when handled.
+ */
+native bool Cel_DeleteFind(int iClient);
 native void Cel_MarkBankItem(int iEntity);
 native bool Cel_IsBankItem(int iEntity);
 native bool Cel_CheckItemCount(int iClient);

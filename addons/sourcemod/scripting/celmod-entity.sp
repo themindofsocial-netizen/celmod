@@ -48,6 +48,7 @@ RenderFx g_rfRenderFX[MAXENTITIES + 1];
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("EntityCollisionRulesChanged");
+	MarkNativeAsOptional("Cel_DeleteFind");
 	MarkNativeAsOptional("Cel_GetZoneType");
 	MarkNativeAsOptional("Cel_IsZoneExempt");
 	MarkNativeAsOptional("SetEntityCollisionGroup");
@@ -640,6 +641,12 @@ public Action Command_Delete(int iClient, int iArgs)
 	}else{
 		if (Cel_GetClientAimTarget(iClient) == -1)
 		{
+			//Dug-up finds (Vials, ores, turds, junk) aren't owned props: the collectibles plugin removes them.
+			if (GetFeatureStatus(FeatureType_Native, "Cel_DeleteFind") == FeatureStatus_Available && Cel_DeleteFind(iClient))
+			{
+				return Plugin_Handled;
+			}
+			
 			Cel_NotLooking(iClient);
 			return Plugin_Handled;
 		}
@@ -1340,6 +1347,70 @@ public Action Command_RenderFX(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+//v turned by fDegrees around the unit axis k (Rodrigues).
+void RotateAround(float v[3], const float k[3], float fDegrees)
+{
+	float c = Cosine(DegToRad(fDegrees)), sn = Sine(DegToRad(fDegrees)), fCross[3], fOut[3];
+	
+	GetVectorCrossProduct(k, v, fCross);
+	
+	float fDot = GetVectorDotProduct(k, v);
+	
+	for (int i = 0; i < 3; i++)
+	{
+		fOut[i] = v[i] * c + fCross[i] * sn + k[i] * fDot * (1.0 - c);
+	}
+	
+	v = fOut;
+}
+
+//The angles after turning by fAdd (pitch, yaw, roll) around the prop's own axes.
+void RotateLocal(const float fStart[3], const float fAdd[3], float fResult[3])
+{
+	float fForward[3], fRight[3], fUp[3];
+	
+	GetAngleVectors(fStart, fForward, fRight, fUp);
+	
+	float fAxis[3];
+	
+	//Yaw: around the prop's up.
+	if (fAdd[1] != 0.0)
+	{
+		fAxis = fUp;
+		RotateAround(fForward, fAxis, fAdd[1]);
+		RotateAround(fRight, fAxis, fAdd[1]);
+	}
+	
+	//Pitch: around the prop's right (positive pitch tips the front down, as in the game).
+	if (fAdd[0] != 0.0)
+	{
+		fAxis = fRight;
+		RotateAround(fForward, fAxis, -fAdd[0]);
+		RotateAround(fUp, fAxis, -fAdd[0]);
+	}
+	
+	//Roll: around the prop's forward.
+	if (fAdd[2] != 0.0)
+	{
+		fAxis = fForward;
+		RotateAround(fUp, fAxis, fAdd[2]);
+		RotateAround(fRight, fAxis, fAdd[2]);
+	}
+	
+	//Back to angles: pitch and yaw from the forward vector, roll from where the up vector ended up.
+	GetVectorAngles(fForward, fResult);
+	
+	float fRight0[3], fUp0[3], fFlat[3];
+	
+	fFlat[0] = fResult[0];
+	fFlat[1] = fResult[1];
+	fFlat[2] = 0.0;
+	
+	GetAngleVectors(fFlat, NULL_VECTOR, fRight0, fUp0);
+	
+	fResult[2] = RadToDeg(ArcTangent2(GetVectorDotProduct(fUp, fRight0), GetVectorDotProduct(fUp, fUp0)));
+}
+
 public Action Command_Rotate(int iClient, int iArgs)
 {
 	char sTemp[16];
@@ -1371,9 +1442,9 @@ public Action Command_Rotate(int iClient, int iArgs)
 		Cel_GetEntityOrigin(iProp, fOrigin);
 		Cel_GetEntityAngles(iProp, fPropAngles);
 		
-		fAngles[0] = fPropAngles[0] += fAddAngles[0];
-		fAngles[1] = fPropAngles[1] += fAddAngles[1];
-		fAngles[2] = fPropAngles[2] += fAddAngles[2];
+		//Turned around the prop's own axes (yaw around its up, pitch around its right, roll around its forward), so
+		//any turn is exactly undone by the opposite one, at any angle. (Adding to the Euler angles didn't.)
+		RotateLocal(fPropAngles, fAddAngles, fAngles);
 		
 		TeleportEntity(iProp, NULL_VECTOR, fAngles, NULL_VECTOR);
 		
@@ -1400,8 +1471,25 @@ public Action Command_Skin(int iClient, int iArgs)
 	char sSkin[16];
 	int iMaxSkins, iSkin;
 	
+	//With no number: how many skins the prop you're looking at has.
 	if (iArgs < 1)
 	{
+		int iLook = Cel_GetClientAimTarget(iClient);
+		
+		if (iLook != -1 && IsValidEntity(iLook))
+		{
+			int iSkins = StudioHdr.FromEntity(iLook).numskinfamilies;
+			
+			if (iSkins > 1)
+			{
+				Cel_ReplyToCommand(iClient, "This prop has {green}%d{default} skins: {green}[tag]skin 0{default} to {green}[tag]skin %d{default} (or {green}next{default} / {green}prev{default}). It's on skin {green}%d{default}.", iSkins, iSkins - 1, Entity_GetSkin(iLook));
+			} else {
+				Cel_ReplyToCommand(iClient, "This prop only has one skin.");
+			}
+			
+			return Plugin_Handled;
+		}
+		
 		Cel_ReplyToCommand(iClient, "%t", "CMD_Skin");
 		return Plugin_Handled;
 	}
@@ -1737,7 +1825,20 @@ public Action Command_Stand(int iClient, int iArgs)
 	
 	if (Cel_CanEdit(iClient, iProp))
 	{
+		float fOrigin[3];
+		
+		Cel_GetEntityOrigin(iProp, fOrigin);
+		
 		TeleportEntity(iProp, NULL_VECTOR, g_fZero, NULL_VECTOR);
+		
+		//The same ring and lever sound as !rotate, so you can see it happen.
+		TE_SetupBeamRingPoint(fOrigin, 0.0, 15.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.5, 3.0, 0.0, g_iOrange, 10, 0);
+		TE_SendToAll();
+		
+		PrecacheSound("buttons/lever7.wav");
+		EmitSoundToAll("buttons/lever7.wav", iProp, 2, 100, 0, 1.0, 100, -1, NULL_VECTOR, NULL_VECTOR, true, 0.0);
+		
+		Cel_ChangeBeam(iClient, iProp);
 	} else {
 		Cel_NotYours(iClient, iProp);
 		return Plugin_Handled;

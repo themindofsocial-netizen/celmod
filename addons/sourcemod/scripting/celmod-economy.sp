@@ -1043,7 +1043,7 @@ void AddTacticsXP(int iClient, int iAmount)
 		SaveTactics(iClient);
 		
 		//Just the bell: the new level shows on the HUD, nothing is said in chat.
-		EmitSoundToClient(iClient, "buttons/bell1.wav");
+		EmitSoundToClient(iClient, "buttons/blip1.wav");
 	}
 }
 
@@ -1065,7 +1065,7 @@ public Action Timer_TacticsMinute(Handle hTimer)
 
 public void OnMapStart()
 {
-	PrecacheSound("buttons/bell1.wav", true);
+	PrecacheSound("buttons/blip1.wav", true);
 }
 
 public Action Event_TacticsDeath(Event eEvent, const char[] sName, bool bDontBroadcast)
