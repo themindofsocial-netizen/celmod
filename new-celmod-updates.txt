@@ -479,3 +479,6 @@
 		   or at set server times (cm_drop_times, e.g. "18:00,21:30"). cm_drop_interval is gone.
 		 - The free emblem that appears in your build is slower to come (7 days, 10% per load) and appears without a
 		   message, so you'll have to find it.
+		 - The Error emblems go red, green, blue: Red Error upgrades to Green Error, which upgrades to Blue Error, and
+		   each one tints you its colour while you hold it. (Emblems you already own keep their name: the old white
+		   Error is now Red Error.)
