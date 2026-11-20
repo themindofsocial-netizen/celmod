@@ -1629,6 +1629,22 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 		return -1;
 	}
 	
+	//Nobody builds in another player's land unless they're on its build team. Admins with !zonebypass can.
+	if (iClient > 0 && iClient <= MaxClients && IsClientInGame(iClient))
+	{
+		int iLandOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+		
+		if (iLandOwner > 0 && iLandOwner <= MaxClients && iLandOwner != iClient && IsClientInGame(iLandOwner)
+			&& !Cel_IsOnBuildTeam(iLandOwner, iClient) && !Cel_ZoneExempt(iClient))
+		{
+			char sMessage[160];
+			
+			FormatEx(sMessage, sizeof(sMessage), "That's {green}%N{default}'s land: you can only build there if they add you with {green}!addteam{default}.", iLandOwner);
+			NotifySpawnRefused(iClient, sMessage);
+			return -1;
+		}
+	}
+	
 	//A physics prop needs the model's .phy file. Without one it would not spawn at all, so it becomes a solid
 	//prop that does not move instead.
 	bool bNoPhysics = false;

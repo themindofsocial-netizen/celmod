@@ -2027,6 +2027,13 @@ public void Frame_CopyProp(any iClient)
 		AddVectors(fOrigin[0], g_fCopyOrigin[iClient], fOrigin[1]);
 		
 		//Walking into a dungeon or event area (or carrying the copy into one) lets go of it.
+		if (InOtherLand(iClient, fOrigin[1]))
+		{
+			Command_StopCopy(iClient, 0);
+			Cel_PrintToChat(iClient, "You let go of the copy: that's another player's land.");
+			return;
+		}
+		
 		if (InNoMoveArea(iClient, fOrigin[1]))
 		{
 			Command_StopCopy(iClient, 0);
@@ -2088,6 +2095,19 @@ bool InNoMoveArea(int iClient, const float fPropPos[3])
 	return (iHere == CEL_ZONE_RESTRICTED || iHere == CEL_ZONE_EVENT || iThere == CEL_ZONE_RESTRICTED || iThere == CEL_ZONE_EVENT);
 }
 
+//A prop can't be carried (+move, +copy) into another player's land unless you're on its build team.
+bool InOtherLand(int iClient, const float fPropPos[3])
+{
+	float fPos[3];
+	
+	fPos = fPropPos;
+	
+	int iOwner = Cel_GetLandOwnerFromPosition(fPos);
+	
+	return (iOwner > 0 && iOwner <= MaxClients && iOwner != iClient && IsClientInGame(iOwner) && !Cel_IsOnBuildTeam(iOwner, iClient)
+		&& !(GetFeatureStatus(FeatureType_Native, "Cel_IsZoneExempt") == FeatureStatus_Available && Cel_ZoneExempt(iClient)));
+}
+
 public void Frame_MoveProp(any iClient)
 {
 	float fOrigin[2][3];
@@ -2099,6 +2119,13 @@ public void Frame_MoveProp(any iClient)
 		AddVectors(fOrigin[0], g_fCopyMoveOrigin[iClient], fOrigin[1]);
 		
 		//Walking into a dungeon or event area (or carrying the prop into one) lets go of it.
+		if (InOtherLand(iClient, fOrigin[1]))
+		{
+			Command_StopGrab(iClient, 0);
+			Cel_PrintToChat(iClient, "You let go of the prop: that's another player's land.");
+			return;
+		}
+		
 		if (InNoMoveArea(iClient, fOrigin[1]))
 		{
 			Command_StopGrab(iClient, 0);

@@ -464,3 +464,5 @@
 		 - Players spawn with just the gravity gun and a crowbar (cm_spawn_loadout); celweps come back as before.
 		   Combine players can pick up crowbars (touching one swaps the stunstick out).
 		 - Health and suit chargers, the map's and charger bits, never run out.
+		 - You can't build in another player's land unless they add you with !addteam: spawning, stacking, pasting
+		   and loading builds there are refused, and a prop carried in with +move or +copy is let go.
