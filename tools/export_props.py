@@ -5,7 +5,8 @@
 
 Reads addons/sourcemod/data/celmod/spawns.txt (what !spawn knows), blacklist.txt (aliases that can't be
 spawned) and shop.txt (the "Props" section: props you buy, one copy per purchase). Writes props/a.php ..
-props/z.php, props/other.php (aliases that start with a digit), props/index.php and props/shop.php.
+props/z.php, props/other.php (aliases that start with a digit), props/index.php, props/shop.php and
+props/props.json (every name, for the search box on the index; props/search.js reads it).
 props/dis.php (the discontinued props history) is left alone.
 """
 import html
@@ -94,11 +95,11 @@ def main():
         for a in aliases:
             cls = flat[a].split('|', 1)[0]
             note = ' <span class="muted">(NPC: shoot it to change its pose, E to pause)</span>' if cls == 'cycler' else ''
-            lines.append('  %s%s<br>' % (html.escape(a), note))
+            lines.append('  <span data-copy="!%s" title="Click to copy !%s">%s</span>%s<br>' % (html.escape(a), html.escape(a), html.escape(a), note))
         page = ("<?php require __DIR__ . '/../includes/bootstrap.php'; cm_page_start('|CelMod| - Prop List - %s'); ?>\n"
                 '<!-- Written by tools/export_props.py from the server\'s spawns.txt: edit that file, not this one. -->\n'
                 '<h2><span class="celColor">|CelMod| Props - %s</span><br>\n</h2>\n%s\n'
-                '<p class="proplist">\n%s\n  <br>\n  </p><div class="btngrid"><a href="./">Back to Props List</a></div><p>\n  </p>\n'
+                '<p class="muted">Click a prop to copy it, ready to paste into the game\'s chat.</p>\n<p class="proplist">\n%s\n  <br>\n  </p><div class="btngrid"><a href="./">Back to Props List</a></div><p>\n  </p>\n'
                 '<?php cm_page_end(); ?>\n') % (title, title, letter_grid(by_bucket, b), '\n'.join(lines))
         open(os.path.join(out_dir, b + '.php'), 'w').write(page)
 
@@ -117,10 +118,17 @@ def main():
              '  Ex. <span class="highlight">!woodcrate1 drop</span><br>\n  <br>\n  Options include:<br>\n'
              '  <b>unfrozen</b> - Spawns the prop unfrozen<br>\n'
              '  <b>nogod</b> - Spawns the prop and makes it breakable<br>\n'
-             '  <b>drop</b> - Spawns the prop at the floor<br>\n</p>\n%s\n'
+             '  <b>drop</b> - Spawns the prop at the floor<br>\n</p>\n'
+             '<div class="searchbar"><input type="search" id="propfind" placeholder="Search all %d props... (press /)" aria-label="Search props" autocomplete="off">'
+             ' <span class="count" id="propcount" aria-live="polite"></span></div>\n'
+             '<div class="search-results" id="propresults" hidden></div>\n%s\n'
              '<div class="btngrid"><a href="shop.php">Shop Props</a> <a href="dis.php">Discontinued Props</a></div>\n'
-             '<p>\n</p>\n<?php cm_page_end(); ?>\n') % (len(props), letter_grid(by_bucket))
+             '<p>\n</p>\n<?php cm_page_end(\'<script src="search.js?v=\' . (int)@filemtime(__DIR__ . \'/search.js\') . \'" defer></script>\'); ?>\n') % (len(props), len(props), letter_grid(by_bucket))
     open(os.path.join(out_dir, 'index.php'), 'w').write(index)
+
+    # Every prop name for the search box on the index (shop props are on their own page).
+    import json
+    open(os.path.join(out_dir, 'props.json'), 'w').write(json.dumps(props, separators=(',', ':')))
 
     rows = []
     for alias in sorted(shop_props):
