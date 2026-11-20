@@ -491,3 +491,5 @@
 		 - Land skins stay inside the land: the outer tiles used to hang half a tile past the edges.
 		 - Killing a dungeon enemy gives back a little ammo for every gun you carry (cm_dungeon_ammo), whatever you
 		   killed it with, crowbar and stunstick included.
+		 - Loading a build no longer freezes the server: it spawns a batch at a time (cm_load_batch, 25 per tick),
+		   so a 200 prop build takes under half a second and nobody else notices.

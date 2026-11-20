@@ -7,6 +7,8 @@
 bool g_bLate;
 
 float g_fCrosshairOrigin[MAXPLAYERS + 1][3];
+bool g_bLoading[MAXPLAYERS + 1]; //a build is being spawned in batches for this player
+ConVar g_cvLoadBatch;
 
 Handle g_hOnBuildLoaded;
 Handle g_hOnLoadEntity;
@@ -50,6 +52,7 @@ public void OnPluginStart()
 		}
 	}
 	
+	g_cvLoadBatch = CreateConVar("cm_load_batch", "25", "Entities spawned per tick (20 ticks a second) when a build loads. Lower = smoother for everyone, but slower to load.", _, true, 1.0);
 	RegConsoleCmd("v_load", Command_LoadBuild, "|CelMod| Loads entities from a save file.");
 	RegConsoleCmd("v_save", Command_SaveBuild, "|CelMod| Saves all server entities that are in your land.");
 	RegConsoleCmd("v_saves", Command_ListSaves, "|CelMod| Lists your saved builds.");
@@ -197,6 +200,12 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 	
 	GetNativeString(2, sSaveName, sizeof(sSaveName));
 	
+	if (g_bLoading[iClient])
+	{
+		Cel_ReplyToCommand(iClient, "Your last build is still loading. Wait a moment.");
+		return false;
+	}
+	
 	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
 	{
 		Cel_ReplyToCommand(iClient, "Your builds cannot be reached right now: your Steam ID is not known to the server yet. Try again in a moment.");
@@ -275,169 +284,27 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 			return false;
 		}
 		
-		if (kvLoadBuild.GotoFirstSubKey())
+		//Spawned a batch at a time over several frames (cm_load_batch per tick), so a big build doesn't freeze the
+		//server for everyone. The build's own message and links come once it's all in.
+		if (!kvLoadBuild.GotoFirstSubKey())
 		{
-			do
-			{
-				fEnt[0][0] = kvLoadBuild.GetFloat("a1");
-				fEnt[0][1] = kvLoadBuild.GetFloat("a2");
-				fEnt[0][2] = kvLoadBuild.GetFloat("a3");
-				
-				fEnt[1][0] = kvLoadBuild.GetFloat("o1");
-				fEnt[1][1] = kvLoadBuild.GetFloat("o2");
-				fEnt[1][2] = kvLoadBuild.GetFloat("o3");
-				
-				fOrigin[0] = fEnt[1][0] + g_fCrosshairOrigin[iClient][0];
-				fOrigin[1] = fEnt[1][1] + g_fCrosshairOrigin[iClient][1];
-				fOrigin[2] = fEnt[1][2] + g_fCrosshairOrigin[iClient][2];
-				
-				kvLoadBuild.GetString("classname", sBuffer[0], sizeof(sBuffer[]));
-				kvLoadBuild.GetString("targetname", sBuffer[1], sizeof(sBuffer[]));
-				kvLoadBuild.GetString("model", sBuffer[2], sizeof(sBuffer[]));
-				
-				EntityType etType = view_as<EntityType>(kvLoadBuild.GetNum("entitytype"));
-				
-				//Entity types that cannot be loaded are skipped instead of re-using the previous entity.
-				iProp = -1;
-				
-				switch(etType)
-				{
-					case ENTTYPE_CYCLER:
-					{
-						kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
-						
-						iProp = Cel_SpawnProp(iClient, sPropName, "cycler", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-						
-						if (iProp != -1)
-						{
-							Cel_SetCyclerAnim(iProp, kvLoadBuild.GetNum("animsequence"), kvLoadBuild.GetFloat("animcycle"), kvLoadBuild.GetNum("animpaused") == 1);
-						}
-					}
-					case ENTTYPE_DOOR:
-					{
-						iProp = Cel_SpawnDoor(iClient, 1, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_DYNAMIC:
-					{
-						kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
-						
-						iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_EFFECT:
-					{
-						iProp = Cel_SpawnEffect(iClient, fOrigin, view_as<EffectType>(kvLoadBuild.GetNum("effecttype")), view_as<bool>(kvLoadBuild.GetNum("effectenabled")), kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_INTERNET:
-					{
-						char sURL[PLATFORM_MAX_PATH];
-						
-						kvLoadBuild.GetString("interneturl", sURL, sizeof(sURL));
-						
-						iProp = Cel_SpawnInternet(iClient, sURL, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_LADDER:
-					{
-						iProp = Cel_SpawnLadder(iClient, sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_LIGHT:
-					{
-						iProp = Cel_SpawnLight(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_PHYSICS:
-					{
-						kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
-						
-						iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-						
-						Cel_SetBreakable(iProp, view_as<bool>(kvLoadBuild.GetNum("breakable")));
-					}
-					case ENTTYPE_AMMO:
-					{
-						iProp = Cel_SpawnAmmoBit(iClient, view_as<AmmoBitType>(kvLoadBuild.GetNum("ammobittype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_AMMOCRATE:
-					{
-						iProp = Cel_SpawnAmmoCrate(iClient, view_as<AmmoCrateType>(kvLoadBuild.GetNum("ammocratetype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_CHARGER:
-					{
-						iProp = Cel_SpawnCharger(iClient, view_as<ChargerType>(kvLoadBuild.GetNum("chargertype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_WEAPONSPWNER:
-					{
-						iProp = Cel_SpawnWeaponBit(iClient, view_as<WeaponBitType>(kvLoadBuild.GetNum("weaponbittype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_TRIGGER:
-					{
-						iProp = Cel_SpawnButton(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-					case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP:
-					{
-						char sItemId[64];
-						
-						kvLoadBuild.GetString("itemid", sItemId, sizeof(sItemId));
-						
-						//Returns -1 when the player no longer owns the item, or it is already spawned.
-						iProp = Cel_SpawnCollectible(iClient, etType == ENTTYPE_EMBLEM ? "emblem" : (etType == ENTTYPE_HAT ? "hat" : "weapon"), sItemId, fEnt[0], fOrigin);
-					}
-					case ENTTYPE_UNKNOWN:
-					{
-						kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
-						
-						iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
-					}
-				}
-				
-				if (iProp == -1 || !IsValidEntity(iProp))
-				{
-					continue;
-				}
-				
-				Entity_SetName(iProp, sBuffer[1]);
-				Cel_SetEntity(iProp, true);
-				Entity_SetSpawnFlags(iProp, kvLoadBuild.GetNum("spawnflags"));
-				Entity_SetSkin(iProp, kvLoadBuild.GetNum("skin"));
-				Cel_SetMotion(iProp, view_as<bool>(kvLoadBuild.GetNum("motion")));
-				Cel_SetSolid(iProp, view_as<bool>(kvLoadBuild.GetNum("solid")));
-				
-				if (kvLoadBuild.GetNum("perm", 0) == 1)
-				{
-					Cel_SetPerm(iProp, true);
-				}
-				Cel_SetRenderFX(iProp, view_as<RenderFx>(kvLoadBuild.GetNum("renderfx")));
-				Cel_SetOwner(iClient, iProp);
-				
-				Cel_SetColorFade(iProp, view_as<bool>(kvLoadBuild.GetNum("colorfading")), kvLoadBuild.GetNum("fc1-1"), kvLoadBuild.GetNum("fc1-2"), kvLoadBuild.GetNum("fc1-3"), kvLoadBuild.GetNum("fc2-1"), kvLoadBuild.GetNum("fc2-2"), kvLoadBuild.GetNum("fc2-3"));
-				Cel_SetRainbow(iProp, view_as<bool>(kvLoadBuild.GetNum("colorrainbow")));
-				
-				//Other plugins restore what they stored with this entity (teleports, messages, sounds, links, welds).
-				Call_StartForward(g_hOnLoadEntity);
-				
-				Call_PushCell(iClient);
-				Call_PushCell(iProp);
-				Call_PushCell(kvLoadBuild);
-				
-				Call_Finish();
-			}
+			kvLoadBuild.Close();
 			
-			while (kvLoadBuild.GotoNextKey());
+			Cel_ReplyToCommand(iClient, "%t", "LoadedBuild", sSaveName);
+			return true;
 		}
 		
-		if(!kvLoadBuild.GotoNextKey())
-		{
-			kvLoadBuild.Close();	
-		}
+		g_bLoading[iClient] = true;
 		
-		iProp = -1;
+		DataPack dpLoad = new DataPack();
 		
-		Cel_ReplyToCommand(iClient, "%t", "LoadedBuild", sSaveName);
+		dpLoad.WriteCell(GetClientUserId(iClient));
+		dpLoad.WriteCell(kvLoadBuild);
+		dpLoad.WriteString(sSaveName);
 		
-		Call_StartForward(g_hOnBuildLoaded);
+		CreateTimer(0.05, Timer_LoadBatch, dpLoad, TIMER_REPEAT | TIMER_DATA_HNDL_CLOSE);
 		
-		Call_PushCell(iClient);
-		Call_PushString(sSaveName);
-		
-		Call_Finish();
+		Cel_ReplyToCommand(iClient, "Loading {green}%s{default} ({green}%d{default} entities)...", sSaveName, iEntries);
 		
 		return true;
 	}else{
@@ -447,6 +314,195 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		
 		return false;
 	}
+}
+
+//One saved entity of a build: spawned and set up as it was saved.
+void LoadBuildEntry(int iClient, KeyValues kvLoadBuild)
+{
+	char sBuffer[3][PLATFORM_MAX_PATH], sPropName[64];
+	float fEnt[2][3], fOrigin[3];
+	int iProp = -1;
+	
+	fEnt[0][0] = kvLoadBuild.GetFloat("a1");
+	fEnt[0][1] = kvLoadBuild.GetFloat("a2");
+	fEnt[0][2] = kvLoadBuild.GetFloat("a3");
+	
+	fEnt[1][0] = kvLoadBuild.GetFloat("o1");
+	fEnt[1][1] = kvLoadBuild.GetFloat("o2");
+	fEnt[1][2] = kvLoadBuild.GetFloat("o3");
+	
+	fOrigin[0] = fEnt[1][0] + g_fCrosshairOrigin[iClient][0];
+	fOrigin[1] = fEnt[1][1] + g_fCrosshairOrigin[iClient][1];
+	fOrigin[2] = fEnt[1][2] + g_fCrosshairOrigin[iClient][2];
+	
+	kvLoadBuild.GetString("classname", sBuffer[0], sizeof(sBuffer[]));
+	kvLoadBuild.GetString("targetname", sBuffer[1], sizeof(sBuffer[]));
+	kvLoadBuild.GetString("model", sBuffer[2], sizeof(sBuffer[]));
+	
+	EntityType etType = view_as<EntityType>(kvLoadBuild.GetNum("entitytype"));
+	
+	//Entity types that cannot be loaded are skipped instead of re-using the previous entity.
+	iProp = -1;
+	
+	switch(etType)
+	{
+		case ENTTYPE_CYCLER:
+		{
+			kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
+			
+			iProp = Cel_SpawnProp(iClient, sPropName, "cycler", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+			
+			if (iProp != -1)
+			{
+				Cel_SetCyclerAnim(iProp, kvLoadBuild.GetNum("animsequence"), kvLoadBuild.GetFloat("animcycle"), kvLoadBuild.GetNum("animpaused") == 1);
+			}
+		}
+		case ENTTYPE_DOOR:
+		{
+			iProp = Cel_SpawnDoor(iClient, 1, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_DYNAMIC:
+		{
+			kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
+			
+			iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_EFFECT:
+		{
+			iProp = Cel_SpawnEffect(iClient, fOrigin, view_as<EffectType>(kvLoadBuild.GetNum("effecttype")), view_as<bool>(kvLoadBuild.GetNum("effectenabled")), kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_INTERNET:
+		{
+			char sURL[PLATFORM_MAX_PATH];
+			
+			kvLoadBuild.GetString("interneturl", sURL, sizeof(sURL));
+			
+			iProp = Cel_SpawnInternet(iClient, sURL, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_LADDER:
+		{
+			iProp = Cel_SpawnLadder(iClient, sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_LIGHT:
+		{
+			iProp = Cel_SpawnLight(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_PHYSICS:
+		{
+			kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
+			
+			iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+			
+			Cel_SetBreakable(iProp, view_as<bool>(kvLoadBuild.GetNum("breakable")));
+		}
+		case ENTTYPE_AMMO:
+		{
+			iProp = Cel_SpawnAmmoBit(iClient, view_as<AmmoBitType>(kvLoadBuild.GetNum("ammobittype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_AMMOCRATE:
+		{
+			iProp = Cel_SpawnAmmoCrate(iClient, view_as<AmmoCrateType>(kvLoadBuild.GetNum("ammocratetype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_CHARGER:
+		{
+			iProp = Cel_SpawnCharger(iClient, view_as<ChargerType>(kvLoadBuild.GetNum("chargertype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_WEAPONSPWNER:
+		{
+			iProp = Cel_SpawnWeaponBit(iClient, view_as<WeaponBitType>(kvLoadBuild.GetNum("weaponbittype")), fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_TRIGGER:
+		{
+			iProp = Cel_SpawnButton(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+		case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP:
+		{
+			char sItemId[64];
+			
+			kvLoadBuild.GetString("itemid", sItemId, sizeof(sItemId));
+			
+			//Returns -1 when the player no longer owns the item, or it is already spawned.
+			iProp = Cel_SpawnCollectible(iClient, etType == ENTTYPE_EMBLEM ? "emblem" : (etType == ENTTYPE_HAT ? "hat" : "weapon"), sItemId, fEnt[0], fOrigin);
+		}
+		case ENTTYPE_UNKNOWN:
+		{
+			kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
+			
+			iProp = Cel_SpawnProp(iClient, sPropName, "prop_physics_override", sBuffer[2], fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+		}
+	}
+	
+	if (iProp == -1 || !IsValidEntity(iProp))
+	{
+		return;
+	}
+	
+	Entity_SetName(iProp, sBuffer[1]);
+	Cel_SetEntity(iProp, true);
+	Entity_SetSpawnFlags(iProp, kvLoadBuild.GetNum("spawnflags"));
+	Entity_SetSkin(iProp, kvLoadBuild.GetNum("skin"));
+	Cel_SetMotion(iProp, view_as<bool>(kvLoadBuild.GetNum("motion")));
+	Cel_SetSolid(iProp, view_as<bool>(kvLoadBuild.GetNum("solid")));
+	
+	if (kvLoadBuild.GetNum("perm", 0) == 1)
+	{
+		Cel_SetPerm(iProp, true);
+	}
+	Cel_SetRenderFX(iProp, view_as<RenderFx>(kvLoadBuild.GetNum("renderfx")));
+	Cel_SetOwner(iClient, iProp);
+	
+	Cel_SetColorFade(iProp, view_as<bool>(kvLoadBuild.GetNum("colorfading")), kvLoadBuild.GetNum("fc1-1"), kvLoadBuild.GetNum("fc1-2"), kvLoadBuild.GetNum("fc1-3"), kvLoadBuild.GetNum("fc2-1"), kvLoadBuild.GetNum("fc2-2"), kvLoadBuild.GetNum("fc2-3"));
+	Cel_SetRainbow(iProp, view_as<bool>(kvLoadBuild.GetNum("colorrainbow")));
+	
+	//Other plugins restore what they stored with this entity (teleports, messages, sounds, links, welds).
+	Call_StartForward(g_hOnLoadEntity);
+	
+	Call_PushCell(iClient);
+	Call_PushCell(iProp);
+	Call_PushCell(kvLoadBuild);
+	
+	Call_Finish();
+}
+
+public Action Timer_LoadBatch(Handle hTimer, DataPack dpLoad)
+{
+	char sSaveName[96];
+	
+	dpLoad.Reset();
+	
+	int iClient = GetClientOfUserId(dpLoad.ReadCell());
+	KeyValues kvLoadBuild = view_as<KeyValues>(dpLoad.ReadCell());
+	dpLoad.ReadString(sSaveName, sizeof(sSaveName));
+	
+	//The player left: the rest isn't loaded.
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		delete kvLoadBuild;
+		return Plugin_Stop;
+	}
+	
+	for (int n = 0; n < g_cvLoadBatch.IntValue; n++)
+	{
+		LoadBuildEntry(iClient, kvLoadBuild);
+		
+		if (!kvLoadBuild.GotoNextKey())
+		{
+			delete kvLoadBuild;
+			
+			g_bLoading[iClient] = false;
+			
+			Cel_ReplyToCommand(iClient, "%t", "LoadedBuild", sSaveName);
+			
+			Call_StartForward(g_hOnBuildLoaded);
+			Call_PushCell(iClient);
+			Call_PushString(sSaveName);
+			Call_Finish();
+			
+			return Plugin_Stop;
+		}
+	}
+	
+	return Plugin_Continue;
 }
 
 //Natives:
@@ -839,4 +895,9 @@ public Action Command_ListSaves(int iClient, int iArgs)
 	delete alNames;
 
 	return Plugin_Handled;
+}
+
+public void OnClientDisconnect(int iClient)
+{
+	g_bLoading[iClient] = false;
 }
