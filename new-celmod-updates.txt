@@ -450,3 +450,6 @@
 		 - !freezeall and !unfreezeall freeze or unfreeze every prop you own (perm and welded props stay frozen).
 		 - !nofly (or !landnoclip) turns noclip off for other players in your land: they can't turn it on there, and
 		   anyone flying in is put back on their feet. You, your build team and admins with !zonebypass still can.
+		 - Chat messages show "!" for commands instead of "[tag]", and replies to commands run from a key bind (+copy,
+		   +move...) now show in chat, not only in the console.
+		 - !nextmap (or "nextmap" in chat) answers "|CelMod| Next map is ..." like every other message.

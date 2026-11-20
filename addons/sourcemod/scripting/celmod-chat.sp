@@ -57,6 +57,10 @@ public void OnPluginStart()
 	LoadTranslations("common.phrases");
 
 	AddCommandListener(Handle_Noclip, "noclip");
+	
+	//SourceMod's nextmap plugin answers "[SM] Next Map: ...": CelMod answers instead, in its own style.
+	AddCommandListener(Listener_NextMap, "sm_nextmap");
+	AddCommandListener(Listener_NextMap, "nextmap");
 	AddCommandListener(Handle_Chat, "say");
 	AddCommandListener(Handle_Chat, "say_team");
 	
@@ -328,6 +332,44 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 	return Plugin_Continue;
 }
 
+public Action Listener_NextMap(int iClient, const char[] sCommand, int iArgs)
+{
+	ReplyNextMap(iClient, false);
+	return Plugin_Handled;
+}
+
+//The word "nextmap" typed in chat (SourceMod answers it to everyone).
+public Action OnClientSayCommand(int iClient, const char[] sCommand, const char[] sArgs)
+{
+	if (StrEqual(sArgs, "nextmap", false))
+	{
+		ReplyNextMap(iClient, true);
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
+}
+
+void ReplyNextMap(int iClient, bool bEveryone)
+{
+	char sMap[PLATFORM_MAX_PATH];
+	
+	if (!GetNextMap(sMap, sizeof(sMap)) || sMap[0] == '\0')
+	{
+		strcopy(sMap, sizeof(sMap), "not chosen yet");
+	}
+	
+	if (bEveryone)
+	{
+		Cel_PrintToChatAll("Next map is {green}%s{default}.", sMap);
+	} else if (iClient > 0 && IsClientInGame(iClient))
+	{
+		Cel_PrintToChat(iClient, "Next map is {green}%s{default}.", sMap);
+	} else {
+		PrintToServer("|CelMod| Next map is %s.", sMap);
+	}
+}
+
 public Action Handle_Noclip(int iClient, char[] sCommand, int iArgs)
 {
 	FakeClientCommand(iClient, "v_fly");
@@ -386,6 +428,9 @@ public int Native_PrintToChat(Handle hPlugin, int iNumParams)
 	
 	FormatNativeString(0, 2, 3, sizeof(sBuffer), iWritten, sBuffer);
 	
+	//Chat messages show commands with "!".
+	ReplaceString(sBuffer, sizeof(sBuffer), "[tag]", "!", true);
+	
 	CPrintToChat(iPlayer, "{blue}|CelMod|{default} %s", sBuffer);
 	
 	Cel_PlayChatMessageSound(iPlayer);
@@ -401,9 +446,39 @@ public int Native_PrintToChatAll(Handle hPlugin, int iNumParams)
 	
 	FormatNativeString(0, 1, 2, sizeof(sBuffer), iWritten, sBuffer);
 	
-	CPrintToChatAll("{blue}|CM|{default} %s", sBuffer);
+	ReplaceString(sBuffer, sizeof(sBuffer), "[tag]", "!", true);
+	
+	CPrintToChatAll("{blue}|CelMod|{default} %s", sBuffer);
 	
 	return true;
+}
+
+//A reply always reaches chat: commands run from a key bind (+copy, +move) count as console commands, and their
+//replies used to go to the console only. A command typed in the console also gets the console copy, with v_.
+void SendReply(int iPlayer, char[] sBuffer, int iMaxLength)
+{
+	if (iPlayer < 1 || iPlayer > MaxClients || !IsClientInGame(iPlayer))
+	{
+		ReplaceString(sBuffer, iMaxLength, "[tag]", "v_", true);
+		CRemoveTags(sBuffer, iMaxLength);
+		PrintToServer("|CelMod| %s", sBuffer);
+		return;
+	}
+	
+	char sChat[MAX_MESSAGE_LENGTH];
+	
+	strcopy(sChat, sizeof(sChat), sBuffer);
+	ReplaceString(sChat, sizeof(sChat), "[tag]", "!", true);
+	
+	CPrintToChat(iPlayer, "{blue}|CelMod|{default} %s", sChat);
+	Cel_PlayChatMessageSound(iPlayer);
+	
+	if (GetCmdReplySource() == SM_REPLY_TO_CONSOLE)
+	{
+		ReplaceString(sBuffer, iMaxLength, "[tag]", "v_", true);
+		CRemoveTags(sBuffer, iMaxLength);
+		PrintToConsole(iPlayer, "|CelMod| %s", sBuffer);
+	}
 }
 
 public int Native_ReplyToCommand(Handle hPlugin, int iNumParams)
@@ -414,18 +489,7 @@ public int Native_ReplyToCommand(Handle hPlugin, int iNumParams)
 	
 	FormatNativeString(0, 2, 3, sizeof(sBuffer), iWritten, sBuffer);
 	
-	ReplaceString(sBuffer, sizeof(sBuffer), "[tag]", GetCmdReplySource() == SM_REPLY_TO_CONSOLE ? "v_" : "!", true);
-	
-	if (GetCmdReplySource() == SM_REPLY_TO_CONSOLE)
-	{
-		CRemoveTags(sBuffer, sizeof(sBuffer));
-		
-		PrintToConsole(iPlayer, "|CelMod| %s", sBuffer);
-	} else {
-		CPrintToChat(iPlayer, "{blue}|CelMod|{default} %s", sBuffer);
-		
-		Cel_PlayChatMessageSound(iPlayer);
-	}
+	SendReply(iPlayer, sBuffer, sizeof(sBuffer));
 	
 	return true;
 }
@@ -438,20 +502,9 @@ public int Native_ReplyToCommandEntity(Handle hPlugin, int iNumParams)
 	
 	FormatNativeString(0, 3, 4, sizeof(sBuffer), iWritten, sBuffer);
 	
-	ReplaceString(sBuffer, sizeof(sBuffer), "[tag]", GetCmdReplySource() == SM_REPLY_TO_CONSOLE ? "v_" : "!", true);
-	
 	Cel_UpdateEntityMessageTags(iEntity, sBuffer, sizeof(sBuffer));
 	
-	if (GetCmdReplySource() == SM_REPLY_TO_CONSOLE)
-	{
-		CRemoveTags(sBuffer, sizeof(sBuffer));
-		
-		PrintToConsole(iPlayer, "|CelMod| %s", sBuffer);
-	} else {
-		CPrintToChat(iPlayer, "{blue}|CelMod|{default} %s", sBuffer);
-		
-		Cel_PlayChatMessageSound(iPlayer);
-	}
+	SendReply(iPlayer, sBuffer, sizeof(sBuffer));
 	
 	return true;
 }
