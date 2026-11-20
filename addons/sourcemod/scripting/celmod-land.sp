@@ -1862,9 +1862,11 @@ void ApplyLandSkin(int iClient)
 	{
 		for (int y = 0; y < iAlong; y++)
 		{
-			//Tile centres, laid edge to edge from the middle of the land outwards.
-			fStart[0] = (fMin[0] + fMax[0]) * 0.5 + (x - (iAcross - 1) * 0.5) * fTile;
-			fStart[1] = (fMin[1] + fMax[1]) * 0.5 + (y - (iAlong - 1) * 0.5) * fTile;
+			//Tile centres, laid edge to edge from the land's corner. A decal can't be cut, so the last row and column
+			//are pulled back to end exactly on the land's far edges instead of hanging past them. (A land smaller than
+			//one tile gets one tile in its middle.)
+			fStart[0] = SkinTileCentre(fMin[0], fMax[0], fTile, x);
+			fStart[1] = SkinTileCentre(fMin[1], fMax[1], fTile, y);
 			fStart[2] = fMin[2] + 48.0;
 
 			fEnd = fStart;
@@ -1892,6 +1894,18 @@ void ApplyLandSkin(int iClient)
 	} else {
 		SendLandSkin(iClient, 0);
 	}
+}
+
+float SkinTileCentre(float fLow, float fHigh, float fTile, int iIndex)
+{
+	if (fHigh - fLow <= fTile)
+	{
+		return (fLow + fHigh) * 0.5;
+	}
+	
+	float fCentre = fLow + fTile * 0.5 + iIndex * fTile;
+	
+	return (fCentre + fTile * 0.5 > fHigh) ? fHigh - fTile * 0.5 : fCentre;
 }
 
 //Sends one land's tiles to a player (or everyone with 0).
