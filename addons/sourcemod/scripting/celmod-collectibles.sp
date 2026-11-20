@@ -290,6 +290,7 @@ ConVar g_cvBoothChance;
 ConVar g_cvTierChances;
 ConVar g_cvTierCaps;
 ConVar g_cvDropInterval;
+int g_iLastScheduledDrop = -1; // the minute of the day the last scheduled drop happened
 ConVar g_cvDropMinPlayers;
 ConVar g_cvDropRadius;
 ConVar g_cvGiftChance;
@@ -463,7 +464,7 @@ public void OnPluginStart()
 	g_cvDigMoneyMin = CreateConVar("cm_dig_money_min", "100", "Least cleers in a dug up money box.", _, true, 0.0);
 	g_cvDigMoneyMax = CreateConVar("cm_dig_money_max", "1500", "Most cleers in a dug up money box.", _, true, 0.0);
 	g_cvUpgradeCost = CreateConVar("cm_upgrade_cost", "5", "How many of the same emblem the Power Booth takes to make one big emblem.", _, true, 2.0);
-	g_cvDropInterval = CreateConVar("cm_drop_interval", "0", "Minutes between automatic emblem drops. 0 disables automatic drops.", _, true, 0.0);
+	g_cvDropInterval = CreateConVar("cm_drop_times", "", "Emblem drops only happen when an admin starts one (!emblemdrop), from the website, or at these server times (24h, comma separated, e.g. \"18:00,21:30\"). Empty = no scheduled drops.");
 	g_cvDropPerPlayer = CreateConVar("cm_drop_per_player", "0.5", "Automatic drops: emblem boxes per player on the server (0.5 = one box for every two players), at least 1 and at most cm_drop_count.", _, true, 0.0);
 	g_cvDropEndMinutes = CreateConVar("cm_drop_end_minutes", "10", "Automatic drops in the last this many minutes of a map are super rare (cm_drop_end_chance). 0 turns this off.", _, true, 0.0);
 	g_cvDropEndChance = CreateConVar("cm_drop_end_chance", "0.05", "Chance an automatic drop still happens in the last minutes of a map (0.05 = 5%).", _, true, 0.0, true, 1.0);
@@ -473,12 +474,12 @@ public void OnPluginStart()
 	g_cvXPReward = CreateConVar("cm_tactics_xp_reward", "15", "Tactics experience for claiming any other reward pickup.", _, true, 0.0);
 	g_cvXPBox = CreateConVar("cm_tactics_xp_box", "10", "Tactics experience for winning an emblem box from an emblem drop.", _, true, 0.0);
 	g_cvXPUpgrade = CreateConVar("cm_tactics_xp_upgrade", "15", "Tactics experience for upgrading emblems at the Power Booth.", _, true, 0.0);
-	g_cvGiftChance = CreateConVar("cm_emblem_gift_chance", "0.25", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
+	g_cvGiftChance = CreateConVar("cm_emblem_gift_rate", "0.1", "Chance per build load that the one time free emblem appears, once the player is old enough.", _, true, 0.0, true, 1.0);
 	g_cvXmasForce = CreateConVar("cm_xmas_gift_force", "0", "Testing: 1 hands out the Christmas gift on any day, not just December 25th.", _, true, 0.0, true, 1.0);
 	g_cvXmasItems = CreateConVar("cm_xmas_gift_items", "", "The festive items the Christmas gift is picked from (kind:id, comma separated). Empty uses every item marked \"xmasgift\" \"1\" in collectibles.txt.");
 	g_cvCaneMaxHealth = CreateConVar("cm_candycane_max_health", "0", "Candy canes heal up to this much health (0 = the player's full health).", _, true, 1.0);
 	g_cvGiftList = CreateConVar("cm_emblem_gift_list", "fire,water,speed,orange,grey,peach,pink,crimson,lime,cyan", "The emblems the one time free emblem is picked from (ids, comma separated): the basic solid colour ones.");
-	g_cvGiftDays = CreateConVar("cm_emblem_gift_days", "3", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
+	g_cvGiftDays = CreateConVar("cm_emblem_gift_wait_days", "7", "Days after a player's first build load before the free emblem can appear. -1 disables the free emblem.");
 
 	g_cvShowSelf = CreateConVar("cm_emblem_show_self", "0", "Testing only: 1 also shows a player their own held emblem (it will float in their first person view).", _, true, 0.0, true, 1.0);
 
@@ -902,7 +903,8 @@ public void Cel_OnBuildLoaded(int iClient, const char[] sSaveName)
 
 	Inv_SetInt(iClient, "emblem_gift", 1);
 
-	Cel_PrintToChat(iClient, "Something new has appeared in your build... a {green}%s{default} emblem! Press {green}E{default} on it to enable it.", g_Items[iItem].sName);
+	// No message: the emblem is simply there in the build, waiting to be found.
+	//Cel_PrintToChat(iClient, "Something new has appeared in your build... a {green}%s{default} emblem! Press {green}E{default} on it to enable it.", g_Items[iItem].sName);
 }
 
 // A random emblem from the website's list (admin panel) or else cm_emblem_gift_list, or -1 if none of its ids exist.
@@ -2926,6 +2928,57 @@ public Action Timer_Think(Handle hTimer)
 	return Plugin_Continue;
 }
 
+// True once in the minute that matches one of cm_drop_times (server local time). Drops are never random.
+bool IsScheduledDropTime()
+{
+	char sTimes[256], sList[16][8], sNow[8];
+
+	g_cvDropInterval.GetString(sTimes, sizeof(sTimes));
+	ReplaceString(sTimes, sizeof(sTimes), " ", "");
+
+	if (sTimes[0] == '\0')
+	{
+		return false;
+	}
+
+	FormatTime(sNow, sizeof(sNow), "%H:%M");
+
+	char sHour[4], sMinute[4];
+
+	FormatTime(sHour, sizeof(sHour), "%H");
+	FormatTime(sMinute, sizeof(sMinute), "%M");
+
+	int iMinuteOfDay = StringToInt(sHour) * 60 + StringToInt(sMinute);
+
+	if (iMinuteOfDay == g_iLastScheduledDrop)
+	{
+		return false;
+	}
+
+	int iCount = ExplodeString(sTimes, ",", sList, sizeof(sList), sizeof(sList[]));
+
+	for (int i = 0; i < iCount; i++)
+	{
+		// "9:05" counts the same as "09:05".
+		char sWant[8];
+
+		strcopy(sWant, sizeof(sWant), sList[i]);
+
+		if (strlen(sWant) == 4 && sWant[1] == ':')
+		{
+			Format(sWant, sizeof(sWant), "0%s", sList[i]);
+		}
+
+		if (StrEqual(sWant, sNow))
+		{
+			g_iLastScheduledDrop = iMinuteOfDay;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 public Action Timer_Minute(Handle hTimer)
 {
 	int iItem, iPlayers = 0;
@@ -2950,7 +3003,7 @@ public Action Timer_Minute(Handle hTimer)
 
 	g_iMinutesSinceDrop++;
 
-	if (g_cvDropInterval.IntValue > 0 && g_iMinutesSinceDrop >= g_cvDropInterval.IntValue && iPlayers >= g_cvDropMinPlayers.IntValue)
+	if (IsScheduledDropTime() && iPlayers >= g_cvDropMinPlayers.IntValue)
 	{
 		int iLeft;
 

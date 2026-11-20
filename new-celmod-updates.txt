@@ -475,3 +475,7 @@
 		 - Tactics levels: you get a private message when you level up, and each level adds 2 to your full health
 		   (cm_level_health), straight away and on every spawn. At level 75 players looking at you see "- Veteran -"
 		   above your name, and at level 100 "-= Legend =-".
+		 - Emblem drops are never random: they only happen when an admin starts one (!emblemdrop), from the website,
+		   or at set server times (cm_drop_times, e.g. "18:00,21:30"). cm_drop_interval is gone.
+		 - The free emblem that appears in your build is slower to come (7 days, 10% per load) and appears without a
+		   message, so you'll have to find it.
