@@ -453,3 +453,6 @@
 		 - Chat messages show "!" for commands instead of "[tag]", and replies to commands run from a key bind (+copy,
 		   +move...) now show in chat, not only in the console.
 		 - !nextmap (or "nextmap" in chat) answers "|CelMod| Next map is ..." like every other message.
+		 - !nofly lands can't be flown into from any side, below included: a flying visitor is stopped at the edge.
+		 - !fly always switches from what you're really doing, so after dying, an event area or a no-fly land takes you
+		   out of noclip, one !fly turns it back on (it needed two).

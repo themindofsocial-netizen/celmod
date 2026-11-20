@@ -578,7 +578,10 @@ public Action Timer_BlockLands(Handle hTimer)
 		
 		bool bFee = (iOwner >= 1 && iOwner <= MaxClients && iOwner != i && g_iLandFee[iOwner] > 0 && !g_bFeePaid[iOwner][i] && IsClientInGame(iOwner) && !Cel_IsOnBuildTeam(iOwner, i));
 		
-		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || (!g_bBlockLand[i][iOwner] && !bFee) || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
+		//!nofly: a visitor flying in, from any side (from below too), is stopped at the edge like a blocked land.
+		bool bNoFly = (iOwner >= 1 && iOwner <= MaxClients && iOwner != i && g_bNoFly[iOwner] && GetEntityMoveType(i) == MOVETYPE_NOCLIP && NoFlyOwnerAt(i) == iOwner);
+		
+		if (iOwner < 1 || iOwner > MaxClients || iOwner == i || (!g_bBlockLand[i][iOwner] && !bFee && !bNoFly) || !Cel_IsPlayer(iOwner) || !Cel_IsLandCreated(iOwner))
 		{
 			g_fLastOutside[i] = fOrigin;
 			g_bOutsideKnown[i] = true;
@@ -595,6 +598,12 @@ public Action Timer_BlockLands(Handle hTimer)
 		if (GetGameTime() >= g_fNextBlockNotice[i])
 		{
 			g_fNextBlockNotice[i] = GetGameTime() + 3.0;
+			
+			if (bNoFly && !g_bBlockLand[i][iOwner])
+			{
+				Cel_PrintToChat(i, "{green}%N{default} has turned noclip off in their land. Walk in instead.", iOwner);
+				continue;
+			}
 			
 			if (!g_bBlockLand[i][iOwner])
 			{

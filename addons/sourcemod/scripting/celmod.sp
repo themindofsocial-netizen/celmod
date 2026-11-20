@@ -459,7 +459,14 @@ public Action Command_Blacklist(int iClient, int iArgs)
 
 public Action Command_Fly(int iClient, int iArgs)
 {
-	g_bIsFlying[iClient] = !g_bIsFlying[iClient];
+	if (iClient < 1 || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	//Toggled from what the player is really doing: dying, an event area or a no-fly land can take them out of
+	//noclip, and a remembered "flying" flag then needed !fly twice.
+	g_bIsFlying[iClient] = (GetEntityMoveType(iClient) != MOVETYPE_NOCLIP);
 	
 	SetEntityMoveType(iClient, g_bIsFlying[iClient] ? MOVETYPE_NOCLIP : MOVETYPE_WALK);
 	
