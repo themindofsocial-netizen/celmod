@@ -10,6 +10,7 @@ char g_sCleerModel[64];
 char g_sShopDB[PLATFORM_MAX_PATH];
 
 ConVar g_cvCleerModel;
+ConVar g_cvLevelHealth;
 
 Economy g_eEconomy[MAXPLAYERS + 1];
 
@@ -104,6 +105,7 @@ public void OnPluginStart()
 	
 	g_cvCleerModel.GetString(g_sCleerModel, sizeof(g_sCleerModel));
 	
+	g_cvLevelHealth = CreateConVar("cm_level_health", "2", "Full health a player gains for each Tactics level.", _, true, 0.0);
 	g_cvXPMinute = CreateConVar("cm_tactics_xp_minute", "3", "Tactics experience for each minute played.", _, true, 0.0);
 	g_cvXPKill = CreateConVar("cm_tactics_xp_kill", "5", "Tactics experience for killing another player.", _, true, 0.0);
 	g_cvXPBuild = CreateConVar("cm_tactics_xp_build", "1", "Tactics experience for spawning a prop or cel (at most once every 3 seconds).", _, true, 0.0);
@@ -1042,8 +1044,28 @@ void AddTacticsXP(int iClient, int iAmount)
 	{
 		SaveTactics(iClient);
 		
-		//Just the bell: the new level shows on the HUD, nothing is said in chat.
 		EmitSoundToClient(iClient, "buttons/blip1.wav");
+		
+		//Each level adds cm_level_health to full health, straight away.
+		ConVar cvSpawn = FindConVar("cm_spawn_health");
+		int iFull = (cvSpawn != null ? cvSpawn.IntValue : 100) + g_cvLevelHealth.IntValue * g_iTacticsLevel[iClient];
+		
+		if (IsPlayerAlive(iClient))
+		{
+			SetEntProp(iClient, Prop_Data, "m_iMaxHealth", iFull);
+			
+			int iHealth = GetClientHealth(iClient) + g_cvLevelHealth.IntValue;
+			
+			SetEntityHealth(iClient, iHealth > iFull ? iFull : iHealth);
+		}
+		
+		//Only the player is told.
+		Cel_PrintToChat(iClient, "You reached Tactics level {green}%d{default}! Your full health is now {green}%d{default}.", g_iTacticsLevel[iClient], iFull);
+		
+		if (g_iTacticsLevel[iClient] == 75 || g_iTacticsLevel[iClient] == 100)
+		{
+			Cel_PrintToChat(iClient, "You earned the title {green}%s{default}: players see it when they look at you.", g_iTacticsLevel[iClient] >= 100 ? "Legend" : "Veteran");
+		}
 	}
 }
 

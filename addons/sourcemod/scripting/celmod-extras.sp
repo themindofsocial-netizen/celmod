@@ -2868,7 +2868,9 @@ public void Frame_SpawnHealth(any iUserId)
 	
 	SetNoBlock(iClient);
 	
-	int iHealth = g_cvSpawnHealth.IntValue;
+	//Each Tactics level adds cm_level_health (2) to a player's full health.
+	ConVar cvPerLevel = FindConVar("cm_level_health");
+	int iHealth = g_cvSpawnHealth.IntValue + (cvPerLevel != null ? cvPerLevel.IntValue : 2) * Cel_GetTacticsLevel(iClient);
 	
 	SetEntProp(iClient, Prop_Data, "m_iMaxHealth", iHealth);
 	SetEntityHealth(iClient, iHealth);

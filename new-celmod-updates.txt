@@ -472,3 +472,6 @@
 		 - !skin with no number tells you how many skins the prop you're looking at has, and which one it's on.
 		 - !del on a Vial or other dug-up find works even if the find isn't seen as a prop.
 		 - The level-up sound uses a sound HL2DM has (buttons/bell1.wav doesn't exist there).
+		 - Tactics levels: you get a private message when you level up, and each level adds 2 to your full health
+		   (cm_level_health), straight away and on every spawn. At level 75 players looking at you see "- Veteran -"
+		   above your name, and at level 100 "-= Legend =-".

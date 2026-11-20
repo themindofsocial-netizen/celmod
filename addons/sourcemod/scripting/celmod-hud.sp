@@ -144,6 +144,23 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 	return Plugin_Continue;
 }
 
+//The title shown above a high-level player's name when someone looks at them.
+char[] LevelTitle(int iClient)
+{
+	char sTitle[32];
+	int iLevel = Cel_GetTacticsLevel(iClient);
+	
+	if (iLevel >= 100)
+	{
+		strcopy(sTitle, sizeof(sTitle), "-= Legend =-\n");
+	} else if (iLevel >= 75)
+	{
+		strcopy(sTitle, sizeof(sTitle), "- Veteran -\n");
+	}
+	
+	return sTitle;
+}
+
 bool IsPrivateCommand(const char[] sText)
 {
 	static const char sPrivate[][] = { "setpass", "pass" };
@@ -454,7 +471,7 @@ public Action Timer_CommandHUD(Handle hTimer)
 					if (Cel_IsPlayer(iEntity)) {
 						Cel_GetClientBalanceTranslated(iEntity, sBalance, sizeof(sBalance));
 
-						Format(sMessage, sizeof(sMessage), "%N Money: %s\nTactics Lvl: %d", iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
+						Format(sMessage, sizeof(sMessage), "%s%N Money: %s\nTactics Lvl: %d", LevelTitle(iEntity), iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
 
 						Cel_GetHudColor(iEntity, iColor);
 					} else {
@@ -514,7 +531,7 @@ public Action Timer_HUD(Handle hTimer)
 				{
 					Cel_GetClientBalanceTranslated(iPlayer, sBalance, sizeof(sBalance));
 					
-					Format(sHUDMessage, sizeof(sHUDMessage), "%N Money: %s\nTactics Lvl: %d", iPlayer, sBalance, Cel_GetTacticsLevel(iPlayer));
+					Format(sHUDMessage, sizeof(sHUDMessage), "%s%N Money: %s\nTactics Lvl: %d", LevelTitle(iPlayer), iPlayer, sBalance, Cel_GetTacticsLevel(iPlayer));
 					
 					Cel_GetHudColor(iPlayer, iHUDColor);
 				} else if (iEntity != -1)
@@ -693,7 +710,7 @@ public Action Timer_HUD(Handle hTimer)
 					}else if (Cel_IsPlayer(iEntity)) {
 						Cel_GetClientBalanceTranslated(iEntity, sBalance, sizeof(sBalance));
 						
-						Format(sHUDMessage, sizeof(sHUDMessage), "%N Money: %s\nTactics Lvl: %d", iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
+						Format(sHUDMessage, sizeof(sHUDMessage), "%s%N Money: %s\nTactics Lvl: %d", LevelTitle(iEntity), iEntity, sBalance, Cel_GetTacticsLevel(iEntity));
 						
 						Cel_GetHudColor(iEntity, iHUDColor);
 					}
