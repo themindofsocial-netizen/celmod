@@ -32,6 +32,7 @@ ConVar g_cvKills;
 ConVar g_cvInterval;
 
 int g_iKills[MAXPLAYERS + 1][MAX_PADTYPES];
+ConVar g_cvDungeonAmmo;
 
 //!npckills: the NPCs whose kills are tracked, and the name shown for each. Saved per player as "npckills_<class>".
 static const char g_sNpcKillTypes[][][] = {
@@ -122,6 +123,7 @@ public void OnPluginStart()
 	LoadPadTypes();
 
 	g_cvDungeonInterval = CreateConVar("cm_dungeon_interval", "15.0", "Default seconds between a dungeon spawner's spawns.", _, true, 2.0);
+	g_cvDungeonAmmo = CreateConVar("cm_dungeon_ammo", "1", "1: killing a dungeon enemy gives back a little ammo for every gun the player carries.", _, true, 0.0, true, 1.0);
 	g_cvXPEnemy = CreateConVar("cm_tactics_xp_enemy", "1.0", "Tactics experience for killing an enemy, for every 50 of its health (0 = none). Spawn pad enemies give none.", _, true, 0.0);
 	g_cvHuntRange = CreateConVar("cm_dungeon_hunt_range", "1500.0", "How far away dungeon and spawn pad enemies notice a player they can see.", _, true, 0.0);
 	g_cvDungeonRange = CreateConVar("cm_dungeon_range", "2000.0", "Dungeon spawners only spawn while a player is this close (0 = always).", _, true, 0.0);
@@ -457,10 +459,50 @@ public void Output_EnemyDeath(const char[] sOutput, int iCaller, int iActivator,
 
 	AddKill(iActivator, iMatch);
 
+	//A dungeon enemy gives back a little ammo for every gun the player carries (whatever killed it, crowbar and
+	//stunstick included).
+	if (g_iDungeonOf[iCaller] != -1 && g_cvDungeonAmmo.BoolValue)
+	{
+		GiveDungeonAmmo(iActivator);
+	}
+
 	//Tactics experience: tougher enemies are worth more (one point for every 50 health, at least one).
 	int iMaxHealth = HasEntProp(iCaller, Prop_Data, "m_iMaxHealth") ? GetEntProp(iCaller, Prop_Data, "m_iMaxHealth") : 0;
 
 	Cel_AddXP(iActivator, RoundToCeil(float(iMaxHealth < 50 ? 50 : iMaxHealth) / 50.0 * g_cvXPEnemy.FloatValue));
+}
+
+//Ammo given back per dungeon kill, by weapon.
+void GiveDungeonAmmo(int iClient)
+{
+	static const char sWeapons[][] = { "weapon_pistol", "weapon_smg1", "weapon_ar2", "weapon_357", "weapon_shotgun", "weapon_crossbow", "weapon_rpg", "weapon_frag" };
+	static const int iAmounts[] = { 6, 15, 10, 2, 2, 1, 1, 1 };
+	
+	char sClass[64];
+	int iSize = GetEntPropArraySize(iClient, Prop_Send, "m_hMyWeapons");
+	
+	for (int w = 0; w < iSize; w++)
+	{
+		int iWeapon = GetEntPropEnt(iClient, Prop_Send, "m_hMyWeapons", w);
+		
+		if (iWeapon <= MaxClients || !IsValidEntity(iWeapon) || !GetEntityClassname(iWeapon, sClass, sizeof(sClass)))
+		{
+			continue;
+		}
+		
+		for (int i = 0; i < sizeof(sWeapons); i++)
+		{
+			if (StrEqual(sClass, sWeapons[i]))
+			{
+				int iAmmoType = GetEntProp(iWeapon, Prop_Send, "m_iPrimaryAmmoType");
+				
+				if (iAmmoType >= 0)
+				{
+					GivePlayerAmmo(iClient, iAmounts[i], iAmmoType, true);
+				}
+			}
+		}
+	}
 }
 
 void AddKill(int iClient, int iType)

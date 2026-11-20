@@ -489,3 +489,5 @@
 		 - !hudcolor <colour or r g b> sets the colour of your HUD text and remembers it (!hudcolor random undoes it).
 		   Loading a build no longer changes your HUD colour.
 		 - Land skins stay inside the land: the outer tiles used to hang half a tile past the edges.
+		 - Killing a dungeon enemy gives back a little ammo for every gun you carry (cm_dungeon_ammo), whatever you
+		   killed it with, crowbar and stunstick included.
