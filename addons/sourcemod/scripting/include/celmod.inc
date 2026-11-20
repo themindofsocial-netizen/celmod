@@ -1947,6 +1947,21 @@ stock void Cel_GetMoneyBoxModel(char[] sModel, int iMaxLength)
 stock bool Cel_IsPhysicsModelComplete(const char[] sModel)
 {
 	char sBase[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+	
+	//Searching the game's files (and every VPK) is slow, and loading a build asks for the same models again and
+	//again: models found complete are remembered. (Missing ones are looked for again, in case they're added.)
+	static StringMap smComplete = null;
+	bool bDummy;
+	
+	if (smComplete == null)
+	{
+		smComplete = new StringMap();
+	}
+	
+	if (smComplete.GetValue(sModel, bDummy))
+	{
+		return true;
+	}
 
 	if (!FileExists(sModel, true))
 	{
@@ -1978,7 +1993,14 @@ stock bool Cel_IsPhysicsModelComplete(const char[] sModel)
 
 	Format(sFile, sizeof(sFile), "%s.phy", sBase);
 
-	return FileExists(sFile, true);
+	if (!FileExists(sFile, true))
+	{
+		return false;
+	}
+	
+	smComplete.SetValue(sModel, true);
+	
+	return true;
 }
 
 /**

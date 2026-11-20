@@ -9,6 +9,7 @@ bool g_bLate;
 float g_fCrosshairOrigin[MAXPLAYERS + 1][3];
 bool g_bLoading[MAXPLAYERS + 1]; //a build is being spawned in batches for this player
 ConVar g_cvLoadBatch;
+ConVar g_cvLoadBudget;
 
 Handle g_hOnBuildLoaded;
 Handle g_hOnLoadEntity;
@@ -52,7 +53,8 @@ public void OnPluginStart()
 		}
 	}
 	
-	g_cvLoadBatch = CreateConVar("cm_load_batch", "25", "Entities spawned per tick (20 ticks a second) when a build loads. Lower = smoother for everyone, but slower to load.", _, true, 1.0);
+	g_cvLoadBatch = CreateConVar("cm_load_per_frame", "6", "Most entities spawned per server frame when a build loads. Lower = smoother for everyone, but slower to load.", _, true, 1.0);
+	g_cvLoadBudget = CreateConVar("cm_load_frame_ms", "2.0", "Milliseconds a loading build may spend spawning in one server frame (the rest waits for the next frame).", _, true, 0.2);
 	RegConsoleCmd("v_load", Command_LoadBuild, "|CelMod| Loads entities from a save file.");
 	RegConsoleCmd("v_save", Command_SaveBuild, "|CelMod| Saves all server entities that are in your land.");
 	RegConsoleCmd("v_saves", Command_ListSaves, "|CelMod| Lists your saved builds.");
@@ -284,8 +286,8 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 			return false;
 		}
 		
-		//Spawned a batch at a time over several frames (cm_load_batch per tick), so a big build doesn't freeze the
-		//server for everyone. The build's own message and links come once it's all in.
+		//Spawned a few at a time, every server frame (at most cm_load_per_frame, and only for cm_load_frame_ms), so
+		//a big build doesn't freeze the server for everyone. The build's own message and links come once it's all in.
 		if (!kvLoadBuild.GotoFirstSubKey())
 		{
 			kvLoadBuild.Close();
@@ -302,7 +304,7 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		dpLoad.WriteCell(kvLoadBuild);
 		dpLoad.WriteString(sSaveName);
 		
-		CreateTimer(0.05, Timer_LoadBatch, dpLoad, TIMER_REPEAT | TIMER_DATA_HNDL_CLOSE);
+		RequestFrame(Frame_LoadBatch, dpLoad);
 		
 		Cel_ReplyToCommand(iClient, "Loading {green}%s{default} ({green}%d{default} entities)...", sSaveName, iEntries);
 		
@@ -464,7 +466,7 @@ void LoadBuildEntry(int iClient, KeyValues kvLoadBuild)
 	Call_Finish();
 }
 
-public Action Timer_LoadBatch(Handle hTimer, DataPack dpLoad)
+public void Frame_LoadBatch(DataPack dpLoad)
 {
 	char sSaveName[96];
 	
@@ -478,8 +480,11 @@ public Action Timer_LoadBatch(Handle hTimer, DataPack dpLoad)
 	if (iClient < 1 || !IsClientInGame(iClient))
 	{
 		delete kvLoadBuild;
-		return Plugin_Stop;
+		delete dpLoad;
+		return;
 	}
+	
+	float fStart = GetEngineTime(), fBudget = g_cvLoadBudget.FloatValue / 1000.0;
 	
 	for (int n = 0; n < g_cvLoadBatch.IntValue; n++)
 	{
@@ -488,6 +493,7 @@ public Action Timer_LoadBatch(Handle hTimer, DataPack dpLoad)
 		if (!kvLoadBuild.GotoNextKey())
 		{
 			delete kvLoadBuild;
+			delete dpLoad;
 			
 			g_bLoading[iClient] = false;
 			
@@ -498,11 +504,16 @@ public Action Timer_LoadBatch(Handle hTimer, DataPack dpLoad)
 			Call_PushString(sSaveName);
 			Call_Finish();
 			
-			return Plugin_Stop;
+			return;
+		}
+		
+		if (GetEngineTime() - fStart >= fBudget)
+		{
+			break;
 		}
 	}
 	
-	return Plugin_Continue;
+	RequestFrame(Frame_LoadBatch, dpLoad);
 }
 
 //Natives:
