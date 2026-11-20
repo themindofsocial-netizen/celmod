@@ -207,8 +207,9 @@ static const int g_iRockColors[][3] =
 {
 	{ 92, 58, 26 }, { 40, 40, 40 }, { 160, 140, 130 }, { 205, 120, 60 }, { 215, 220, 230 }, { 255, 200, 40 }, { 40, 200, 90 }, { 220, 30, 50 }, { 160, 240, 255 }
 };
-static const int g_iRockPayMin[] = { 0, 4, 5, 6, 8, 12, 18, 18, 30 };
-static const int g_iRockPayMax[] = { 0, 6, 7, 9, 12, 18, 24, 24, 45 };
+// Ores are rare (a diamond is 1 in 10,000 junk finds), so they sell for a lot more.
+static const int g_iRockPayMin[] = { 0, 30, 50, 80, 150, 300, 700, 1000, 3000 };
+static const int g_iRockPayMax[] = { 0, 50, 80, 120, 220, 450, 1000, 1500, 5000 };
 ConVar g_cvVialFindChance;
 ConVar g_cvBeaconRange;
 ConVar g_cvBeaconCooldown;
@@ -232,6 +233,7 @@ int g_iSmogRef[MAXPLAYERS + 1][3];
 ConVar g_cvNukeMaxProps;
 ConVar g_cvNukeWrecks;
 ConVar g_cvDigChance;
+int g_iDigSwings[MAXPLAYERS + 1];
 ConVar g_cvDigEmblemChance;
 ConVar g_cvDigMoneyChance;
 ConVar g_cvDigMoneyMax;
@@ -443,10 +445,10 @@ public void OnPluginStart()
 	g_cvDropCount = CreateConVar("cm_drop_count", "5", "Number of crates in one emblem drop.", _, true, 1.0, true, 30.0);
 	g_cvNukeWrecks = CreateConVar("cm_nuke_wrecks_builds", "1", "1: the Nuke emblem unfreezes and scatters props where it lands, as on the original server. 0: builds are safe.", _, true, 0.0, true, 1.0);
 	g_cvNukeMaxProps = CreateConVar("cm_nuke_max_props", "80", "Most props one Nuke can send flying, to limit lag.", _, true, 0.0);
-	g_cvDigChance = CreateConVar("cm_dig_chance", "0.35", "Chance a shovel hit on the ground digs something up.", _, true, 0.0, true, 1.0);
+	g_cvDigChance = CreateConVar("cm_dig_find_chance", "0.15", "Chance a shovel hit on the ground digs something up (0.15 = 15%).", _, true, 0.0, true, 1.0);
 	g_cvDigEmblemChance = CreateConVar("cm_dig_emblem_share", "0.0001", "Share of finds that are a Black or White emblem (0.0001 = 0.01%, 1 in 10,000).", _, true, 0.0, true, 1.0);
 	// New names, so a saved config's old (more generous) values don't carry over.
-	g_cvDigMoneyChance = CreateConVar("cm_dig_money_share", "0.05", "Share of finds that are a money box (0.05 = 5%). The rest is junk.", _, true, 0.0, true, 1.0);
+	g_cvDigMoneyChance = CreateConVar("cm_dig_money_rate", "0.02", "Share of finds that are a money box (0.02 = 2%). The rest is junk.", _, true, 0.0, true, 1.0);
 	g_cvDigHoboChance = CreateConVar("cm_dig_hobo_chance", "0.02", "Share of finds that are a hobo (an idle, brown Eli).", _, true, 0.0, true, 1.0);
 	g_cvDigOreChances = CreateConVar("cm_dig_ore_chances", "1 0.6 0.4 0.25 0.15 0.08 0.04 0.03 0.01", "Percent chance per junk find of each rock, in order: turd coal iron copper silver gold emerald ruby diamond.");
 	g_cvDigOreChances.AddChangeHook(OnOreChancesChanged);
@@ -2272,7 +2274,10 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 	g_iLastButtons[iClient] = iButtons;
 
 	// Tapping the walk key steps the walking speed down a tier: normal, slow, very slow, super slow, then fast.
-	if ((iButtons & IN_WALK) && !(iLast & IN_WALK) && IsPlayerAlive(iClient) && !g_bWalkKeyOff[iClient])
+	if ((iButtons & IN_WALK) && !(iLast & IN_WALK) && IsPlayerAlive(iClient) && !g_bWalkKeyOff[iClient] && g_bInEvent[iClient])
+	{
+		PrintHintText(iClient, "You can't change your speed in an event area.");
+	} else if ((iButtons & IN_WALK) && !(iLast & IN_WALK) && IsPlayerAlive(iClient) && !g_bWalkKeyOff[iClient])
 	{
 		g_iWalkTier[iClient] = (g_iWalkTier[iClient] == 0) ? sizeof(g_fWalkTier) - 1 : g_iWalkTier[iClient] - 1;
 
@@ -2784,8 +2789,17 @@ public Action Timer_Think(Handle hTimer)
 			}
 		}
 
-		// The walking speed tier the player picked with the walk key.
-		fSpeed *= WalkFactor(i);
+		// The walking speed tier the player picked with the walk key. In an event area everyone walks at normal speed
+		// (slowed only by a blizzard), so nobody changes their speed there.
+		if (g_bInEvent[i])
+		{
+			if (fSpeed > 1.0)
+			{
+				fSpeed = 1.0;
+			}
+		} else {
+			fSpeed *= WalkFactor(i);
+		}
 
 		if (fSpeed != 1.0 || g_bSpeedManaged[i])
 		{
@@ -8229,7 +8243,23 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 	char sChoices[8][32];
 	float fUp[3] = { 0.0, 0.0, 1.0 };
 
+	// Nothing is dug up in event areas (mazes, parkour).
+	if (g_bInEvent[iClient] || ZoneTypeAt(fHit) == CEL_ZONE_EVENT)
+	{
+		PrintHintText(iClient, "You can't dig in an event area.");
+		return;
+	}
+
 	TE_SetupDust(fHit, fUp, 12.0, 1.0);
+	TE_SendToAll();
+
+	// Clods of dirt thrown up by the shovel, so every swing visibly does something.
+	float fDirt[3];
+
+	fDirt = fHit;
+	fDirt[2] += 2.0;
+
+	TE_SetupSparks(fDirt, fUp, 1, 2);
 	TE_SendToAll();
 
 	EmitSoundToAll(SOUND_DIG, iClient, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.7);
@@ -8237,8 +8267,16 @@ void DigForEmblem(int iClient, int iItem, float fHit[3])
 	// Digging too fast in one place finds nothing new.
 	if (GetGameTime() < g_fNextDig[iClient] || GetRandomFloat(0.0, 1.0) > g_cvDigChance.FloatValue)
 	{
+		// A progress hint: each swing adds a little more, so it's clear the digging is going somewhere.
+		g_iDigSwings[iClient] = (g_iDigSwings[iClient] + 1) % 6;
+
+		static const char sProgress[][] = { "Digging .", "Digging . .", "Digging . . .", "Digging . . . .", "Digging . . . . .", "Digging . . . . . ." };
+
+		PrintHintText(iClient, "%s", sProgress[g_iDigSwings[iClient]]);
 		return;
 	}
+
+	g_iDigSwings[iClient] = 0;
 
 	g_fNextDig[iClient] = GetGameTime() + 1.5;
 

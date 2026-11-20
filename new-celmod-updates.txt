@@ -456,3 +456,7 @@
 		 - !nofly lands can't be flown into from any side, below included: a flying visitor is stopped at the edge.
 		 - !fly always switches from what you're really doing, so after dying, an event area or a no-fly land takes you
 		   out of noclip, one !fly turns it back on (it needed two).
+		 - Digging: nothing can be dug in event areas. Each swing throws up dirt and shows a "Digging . . ." hint so
+		   you can see it working. Finds are rarer (15% of swings, cm_dig_find_chance), cleers crates are 2% of finds
+		   (cm_dig_money_rate), and ores sell for much more: coal 30-50 CL up to diamond 3,000-5,000 CL.
+		 - Event areas: everyone walks at normal speed there. The walk key and speed emblems can't speed you up.
