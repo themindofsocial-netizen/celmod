@@ -64,6 +64,7 @@ int g_iDiedInLand[MAXPLAYERS + 1];
 ConVar g_cvSpawnPointModel;
 ConVar g_cvSpawnHealth;
 ConVar g_cvLoadout;
+ConVar g_cvMaxTurrets;
 ConVar g_cvNoBlock;
 ConVar g_cvDoubleJump;
 ConVar g_cvDoubleJumpHeight;
@@ -167,7 +168,90 @@ public void OnPluginStart()
 	AddCommandListener(Listener_NoFly, "v_fly");
 	RegConsoleCmd("v_weps", Command_LandWeps, "|CelMod| Turns other players' weapons off (or back on) inside your land.");
 	RegConsoleCmd("v_text", Command_Text, "|CelMod| Writes words in the world out of text screens where you aim: !text <words> (^ in front for small text).");
+	RegConsoleCmd("v_turret", Command_Turret, "|CelMod| Places a floor turret where you aim that fights enemies (never players). Sold in the shop.");
+	g_cvMaxTurrets = CreateConVar("cm_max_turrets", "2", "Most turrets (!turret) one player can have out.", _, true, 0.0);
 	RegConsoleCmd("v_arsenal", Command_Arsenal, "|CelMod| Gives you every weapon (bought in the shop: !buy arsenal).");
+}
+
+//!turret: a floor turret where you aim. It likes players, so it only shoots enemies (dungeon NPCs and the like).
+public Action Command_Turret(int iClient, int iArgs)
+{
+	if (iClient < 1 || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	int iOut = 0;
+	int iTurret = -1;
+	
+	while ((iTurret = FindEntityByClassname(iTurret, "npc_turret_floor")) != -1)
+	{
+		if (Cel_IsEntity(iTurret) && Cel_GetOwner(iTurret) == iClient)
+		{
+			iOut++;
+		}
+	}
+	
+	if (iOut >= g_cvMaxTurrets.IntValue)
+	{
+		Cel_ReplyToCommand(iClient, "You already have {green}%d{default} turrets out, the most you can. Delete one first.", iOut);
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckCelCount(iClient))
+	{
+		Cel_ReplyToCommand(iClient, "%t", "MaxCelLimit", Cel_GetCelCount(iClient));
+		return Plugin_Handled;
+	}
+	
+	float fOrigin[3], fAngles[3];
+	
+	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+	
+	//Not in event areas, and not in another player's land.
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && Cel_GetZoneType(fOrigin) == CEL_ZONE_EVENT && !Cel_ZoneExempt(iClient))
+	{
+		Cel_ReplyToCommand(iClient, "You can't place a turret in an event area.");
+		return Plugin_Handled;
+	}
+	
+	int iLandOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+	
+	if (iLandOwner > 0 && iLandOwner <= MaxClients && iLandOwner != iClient && IsClientInGame(iLandOwner) && !Cel_IsOnBuildTeam(iLandOwner, iClient))
+	{
+		Cel_ReplyToCommand(iClient, "That's {green}%N{default}'s land: you can't place a turret there.", iLandOwner);
+		return Plugin_Handled;
+	}
+	
+	iTurret = CreateEntityByName("npc_turret_floor");
+	
+	if (iTurret == -1)
+	{
+		Cel_ReplyToCommand(iClient, "This server can't make turrets.");
+		return Plugin_Handled;
+	}
+	
+	GetClientEyeAngles(iClient, fAngles);
+	fAngles[0] = 0.0;
+	fAngles[2] = 0.0;
+	
+	DispatchKeyValueVector(iTurret, "origin", fOrigin);
+	DispatchKeyValueVector(iTurret, "angles", fAngles);
+	DispatchSpawn(iTurret);
+	ActivateEntity(iTurret);
+	
+	//It never shoots players.
+	SetVariantString("player D_LI 99");
+	AcceptEntityInput(iTurret, "SetRelationship");
+	
+	Cel_SetEntity(iTurret, true);
+	Cel_SetOwner(iClient, iTurret);
+	Cel_SetPropName(iTurret, "turret");
+	Cel_RecountClientEntities(iClient);
+	
+	Cel_ReplyToCommand(iClient, "Placed a {green}turret{default}. It fights enemies and never shoots players. {green}[tag]del{default} removes it.");
+	
+	return Plugin_Handled;
 }
 
 //Health and suit chargers never run out: the map's own and charger bits are topped up twice a second, before

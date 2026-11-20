@@ -154,6 +154,20 @@ void LoadCatalog()
 			strcopy(eItem.sTarget, sizeof(eItem.sTarget), sKey);
 			eItem.iPrice = StringToInt(sParts[0]);
 			AddItem(eItem);
+			
+			//The command (and any other !command its name shows, like "!landgravity") is locked until bought.
+			LockShopCommand(sKey, sKey);
+			
+			char sWords[8][64];
+			int iWords = ExplodeString(eItem.sName, " ", sWords, sizeof(sWords), sizeof(sWords[]));
+			
+			for (int w = 0; w < iWords; w++)
+			{
+				if (sWords[w][0] == '!' && sWords[w][1] != '\0')
+				{
+					LockShopCommand(sWords[w][1], sKey);
+				}
+			}
 		} while (kvShop.GotoNextKey(false));
 	}
 	kvShop.Rewind();
@@ -481,6 +495,70 @@ void ReadCommonKeys(KeyValues kvShop, ShopItem eItem)
 	kvShop.GetString("description", eItem.sDescription, sizeof(eItem.sDescription), "");
 	eItem.iPrice = kvShop.GetNum("price", eItem.iPrice);
 	eItem.iStock = kvShop.GetNum("stock", 0);
+}
+
+//Every command the shop sells only works once bought: one listener for all of them, so a command added to
+//shop.txt is locked without touching its plugin. g_smLockedCommands: "v_<command>" -> the shop key that unlocks it.
+StringMap g_smLockedCommands;
+
+void LockShopCommand(const char[] sCommand, const char[] sKey)
+{
+	char sName[72];
+	
+	FormatEx(sName, sizeof(sName), "v_%s", sCommand);
+	StringToLowerCase(sName);
+	
+	if (g_smLockedCommands == null)
+	{
+		g_smLockedCommands = new StringMap();
+	}
+	
+	char sOld[64];
+	
+	if (!g_smLockedCommands.GetString(sName, sOld, sizeof(sOld)))
+	{
+		AddCommandListener(Listener_LockedCommand, sName);
+	}
+	
+	g_smLockedCommands.SetString(sName, sKey);
+}
+
+public Action Listener_LockedCommand(int iClient, const char[] sCommand, int iArgc)
+{
+	char sName[72], sKey[64];
+	
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || IsFakeClient(iClient))
+	{
+		return Plugin_Continue;
+	}
+	
+	strcopy(sName, sizeof(sName), sCommand);
+	StringToLowerCase(sName);
+	
+	if (g_smLockedCommands == null || !g_smLockedCommands.GetString(sName, sKey, sizeof(sKey)))
+	{
+		return Plugin_Continue;
+	}
+	
+	int iIndex = FindItem(sKey);
+	
+	if (iIndex == -1)
+	{
+		return Plugin_Continue;
+	}
+	
+	ShopItem eItem;
+	
+	g_alItems.GetArray(iIndex, eItem);
+	
+	if (OwnsItem(iClient, eItem))
+	{
+		return Plugin_Continue;
+	}
+	
+	Cel_PrintToChat(iClient, "{green}%s{default} is sold in the shop: buy it with {green}!buy %s{default} for {green}%d CL{default}, or in the web shop.", eItem.sName, sKey, eItem.iPrice);
+	
+	return Plugin_Handled;
 }
 
 void AddItem(ShopItem eItem)

@@ -482,3 +482,7 @@
 		 - The Error emblems go red, green, blue: Red Error upgrades to Green Error, which upgrades to Blue Error, and
 		   each one tints you its colour while you hold it. (Emblems you already own keep their name: the old white
 		   Error is now Red Error.)
+		 - Everything the shop sells is locked until bought: commands like !fire, !weld, !light, !landgravity,
+		   !landcolor, !internet and !seturl now ask you to buy them first, as do combine props (props_combine models).
+		 - !turret works: it places a floor turret where you aim that fights enemies and never shoots players (2 each,
+		   cm_max_turrets). It was sold in the shop but had never been added.

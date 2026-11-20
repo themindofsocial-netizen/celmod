@@ -43,6 +43,8 @@ ConVar g_cvItemLimit;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("Cel_CheckShopDB");
+	MarkNativeAsOptional("Cel_CheckClientPurchase");
 	MarkNativeAsOptional("Cel_GetZoneType");
 	MarkNativeAsOptional("Cel_IsZoneExempt");
 	
@@ -1673,6 +1675,23 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	if (!ShopPropCopyAllowed(iClient, sAlias))
 	{
 		return -1;
+	}
+	
+	//Combine props (models/props_combine/) are unlocked by buying "combine props" in the shop, when it sells them.
+	if (iClient > 0 && iClient <= MaxClients && IsClientInGame(iClient) && StrContains(sModel, "props_combine/", false) != -1)
+	{
+		int iPrice;
+		char sDisplay[64];
+		
+		if (GetFeatureStatus(FeatureType_Native, "Cel_CheckShopDB") == FeatureStatus_Available
+			&& Cel_CheckShopDB("combineprops", iPrice, sDisplay, sizeof(sDisplay)) && !Cel_CheckClientPurchase(iClient, "combineprops"))
+		{
+			char sMessage[160];
+			
+			FormatEx(sMessage, sizeof(sMessage), "Combine props are sold in the shop: buy them with {green}!buy combineprops{default} for {green}%d CL{default}.", iPrice);
+			NotifySpawnRefused(iClient, sMessage);
+			return -1;
+		}
 	}
 	
 	//Shop props and hobos are bank items: they have their own limit instead of the prop limit.
