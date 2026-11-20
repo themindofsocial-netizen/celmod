@@ -419,6 +419,22 @@
 			"power"			"sprint"
 			"dropweight"	"12"
 		}
+		// Time: left click fast-forwards you (double speed for "value" seconds), right click rewinds you to where you
+		// were 3 seconds ago. A dark shadow of you trails 2 seconds behind while it's out.
+		"time"
+		{
+			"name"			"Time"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"8"
+			"color"			"64 64 64 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"time"
+			"value"			"2.0"
+			"cooldown"		"6"
+			"dropweight"	"3"
+		}
 		"cloud"
 		{
 			"name"			"Cloud"

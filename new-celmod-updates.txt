@@ -495,3 +495,6 @@
 		   so a 200 prop build takes under half a second and nobody else notices.
 		 - !stack and +copy on an emblem, hat or celwep take more copies out of your bank if you own spare ones
 		   (!stack 0 0 20 3 lays out three more).
+		 - New emblem: Time (cloud texture, dark grey). Left click fast-forwards you (double speed for 2 seconds), right
+		   click rewinds you to where you were 3 seconds ago, and a dark shadow of you trails 2 seconds behind while
+		   it's out. Like other powers it does nothing in event areas.

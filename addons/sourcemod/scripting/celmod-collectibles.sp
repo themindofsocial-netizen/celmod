@@ -233,6 +233,15 @@ int g_iSmogRef[MAXPLAYERS + 1][3];
 ConVar g_cvNukeMaxProps;
 ConVar g_cvNukeWrecks;
 ConVar g_cvDigChance;
+// Time emblem: where each player was over the last 3 seconds (a sample every 0.2 s), the fast-forward end time, and
+// the dark shadow that trails 2 seconds behind.
+#define TIME_SAMPLES 15
+float g_fTimePos[MAXPLAYERS + 1][TIME_SAMPLES][3];
+float g_fTimeAng[MAXPLAYERS + 1][TIME_SAMPLES][3];
+int g_iTimeHead[MAXPLAYERS + 1];
+int g_iTimeFilled[MAXPLAYERS + 1];
+float g_fTimeBoostUntil[MAXPLAYERS + 1];
+int g_iTimeShadowRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
 int g_iDigSwings[MAXPLAYERS + 1];
 ConVar g_cvDigEmblemChance;
 ConVar g_cvDigMoneyChance;
@@ -738,6 +747,9 @@ public void OnClientDisconnect(int iClient)
 	g_bRealLeave[iClient] = false;
 
 	RemoveThirdPersonCamera(iClient);
+	RemoveTimeShadow(iClient);
+	g_iTimeFilled[iClient] = 0;
+	g_fTimeBoostUntil[iClient] = 0.0;
 
 	// The items stay in the player's ledger, so they can spawn them again next time.
 	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
@@ -2421,6 +2433,16 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		RequestFrame(Frame_Jump, GetClientUserId(iClient));
 	}
 
+	// Time: left click fast-forwards you (double speed for "value" seconds).
+	if (StrEqual(g_Items[iItem].sPower, "time") && (iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && GetGameTime() >= g_fNextPower[iClient] && !g_bInEvent[iClient])
+	{
+		g_fNextPower[iClient] = GetGameTime() + g_Items[iItem].fCooldown;
+		g_fTimeBoostUntil[iClient] = GetGameTime() + (g_Items[iItem].fValue > 0.0 ? g_Items[iItem].fValue : 2.0);
+
+		EmitSoundToAll("buttons/blip1.wav", iClient);
+		PrintHintText(iClient, "Fast forward!");
+	}
+
 	if (StrEqual(g_Items[iItem].sPower, "feather") && !g_bInEvent[iClient])
 	{
 		float fVelocity[3];
@@ -2582,6 +2604,113 @@ public Action Timer_ApplyHat(Handle hTimer, any iUserId)
 	return Plugin_Stop;
 }
 
+// Time emblem, every 0.2 s: remembers where the player is, and moves their shadow to where they were 2 s ago.
+void ThinkTimeEmblem(int iClient, int iItem)
+{
+	GetClientAbsOrigin(iClient, g_fTimePos[iClient][g_iTimeHead[iClient]]);
+	GetClientEyeAngles(iClient, g_fTimeAng[iClient][g_iTimeHead[iClient]]);
+
+	g_iTimeHead[iClient] = (g_iTimeHead[iClient] + 1) % TIME_SAMPLES;
+
+	if (g_iTimeFilled[iClient] < TIME_SAMPLES)
+	{
+		g_iTimeFilled[iClient]++;
+	}
+
+	bool bHolding = (g_bHoldingGravGun[iClient] && iItem != -1 && StrEqual(g_Items[iItem].sPower, "time") && !g_bInEvent[iClient]);
+	int iShadow = EntRefToEntIndex(g_iTimeShadowRef[iClient]);
+
+	if (!bHolding)
+	{
+		RemoveTimeShadow(iClient);
+		return;
+	}
+
+	// 2 seconds back (10 samples) or as far as there is.
+	int iBack = g_iTimeFilled[iClient] < 10 ? g_iTimeFilled[iClient] : 10;
+	int iSlot = (g_iTimeHead[iClient] - iBack + TIME_SAMPLES * 2) % TIME_SAMPLES;
+
+	if (iShadow == INVALID_ENT_REFERENCE)
+	{
+		char sModel[PLATFORM_MAX_PATH];
+
+		GetClientModel(iClient, sModel, sizeof(sModel));
+
+		iShadow = CreateEntityByName("prop_dynamic_override");
+
+		if (iShadow == -1)
+		{
+			return;
+		}
+
+		DispatchKeyValue(iShadow, "model", sModel);
+		DispatchKeyValue(iShadow, "solid", "0");
+		DispatchSpawn(iShadow);
+
+		SetEntityRenderMode(iShadow, RENDER_TRANSCOLOR);
+		SetEntityRenderColor(iShadow, 60, 60, 60, 130);
+
+		g_iTimeShadowRef[iClient] = EntIndexToEntRef(iShadow);
+	}
+
+	float fAngles[3];
+
+	fAngles[1] = g_fTimeAng[iClient][iSlot][1];
+
+	TeleportEntity(iShadow, g_fTimePos[iClient][iSlot], fAngles, NULL_VECTOR);
+}
+
+void RemoveTimeShadow(int iClient)
+{
+	int iShadow = EntRefToEntIndex(g_iTimeShadowRef[iClient]);
+
+	if (g_iTimeShadowRef[iClient] != INVALID_ENT_REFERENCE && iShadow != INVALID_ENT_REFERENCE && iShadow > MaxClients)
+	{
+		AcceptEntityInput(iShadow, "Kill");
+	}
+
+	g_iTimeShadowRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+void RewindTime(int iClient)
+{
+	if (g_bInEvent[iClient] || g_iTimeFilled[iClient] < 2)
+	{
+		return;
+	}
+
+	// The oldest sample: about 3 seconds ago.
+	int iSlot = (g_iTimeFilled[iClient] < TIME_SAMPLES) ? 0 : g_iTimeHead[iClient];
+	float fTo[3], fCheck[3], fNow[3], fZero[3];
+
+	fTo = g_fTimePos[iClient][iSlot];
+	fCheck = fTo;
+	fCheck[2] += 32.0;
+
+	if (ZoneBlocks(iClient, fCheck))
+	{
+		PrintHintText(iClient, "You can't rewind into that area.");
+		return;
+	}
+
+	GetClientAbsOrigin(iClient, fNow);
+
+	int iColor[4] = { 90, 90, 90, 255 };
+
+	TE_SetupBeamRingPoint(fNow, 10.0, 120.0, g_iBmLaser, 0, 0, 15, 0.4, 6.0, 0.0, iColor, 10, 0);
+	TE_SendToAll();
+
+	TeleportEntity(iClient, fTo, g_fTimeAng[iClient][iSlot], fZero);
+
+	TE_SetupBeamRingPoint(fTo, 120.0, 10.0, g_iBmLaser, 0, 0, 15, 0.4, 6.0, 0.0, iColor, 10, 0);
+	TE_SendToAll();
+
+	EmitSoundToAll("buttons/blip1.wav", iClient);
+
+	// The history starts again from here.
+	g_iTimeFilled[iClient] = 0;
+}
+
 public Action Timer_Think(Handle hTimer)
 {
 	char sClassname[64];
@@ -2602,6 +2731,7 @@ public Action Timer_Think(Handle hTimer)
 		if (!IsPlayerAlive(i))
 		{
 			g_bHoldingGravGun[i] = false;
+			RemoveTimeShadow(i);
 			continue;
 		}
 
@@ -2771,6 +2901,8 @@ public Action Timer_Think(Handle hTimer)
 			iItem = -1;
 		}
 
+		ThinkTimeEmblem(i, iItem);
+
 		// Movement speed: slowed by a blizzard emblem, or boosted by the player's own speed emblem.
 		fSpeed = 1.0;
 
@@ -2794,6 +2926,12 @@ public Action Timer_Think(Handle hTimer)
 			{
 				// The speed emblem uses its value, any other emblem can carry a "speed" key.
 				fSpeed = StrEqual(g_Items[iItem].sPower, "speed") ? g_Items[iItem].fValue : g_Items[iItem].fSpeed;
+			}
+
+			// Time emblem fast-forward: double speed for a moment.
+			if (fNow < g_fTimeBoostUntil[i] && !g_bInEvent[i])
+			{
+				fSpeed = 2.0;
 			}
 		}
 
@@ -6210,6 +6348,14 @@ void SecondaryEmblemPower(int iClient, int iItem)
 
 		SecondaryAttack(iClient, iItem);
 
+		return;
+	}
+
+	// Time: right click rewinds you to where you were 3 seconds ago (where your shadow was a moment ago).
+	if (StrEqual(sPower, "time"))
+	{
+		RewindTime(iClient);
+		g_fNextSecondary[iClient] = GetGameTime() + 5.0;
 		return;
 	}
 
