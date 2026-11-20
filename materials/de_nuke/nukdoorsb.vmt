@@ -1,0 +1,9 @@
+LightmappedGeneric
+{
+	"$basetexture"	"de_nuke/nukdoorsb"
+	"$surfaceprop" "metal"
+	// The reflection mask (nukdoorsb_ref) wasn't in the texture pack, so the map's cubemap reflection is toned down
+	// instead of shining over the whole door. Add de_nuke/nukdoorsb_ref.vtf and "$envmapmask" to restore it.
+	"$envmaptint" "[.25 .25 .25]"
+
+}

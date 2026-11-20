@@ -150,6 +150,37 @@
 			"upgradecost"	"3"
 			"dropweight"	"15"
 		}
+		"silver"
+{
+	"name"			"Silver"
+	"model"			"models/celmod/phys8.mdl"
+	"skin"			"1"
+	"color"			"255 255 255 255"
+	"handscale"		"1.0"
+	"handoffset"	"8 5 -2"
+	"handangles"	"0 -90 0"
+	"power"			"gold"
+	"value"			"60"
+	"upgradesto"	"inferno"
+	"upgradecost"	"3"
+	"dropweight"	"0"
+}
+		// Time: left click fast-forwards you (double speed for "value" seconds), right click rewinds you to where you
+		// were 3 seconds ago. A dark shadow of you trails 2 seconds behind while it's out.
+		"time"
+		{
+			"name"			"Time"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"8"
+			"color"			"64 64 64 255"
+			"handscale"		"1.0"
+			"handoffset"	"8 5 -2"
+			"handangles"	"0 -90 0"
+			"power"			"time"
+			"value"			"2.0"
+			"cooldown"		"6"
+			"dropweight"	"3"
+		}
 		"blizzard"
 		{
 			"name"			"Blizzard"
@@ -326,8 +357,8 @@
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"name"			"Red Error"
-			"color"			"255 0 0 255"
+			"name"			"Error"
+			"color"			"255 255 255 255"
 			"skin"			"4"
 			"power"			"shot"
 			"value"			"25"
@@ -335,9 +366,8 @@
 			"range"			"3000"
 			"fx"			"glitch"
 			"sprite"		"models/error.mdl"
-			"beamcolor"		"255 60 60 255"
-			"playercolor"	"255 70 70 255"
-			"upgradesto"	"error_green"
+			"beamcolor"		"255 255 255 255"
+			"upgradesto"	"error_blue"
 			"upgradecost"	"2"
 			"dropweight"	"4"
 		}
@@ -351,14 +381,15 @@
 			"color"			"0 0 255 255"
 			"skin"			"4"
 			"power"			"shot"
-			"value"			"75"
+			"value"			"50"
 			"cooldown"		"1.5"
 			"range"			"3000"
 			"fx"			"glitch"
 			"sprite"		"models/error.mdl"
 			"beamcolor"		"60 60 255 255"
-			"playercolor"	"70 70 255 255"
-			"dropweight"	"2"
+			"upgradesto"	"error_green"
+			"upgradecost"	"2"
+			"dropweight"	"3"
 		}
 		"error_green"
 		{
@@ -370,16 +401,13 @@
 			"color"			"0 255 0 255"
 			"skin"			"4"
 			"power"			"shot"
-			"value"			"50"
+			"value"			"75"
 			"cooldown"		"1.5"
 			"range"			"3000"
 			"fx"			"glitch"
 			"sprite"		"models/error.mdl"
 			"beamcolor"		"60 255 60 255"
-			"playercolor"	"70 255 70 255"
-			"upgradesto"	"error_blue"
-			"upgradecost"	"2"
-			"dropweight"	"3"
+			"dropweight"	"2"
 		}
 		"speed"
 		{
@@ -418,22 +446,6 @@
 			"handangles"	"0 -90 0"
 			"power"			"sprint"
 			"dropweight"	"12"
-		}
-		// Time: left click fast-forwards you (double speed for "value" seconds), right click rewinds you to where you
-		// were 3 seconds ago. A dark shadow of you trails 2 seconds behind while it's out.
-		"time"
-		{
-			"name"			"Time"
-			"model"			"models/celmod/phys8.mdl"
-			"skin"			"8"
-			"color"			"64 64 64 255"
-			"handscale"		"1.0"
-			"handoffset"	"8 5 -2"
-			"handangles"	"0 -90 0"
-			"power"			"time"
-			"value"			"2.0"
-			"cooldown"		"6"
-			"dropweight"	"3"
 		}
 		"cloud"
 		{
@@ -572,7 +584,7 @@
 		{
 			"name"			"Nuke"
 			"model"			"models/celmod/phys8.mdl"
-			"skin"			"6"
+			"skin"			"0"
 			"color"			"0 0 80 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
@@ -874,17 +886,17 @@
 			"dropweight"	"10"
 		}
 		"crimson"
-		{
-			"name"			"Crimson"
-			"model"			"models/celmod/phys8.mdl"
-			"skin"			"0"
-			"color"			"220 20 60 255"
-			"handscale"		"1.0"
-			"handoffset"	"8 5 -2"
-			"handangles"	"0 -90 0"
-			"power"			"none"
-			"dropweight"	"10"
-		}
+{
+	"name"			"Crimson"
+	"model"			"models/celmod/phys8.mdl"
+	"skin"			"8"
+	"color"			"255 0 0 255"
+	"handscale"		"1.0"
+	"handoffset"	"0 0 0"
+	"handangles"	"0 0 0"
+	"power"			"none"
+	"dropweight"	"10"
+}
 		"lime"
 		{
 			"name"			"Lime"
@@ -1008,6 +1020,33 @@
 			"dropweight"	"4"
 		}
 		// Decorative: a red wireframe, no power.
+		"wireframe"
+{
+	"name"			"Wireframe"
+	"model"			"models/celmod/phys8.mdl"
+	"skin"			"9"
+	"color"			"255 255 255 255"
+	"handscale"		"1.0"
+	"handoffset"	"0 0 0"
+	"handangles"	"0 0 0"
+	"power"			"none"
+	"dropweight"	"10"
+}
+"blood"
+{
+	"name"			"Blood"
+	"model"			"models/celmod/phys8.mdl"
+	"skin"			"11"
+	"color"			"255 0 0 255"
+	"handscale"		"1.0"
+	"handoffset"	"8 5 -2"
+	"handangles"	"0 -90 0"
+	"power"			"none"
+	"upgradesto"	"inferno"
+	"upgradecost"	"3"
+	"dropweight"	"15"
+}
+
 		"vector"
 		{
 			"name"			"Vector"
@@ -1074,17 +1113,17 @@
 		}
 		// Decorative: a deep violet, no power.
 		"curse"
-		{
-			"name"			"Curse"
-			"model"			"models/celmod/phys8.mdl"
-			"skin"			"0"
-			"color"			"120 0 255 255"
-			"handscale"		"1.0"
-			"handoffset"	"8 5 -2"
-			"handangles"	"0 -90 0"
-			"power"			"none"
-			"dropweight"	"4"
-		}
+{
+	"name"			"Curse"
+	"model"			"models/celmod/phys8.mdl"
+	"skin"			"8"
+	"color"			"153 0 255 255"
+	"handscale"		"1.0"
+	"handoffset"	"0 0 0"
+	"handangles"	"0 0 0"
+	"power"			"none"
+	"dropweight"	"10"
+}
 		// Decorative: the animated nuke skin in magenta, no power.
 		"dragon"
 		{
@@ -1128,6 +1167,7 @@
 			"playercolor"	"60 255 120 120"
 			"dropweight"	"3"
 		}
+
 	}
 
 	"Weapons"

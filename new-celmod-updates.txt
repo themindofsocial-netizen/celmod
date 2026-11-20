@@ -516,3 +516,8 @@
 		 - New map rotation: gm_bloodyconstruct_cm12, gm_grassyplains_cm12, gm_build_map_cm12, gm_cubicle_winter_cm12,
 		   gm_fourplay_cm12, gm_park_cm12_snowy, gm_cubeland_cm12 and gm_multi_area_cm12. Each map lasts 3 hours
 		   (mp_timelimit 180, cfg/mapcycle.txt), and kills no longer end a map early (mp_fraglimit 0).
+		 - The textures gm_bloodyconstruct_cm12 was missing (cncr04s, de_nuke and de_train) are added, with lower-case
+		   names so Linux servers and the FastDL find them.
+		 - New FastDL: every current map, CelMod's content and the maps' textures, in fastdl/ with a setup guide
+		   (fastdl/README.md). tools/build_fastdl.py rebuilds it from the game server and lists anything missing.
+		 - New emblems: Silver, Wireframe and Blood. Crimson and Curse have a new look, and Error is white again.

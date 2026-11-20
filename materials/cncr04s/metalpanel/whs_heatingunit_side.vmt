@@ -1,0 +1,6 @@
+"lightmappedgeneric"
+{
+	"$basetexture" "cncr04s/metalpanel/whs_heatingunit_side"
+	"$surfaceprop" "metalpanel"
+	"$keywords" "metal"
+}

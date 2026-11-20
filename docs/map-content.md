@@ -1,5 +1,9 @@
 # Map content the maps need
 
+> **Update:** the cncr04s and Counter-Strike: Source textures for gm_bloodyconstruct_cm12 are now in this repo
+> (materials/cncr04s, materials/de_nuke, materials/de_train). `tools/build_fastdl.py --game` run on the server
+> rebuilds the FastDL from what the server has and lists anything still missing in MISSING.txt.
+
 Worked out from the map files themselves (tools: the BSP texture table, entities, static props and each map's
 packed files), then compared with every file stock Half-Life 2 ships (its VPK file lists) and with what this repo
 already has. Anything left over has to be on the server and on the FastDL host, or players see purple-and-black
