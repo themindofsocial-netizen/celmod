@@ -26,6 +26,7 @@ float g_fMaxLandSize;
 
 Handle g_hGettingTop[MAXPLAYERS+1];
 Handle g_hLandTimer[MAXPLAYERS+1];
+ConVar g_cvPvpDeathmatchOnly;
 int g_iLandRef[MAXPLAYERS+1] = { INVALID_ENT_REFERENCE, ... }; //the land trigger, as a reference: the raw index can be reused by another entity
 
 int g_iBeam = -1;
@@ -135,6 +136,7 @@ public void OnPluginStart()
 	}
 	
 	g_cvMaxLandSize = CreateConVar("cm_max_land_size", "1495.5", "Maximum land size allowed.");
+	g_cvPvpDeathmatchOnly = CreateConVar("cm_pvp_deathmatch_only", "1", "1: players only hurt each other when both are inside a deathmatch land (!deathmatch). 0: everywhere except co-op lands.", _, true, 0.0, true, 1.0);
 	
 	g_cvMaxLandSize.AddChangeHook(CMLand_OnConVarChanged);
 	
@@ -1569,8 +1571,30 @@ public Action Timer_GettingTop(Handle hTimer, any iPlayer)
 //In a co-op land, damage from another player does nothing.
 public Action Hook_CoopDamage(int iVictim, int &iAttacker, int &iInflictor, float &fDamage, int &iDamageType)
 {
-	if (iVictim < 1 || iVictim > MaxClients || !g_liLand[iVictim].bInCoopMode)
+	if (iVictim < 1 || iVictim > MaxClients)
 	{
+		return Plugin_Continue;
+	}
+	
+	//Players only hurt each other inside deathmatch lands (both of them inside one), unless cm_pvp_deathmatch_only
+	//is 0. Enemies, falling and the world still hurt as normal.
+	if (!g_liLand[iVictim].bInCoopMode)
+	{
+		int iPvp = iAttacker;
+		
+		if (iPvp > MaxClients && iInflictor > 0 && iInflictor <= MaxClients)
+		{
+			iPvp = iInflictor;
+		}
+		
+		if (g_cvPvpDeathmatchOnly.BoolValue && iPvp > 0 && iPvp <= MaxClients && iPvp != iVictim
+			&& !(g_liLand[iVictim].bInDeathmatchMode && g_liLand[iPvp].bInDeathmatchMode))
+		{
+			fDamage = 0.0;
+			
+			return Plugin_Handled;
+		}
+		
 		return Plugin_Continue;
 	}
 	

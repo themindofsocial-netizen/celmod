@@ -63,6 +63,7 @@ int g_iSpawnPointRef[MAXPLAYERS + 1] = {INVALID_ENT_REFERENCE, ...};
 int g_iDiedInLand[MAXPLAYERS + 1];
 ConVar g_cvSpawnPointModel;
 ConVar g_cvSpawnHealth;
+ConVar g_cvLoadout;
 ConVar g_cvNoBlock;
 ConVar g_cvDoubleJump;
 ConVar g_cvDoubleJumpHeight;
@@ -102,6 +103,9 @@ public void OnPluginStart()
 	HookEvent("player_death", Event_SpawnPointDeath);
 	HookEvent("player_spawn", Event_SpawnPointSpawn);
 	HookEvent("player_spawn", Event_SpawnHealth);
+	HookEvent("player_spawn", Event_SpawnLoadout);
+	CreateTimer(0.5, Timer_RefillChargers, _, TIMER_REPEAT);
+	g_cvLoadout = CreateConVar("cm_spawn_loadout", "weapon_physcannon weapon_crowbar", "The only weapons players spawn with (empty = the game's own). Celweps and bought weapons are given back as usual.");
 	
 	g_cvNoBlock = CreateConVar("cm_noblock", "1", "1: players walk through each other (they still collide with the world and props, and can still be shot).", _, true, 0.0, true, 1.0);
 	g_cvNoBlock.AddChangeHook(CMExtras_OnNoBlockChanged);
@@ -166,8 +170,142 @@ public void OnPluginStart()
 	RegConsoleCmd("v_arsenal", Command_Arsenal, "|CelMod| Gives you every weapon (bought in the shop: !buy arsenal).");
 }
 
+//Health and suit chargers never run out: the map's own and charger bits are topped up twice a second, before
+//anyone can empty them.
+public Action Timer_RefillChargers(Handle hTimer)
+{
+	static const char sClasses[][] = { "item_healthcharger", "item_suitcharger", "bit_charger_health", "bit_charger_suit" };
+	
+	ConVar cvHealth = FindConVar("sk_healthcharger"), cvSuit = FindConVar("sk_suitcharger");
+	int iHealth = (cvHealth != null && cvHealth.IntValue > 0) ? cvHealth.IntValue : 50;
+	int iSuit = (cvSuit != null && cvSuit.IntValue > 0) ? cvSuit.IntValue : 75;
+	
+	for (int c = 0; c < sizeof(sClasses); c++)
+	{
+		int iCharger = -1;
+		bool bSuit = (StrContains(sClasses[c], "suit") != -1);
+		
+		while ((iCharger = FindEntityByClassname(iCharger, sClasses[c])) != -1)
+		{
+			if (HasEntProp(iCharger, Prop_Data, "m_iJuice") && GetEntProp(iCharger, Prop_Data, "m_iJuice") < (bSuit ? iSuit : iHealth))
+			{
+				SetEntProp(iCharger, Prop_Data, "m_iJuice", bSuit ? iSuit : iHealth);
+				
+				if (HasEntProp(iCharger, Prop_Send, "m_flJuice"))
+				{
+					SetEntPropFloat(iCharger, Prop_Send, "m_flJuice", 1.0);
+				}
+			}
+		}
+	}
+	
+	return Plugin_Continue;
+}
+
+//Spawn loadout: the game hands out its default weapons; just after, everything not in cm_spawn_loadout is taken
+//away and anything missing from it is given. (Celweps and Custom Guns come a second later, as before.)
+public void Event_SpawnLoadout(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	char sLoadout[256];
+	
+	g_cvLoadout.GetString(sLoadout, sizeof(sLoadout));
+	TrimString(sLoadout);
+	
+	if (sLoadout[0] != '\0')
+	{
+		CreateTimer(0.1, Timer_SpawnLoadout, eEvent.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
+public Action Timer_SpawnLoadout(Handle hTimer, any iUserId)
+{
+	char sLoadout[256], sClass[64], sKeep[8][64];
+	int iClient = GetClientOfUserId(iUserId);
+	
+	if (iClient < 1 || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return Plugin_Stop;
+	}
+	
+	g_cvLoadout.GetString(sLoadout, sizeof(sLoadout));
+	TrimString(sLoadout);
+	
+	int iKeep = ExplodeString(sLoadout, " ", sKeep, sizeof(sKeep), sizeof(sKeep[]));
+	bool bHave[8];
+	
+	int iSize = GetEntPropArraySize(iClient, Prop_Send, "m_hMyWeapons");
+	
+	for (int w = 0; w < iSize; w++)
+	{
+		int iWeapon = GetEntPropEnt(iClient, Prop_Send, "m_hMyWeapons", w);
+		
+		if (iWeapon <= MaxClients || !IsValidEntity(iWeapon) || !GetEntityClassname(iWeapon, sClass, sizeof(sClass)))
+		{
+			continue;
+		}
+		
+		bool bKeep = false;
+		
+		for (int k = 0; k < iKeep; k++)
+		{
+			if (StrEqual(sClass, sKeep[k], false))
+			{
+				bKeep = true;
+				bHave[k] = true;
+			}
+		}
+		
+		if (!bKeep)
+		{
+			RemovePlayerItem(iClient, iWeapon);
+			AcceptEntityInput(iWeapon, "Kill");
+		}
+	}
+	
+	for (int k = 0; k < iKeep; k++)
+	{
+		if (!bHave[k] && sKeep[k][0] != '\0')
+		{
+			GivePlayerItem(iClient, sKeep[k]);
+		}
+	}
+	
+	FakeClientCommand(iClient, "use weapon_physcannon");
+	
+	return Plugin_Stop;
+}
+
+//Combine players spawn with the game's stunstick in the crowbar's slot, so they couldn't pick a crowbar up: touching
+//one swaps the stunstick for it.
+public Action Hook_WeaponCanUse(int iClient, int iWeapon)
+{
+	char sClass[32];
+	
+	if (iWeapon <= MaxClients || !IsValidEntity(iWeapon) || !GetEntityClassname(iWeapon, sClass, sizeof(sClass)) || !StrEqual(sClass, "weapon_crowbar"))
+	{
+		return Plugin_Continue;
+	}
+	
+	int iSize = GetEntPropArraySize(iClient, Prop_Send, "m_hMyWeapons");
+	
+	for (int w = 0; w < iSize; w++)
+	{
+		int iHeld = GetEntPropEnt(iClient, Prop_Send, "m_hMyWeapons", w);
+		
+		if (iHeld > MaxClients && IsValidEntity(iHeld) && GetEntityClassname(iHeld, sClass, sizeof(sClass)) && StrEqual(sClass, "weapon_stunstick"))
+		{
+			RemovePlayerItem(iClient, iHeld);
+			AcceptEntityInput(iHeld, "Kill");
+		}
+	}
+	
+	return Plugin_Continue;
+}
+
 public void OnClientPutInServer(int iClient)
 {
+	SDKHook(iClient, SDKHook_WeaponCanUse, Hook_WeaponCanUse);
+	
 	g_sBuildMessage[iClient][0] = '\0';
 	g_iLastLandIn[iClient] = 0;
 	g_iNoWepsOwner[iClient] = 0;

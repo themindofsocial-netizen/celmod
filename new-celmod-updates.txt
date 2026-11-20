@@ -460,3 +460,7 @@
 		   you can see it working. Finds are rarer (15% of swings, cm_dig_find_chance), cleers crates are 2% of finds
 		   (cm_dig_money_rate), and ores sell for much more: coal 30-50 CL up to diamond 3,000-5,000 CL.
 		 - Event areas: everyone walks at normal speed there. The walk key and speed emblems can't speed you up.
+		 - Players only hurt each other when both are inside a deathmatch land (cm_pvp_deathmatch_only 1).
+		 - Players spawn with just the gravity gun and a crowbar (cm_spawn_loadout); celweps come back as before.
+		   Combine players can pick up crowbars (touching one swaps the stunstick out).
+		 - Health and suit chargers, the map's and charger bits, never run out.
