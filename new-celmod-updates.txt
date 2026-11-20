@@ -513,3 +513,6 @@
 		 - Admin debug: !shell [big] spawns a plain emblem shell you can !skin, !color and !alpha like any prop, to try out
 		   emblem looks in game. Look at it and type !shell for the skin and color lines to put in collectibles.txt.
 		 - !npckills works inside event areas, so you can track your kills in dungeons (as do !pmute, !reportbug and !hudcolor).
+		 - New map rotation: gm_bloodyconstruct_cm12, gm_grassyplains_cm12, gm_build_map_cm12, gm_cubicle_winter_cm12,
+		   gm_fourplay_cm12, gm_park_cm12_snowy, gm_cubeland_cm12 and gm_multi_area_cm12. Each map lasts 3 hours
+		   (mp_timelimit 180, cfg/mapcycle.txt), and kills no longer end a map early (mp_fraglimit 0).

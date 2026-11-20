@@ -1,0 +1,8 @@
+gm_bloodyconstruct_cm12
+gm_grassyplains_cm12
+gm_build_map_cm12
+gm_cubicle_winter_cm12
+gm_fourplay_cm12
+gm_park_cm12_snowy
+gm_cubeland_cm12
+gm_multi_area_cm12

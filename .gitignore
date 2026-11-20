@@ -212,6 +212,7 @@ download
 downloadlists
 gameinfo.txt
 maps
+!fastdl/maps
 materials/celmod/embview
 materials/celmod/faces
 materials/celmod/hoopie_w.vmt
@@ -235,7 +236,6 @@ addons/sourcemod/plugins/randomcycle.smx
 addons/sourcemod/plugins/rockthevote.smx
 addons/sourcemod/plugins/sql-admin-manager.smx
 addons/sourcemod/plugins/swag.smx
-cfg/mapcycle.txt
 addons/sourcemod/plugins/updater.smx
 addons/sourcemod/scripting/include/updater.inc
 addons/sourcemod/extensions/bintools.ext.dll

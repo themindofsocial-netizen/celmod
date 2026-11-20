@@ -8,3 +8,5 @@ rockzehh/celmod-archive, fastdl/). Players download these instead of getting an 
 
 Not included (not in this repo): the Gordon Freeman and Skeleton player models (models/humans/freeman,
 models/humans/skeleton) and their materials. Compress those with bzip2 and add them the same way.
+
+  maps/                                  every map in the mapcycle (cfg/mapcycle.txt), as .bsp.bz2
