@@ -16,6 +16,7 @@ Handle g_hCommandTimer;
 Handle g_hHudTimer;
 
 int g_iClientColor[MAXPLAYERS + 1][4];
+bool g_bHudColorChosen[MAXPLAYERS + 1]; //!hudcolor: a colour the player picked (kept, never re-randomized)
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
@@ -51,6 +52,7 @@ public void OnPluginStart()
 	AddCommandListener(Handle_Chat, "say");
 	AddCommandListener(Handle_Chat, "say_team");
 	
+	RegConsoleCmd("v_hudcolor", Command_HudColor, "|CelMod| Changes the colour of your HUD text: !hudcolor <colour or r g b>, or random.");
 	RegConsoleCmd("v_switch", Command_Switch, "|CelMod| Switches the side the hud is on the screen.");
 	RegConsoleCmd("v_feed", Command_Feed, "|CelMod| Turns the command feed (the list of recent commands) on or off.");
 }
@@ -84,6 +86,83 @@ public void OnClientPostAdminCheck(int iClient)
 	}
 	
 	g_bFeedOff[iClient] = (Cel_GetClientSettingInt(iClient, "hud-feed-off") == 1);
+	
+	//The colour picked with !hudcolor, saved as (r << 16 | g << 8 | b) + 1 (0 or less = random).
+	int iSaved = Cel_GetClientSettingInt(iClient, "hud-color");
+	
+	g_bHudColorChosen[iClient] = (iSaved > 0);
+	
+	if (g_bHudColorChosen[iClient])
+	{
+		iSaved--;
+		
+		g_iClientColor[iClient][0] = (iSaved >> 16) & 255;
+		g_iClientColor[iClient][1] = (iSaved >> 8) & 255;
+		g_iClientColor[iClient][2] = iSaved & 255;
+		g_iClientColor[iClient][3] = 255;
+	}
+}
+
+public Action Command_HudColor(int iClient, int iArgs)
+{
+	char sArg[64], sColor[64], sParts[3][16];
+	int iRGB[3];
+	
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	GetCmdArgString(sArg, sizeof(sArg));
+	StripQuotes(sArg);
+	TrimString(sArg);
+	
+	if (sArg[0] == '\0')
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]hudcolor{default} <colour name or r g b>, or {green}random{default}. Colour names are the same as {green}[tag]color{default}.");
+		return Plugin_Handled;
+	}
+	
+	if (StrEqual(sArg, "random", false) || StrEqual(sArg, "off", false))
+	{
+		g_bHudColorChosen[iClient] = false;
+		Cel_SetClientSettingInt(iClient, "hud-color", 0);
+		Cel_ChooseHudColor(iClient);
+		
+		Cel_ReplyToCommand(iClient, "Your HUD colour is random again.");
+		return Plugin_Handled;
+	}
+	
+	if (ExplodeString(sArg, " ", sParts, 3, sizeof(sParts[])) == 3 && String_IsNumeric(sParts[0]) && String_IsNumeric(sParts[1]) && String_IsNumeric(sParts[2]))
+	{
+		for (int i = 0; i < 3; i++)
+		{
+			iRGB[i] = StringToInt(sParts[i]);
+			iRGB[i] = iRGB[i] < 0 ? 0 : (iRGB[i] > 255 ? 255 : iRGB[i]);
+		}
+	} else if (Cel_CheckColorDB(sArg, sColor, sizeof(sColor))) {
+		ExplodeString(sColor, "|", sParts, 3, sizeof(sParts[]));
+		
+		for (int i = 0; i < 3; i++)
+		{
+			iRGB[i] = StringToInt(sParts[i]);
+		}
+	} else {
+		Cel_ReplyToCommand(iClient, "{green}%s{default} isn't a colour. Use a name from {green}[tag]colors{default}, or three numbers (r g b).", sArg);
+		return Plugin_Handled;
+	}
+	
+	g_bHudColorChosen[iClient] = true;
+	g_iClientColor[iClient][0] = iRGB[0];
+	g_iClientColor[iClient][1] = iRGB[1];
+	g_iClientColor[iClient][2] = iRGB[2];
+	g_iClientColor[iClient][3] = 255;
+	
+	Cel_SetClientSettingInt(iClient, "hud-color", ((iRGB[0] << 16) | (iRGB[1] << 8) | iRGB[2]) + 1);
+	
+	Cel_ReplyToCommand(iClient, "Your HUD colour is now {green}%s{default}.", sArg);
+	
+	return Plugin_Handled;
 }
 
 public Action Command_Feed(int iClient, int iArgs)
@@ -201,6 +280,12 @@ public Action Command_Switch(int iClient, int iArgs)
 public int Native_ChooseHudColor(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
+	
+	//A colour picked with !hudcolor is kept.
+	if (iClient > 0 && iClient <= MaxClients && g_bHudColorChosen[iClient])
+	{
+		return true;
+	}
 	
 	switch (GetRandomInt(0, 6))
 	{

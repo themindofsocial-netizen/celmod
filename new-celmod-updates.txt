@@ -486,3 +486,5 @@
 		   !landcolor, !internet and !seturl now ask you to buy them first, as do combine props (props_combine models).
 		 - !turret works: it places a floor turret where you aim that fights enemies and never shoots players (2 each,
 		   cm_max_turrets). It was sold in the shop but had never been added.
+		 - !hudcolor <colour or r g b> sets the colour of your HUD text and remembers it (!hudcolor random undoes it).
+		   Loading a build no longer changes your HUD colour.
