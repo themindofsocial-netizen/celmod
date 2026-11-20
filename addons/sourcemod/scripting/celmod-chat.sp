@@ -11,6 +11,11 @@ StringMap g_smCelCommands;
 //!pmute: g_bMuted[listener][talker], only for that listener: no voice and no chat from the talker.
 bool g_bMuted[MAXPLAYERS + 1][MAXPLAYERS + 1];
 
+//!pungag: SteamID -> when the gag ends (unix time, 0 = never). Kept in data/celmod/gags.txt so it lasts across maps
+//and reconnects.
+StringMap g_smGags;
+char g_sGagFile[PLATFORM_MAX_PATH];
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_IsCelCommand", Native_IsCelCommand);
@@ -45,6 +50,16 @@ public void OnPluginStart()
 	
 	RegConsoleCmd("v_pmute", Command_PMute, "|CelMod| Mutes (or unmutes) a player just for you, voice and chat: !pmute <name>.");
 	RegConsoleCmd("v_punmute", Command_PMute, "|CelMod| Unmutes a player you muted with !pmute: !punmute <name>.");
+	
+	//Admin punishments.
+	RegAdminCmd("v_pungag", Command_PunGag, ADMFLAG_CHAT, "|CelMod| Stops a player chatting: !pungag <name> [minutes, 0 = until lifted] [reason].");
+	RegAdminCmd("v_punungag", Command_PunUngag, ADMFLAG_CHAT, "|CelMod| Lifts a gag: !punungag <name>.");
+	RegAdminCmd("v_punkick", Command_PunKick, ADMFLAG_KICK, "|CelMod| Kicks a player: !punkick <name> [reason].");
+	RegAdminCmd("v_punban", Command_PunBan, ADMFLAG_BAN, "|CelMod| Bans a player: !punban <name> <minutes, 0 = forever> [reason].");
+	
+	g_smGags = new StringMap();
+	BuildPath(Path_SM, g_sGagFile, sizeof(g_sGagFile), "data/celmod/gags.txt");
+	LoadGags();
 
 	// Chat from a muted player is held back from the players who muted them.
 	UserMsg umSayText2 = GetUserMessageId("SayText2");
@@ -329,7 +344,309 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 		return Plugin_Handled;
 	}
 	
+	//A gagged player can still use commands, but nobody sees their chat.
+	int iLeft;
+	
+	if (iClient > 0 && GagMinutesLeft(iClient, iLeft))
+	{
+		if (iLeft > 0)
+		{
+			Cel_PrintToChat(iClient, "You are gagged for {green}%d{default} more minute%s.", iLeft, iLeft == 1 ? "" : "s");
+		} else {
+			Cel_PrintToChat(iClient, "You are gagged until an admin lifts it.");
+		}
+		
+		return Plugin_Handled;
+	}
+	
 	return Plugin_Continue;
+}
+
+//Punishments:
+void LoadGags()
+{
+	g_smGags.Clear();
+	
+	KeyValues kvGags = new KeyValues("Gags");
+	
+	if (kvGags.ImportFromFile(g_sGagFile) && kvGags.GotoFirstSubKey(false))
+	{
+		char sAuth[64];
+		int iNow = GetTime();
+		
+		do
+		{
+			kvGags.GetSectionName(sAuth, sizeof(sAuth));
+			
+			int iUntil = kvGags.GetNum(NULL_STRING, 0);
+			
+			if (iUntil == 0 || iUntil > iNow)
+			{
+				g_smGags.SetValue(sAuth, iUntil);
+			}
+		} while (kvGags.GotoNextKey(false));
+	}
+	
+	delete kvGags;
+}
+
+void SaveGags()
+{
+	KeyValues kvGags = new KeyValues("Gags");
+	StringMapSnapshot smsGags = g_smGags.Snapshot();
+	char sAuth[64];
+	int iUntil;
+	
+	for (int i = 0; i < smsGags.Length; i++)
+	{
+		smsGags.GetKey(i, sAuth, sizeof(sAuth));
+		
+		if (g_smGags.GetValue(sAuth, iUntil))
+		{
+			kvGags.SetNum(sAuth, iUntil);
+		}
+	}
+	
+	delete smsGags;
+	
+	kvGags.ExportToFile(g_sGagFile);
+	delete kvGags;
+}
+
+//True when the player is gagged; iLeft is the minutes left (0 = until it is lifted).
+bool GagMinutesLeft(int iClient, int &iLeft)
+{
+	char sAuth[64];
+	int iUntil;
+	
+	if (!GetClientAuthId(iClient, AuthId_Steam2, sAuth, sizeof(sAuth)) || !g_smGags.GetValue(sAuth, iUntil))
+	{
+		return false;
+	}
+	
+	if (iUntil == 0)
+	{
+		iLeft = 0;
+		return true;
+	}
+	
+	int iNow = GetTime();
+	
+	if (iUntil <= iNow)
+	{
+		g_smGags.Remove(sAuth);
+		SaveGags();
+		return false;
+	}
+	
+	iLeft = (iUntil - iNow + 59) / 60;
+	return true;
+}
+
+//The text after the first iSkip arguments, used as the reason.
+void GetReason(int iSkip, char[] sReason, int iMaxLength, const char[] sDefault)
+{
+	char sArgs[256];
+	int iPos = 0;
+	
+	GetCmdArgString(sArgs, sizeof(sArgs));
+	
+	for (int i = 0; i < iSkip && iPos != -1; i++)
+	{
+		char sSkip[128];
+		int iNext = BreakString(sArgs[iPos], sSkip, sizeof(sSkip));
+		
+		iPos = (iNext == -1) ? -1 : iPos + iNext;
+	}
+	
+	if (iPos == -1 || sArgs[iPos] == '\0')
+	{
+		strcopy(sReason, iMaxLength, sDefault);
+	} else {
+		strcopy(sReason, iMaxLength, sArgs[iPos]);
+		StripQuotes(sReason);
+		TrimString(sReason);
+	}
+}
+
+void FormatLength(int iMinutes, char[] sLength, int iMaxLength)
+{
+	if (iMinutes <= 0)
+	{
+		strcopy(sLength, iMaxLength, "for good");
+	} else if (iMinutes % 1440 == 0)
+	{
+		FormatEx(sLength, iMaxLength, "for %d day%s", iMinutes / 1440, iMinutes == 1440 ? "" : "s");
+	} else if (iMinutes % 60 == 0)
+	{
+		FormatEx(sLength, iMaxLength, "for %d hour%s", iMinutes / 60, iMinutes == 60 ? "" : "s");
+	} else {
+		FormatEx(sLength, iMaxLength, "for %d minute%s", iMinutes, iMinutes == 1 ? "" : "s");
+	}
+}
+
+public Action Command_PunGag(int iClient, int iArgs)
+{
+	char sTarget[64], sMinutes[16], sReason[128], sAuth[64], sLength[32];
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}!pungag <name> [minutes, 0 = until lifted] [reason]{default}");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	int iTarget = FindTarget(iClient, sTarget, true, true);
+	
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	int iMinutes = 0, iSkip = 1;
+	
+	if (iArgs >= 2)
+	{
+		GetCmdArg(2, sMinutes, sizeof(sMinutes));
+		
+		if (StringToIntEx(sMinutes, iMinutes) == strlen(sMinutes) && sMinutes[0] != '\0')
+		{
+			iSkip = 2;
+		} else {
+			iMinutes = 0;
+		}
+	}
+	
+	if (iMinutes < 0)
+	{
+		iMinutes = 0;
+	}
+	
+	GetReason(iSkip, sReason, sizeof(sReason), "No reason given");
+	
+	if (!GetClientAuthId(iTarget, AuthId_Steam2, sAuth, sizeof(sAuth)))
+	{
+		Cel_ReplyToCommand(iClient, "{green}%N{default} isn't signed in to Steam yet; try again in a moment.", iTarget);
+		return Plugin_Handled;
+	}
+	
+	g_smGags.SetValue(sAuth, iMinutes > 0 ? GetTime() + iMinutes * 60 : 0);
+	SaveGags();
+	
+	FormatLength(iMinutes, sLength, sizeof(sLength));
+	
+	Cel_PrintToChatAll("{green}%N{default} was gagged %s by an admin. Reason: {green}%s{default}", iTarget, iMinutes > 0 ? sLength : "until it's lifted", sReason);
+	LogAction(iClient, iTarget, "\"%L\" gagged \"%L\" (minutes \"%d\") (reason \"%s\")", iClient, iTarget, iMinutes, sReason);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_PunUngag(int iClient, int iArgs)
+{
+	char sTarget[64], sAuth[64];
+	int iUntil;
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}!punungag <name>{default}");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	int iTarget = FindTarget(iClient, sTarget, true, false);
+	
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (!GetClientAuthId(iTarget, AuthId_Steam2, sAuth, sizeof(sAuth)) || !g_smGags.GetValue(sAuth, iUntil))
+	{
+		Cel_ReplyToCommand(iClient, "{green}%N{default} isn't gagged.", iTarget);
+		return Plugin_Handled;
+	}
+	
+	g_smGags.Remove(sAuth);
+	SaveGags();
+	
+	Cel_PrintToChatAll("{green}%N{default} can chat again.", iTarget);
+	LogAction(iClient, iTarget, "\"%L\" ungagged \"%L\"", iClient, iTarget);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_PunKick(int iClient, int iArgs)
+{
+	char sTarget[64], sReason[128];
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}!punkick <name> [reason]{default}");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	int iTarget = FindTarget(iClient, sTarget, false, true);
+	
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	GetReason(1, sReason, sizeof(sReason), "Kicked by an admin");
+	
+	Cel_PrintToChatAll("{green}%N{default} was kicked. Reason: {green}%s{default}", iTarget, sReason);
+	LogAction(iClient, iTarget, "\"%L\" kicked \"%L\" (reason \"%s\")", iClient, iTarget, sReason);
+	
+	KickClient(iTarget, "|CelMod| %s", sReason);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_PunBan(int iClient, int iArgs)
+{
+	char sTarget[64], sMinutes[16], sReason[128], sLength[32];
+	
+	if (iArgs < 2)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}!punban <name> <minutes, 0 = forever> [reason]{default}");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	GetCmdArg(2, sMinutes, sizeof(sMinutes));
+	
+	int iMinutes;
+	
+	if (StringToIntEx(sMinutes, iMinutes) != strlen(sMinutes) || iMinutes < 0)
+	{
+		Cel_ReplyToCommand(iClient, "The ban length is in minutes: {green}0{default} bans for good. Usage: {green}!punban <name> <minutes> [reason]{default}");
+		return Plugin_Handled;
+	}
+	
+	int iTarget = FindTarget(iClient, sTarget, true, true);
+	
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	GetReason(2, sReason, sizeof(sReason), "Banned by an admin");
+	FormatLength(iMinutes, sLength, sizeof(sLength));
+	
+	Cel_PrintToChatAll("{green}%N{default} was banned %s. Reason: {green}%s{default}", iTarget, sLength, sReason);
+	LogAction(iClient, iTarget, "\"%L\" banned \"%L\" (minutes \"%d\") (reason \"%s\")", iClient, iTarget, iMinutes, sReason);
+	
+	char sKick[192];
+	
+	FormatEx(sKick, sizeof(sKick), "|CelMod| Banned %s: %s", sLength, sReason);
+	
+	BanClient(iTarget, iMinutes, BANFLAG_AUTO, sReason, sKick, "sm_ban", iClient);
+	
+	return Plugin_Handled;
 }
 
 public Action Listener_NextMap(int iClient, const char[] sCommand, int iArgs)

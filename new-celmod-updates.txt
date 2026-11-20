@@ -507,3 +507,9 @@
 		 - Loading a build is much lighter on the server: props come in a few at a time every frame with a strict time
 		   limit per frame (cm_load_per_frame, cm_load_frame_ms) instead of in bursts, and each prop's model files are
 		   checked once instead of being searched for again for every copy.
+		 - New admin punishments: !pungag <player> [minutes] [reason] (stops their chat; lasts across maps and
+		   reconnects, 0 minutes = until !punungag), !punkick <player> [reason] and !punban <player> <minutes> [reason]
+		   (0 = forever). Each is announced in chat and logged.
+		 - Admin debug: !shell [big] spawns a plain emblem shell you can !skin, !color and !alpha like any prop, to try out
+		   emblem looks in game. Look at it and type !shell for the skin and color lines to put in collectibles.txt.
+		 - !npckills works inside event areas, so you can track your kills in dungeons (as do !pmute, !reportbug and !hudcolor).

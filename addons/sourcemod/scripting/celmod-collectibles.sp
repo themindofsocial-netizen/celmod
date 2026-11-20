@@ -506,6 +506,7 @@ public void OnPluginStart()
 	AutoExecConfig(true, "celmod.collectibles");
 
 	RegAdminCmd("v_delreward", Command_DelReward, ADMFLAG_SLAY, "|CelMod| Removes the reward pickup you are looking at.");
+	RegAdminCmd("v_shell", Command_Shell, ADMFLAG_SLAY, "|CelMod| Debug: spawns a plain emblem shell to try skins and colors on (!shell [big]); look at one and type !shell to print its emblem lines.");
 	RegAdminCmd("v_emblemdrop", Command_EmblemDrop, ADMFLAG_SLAY, "|CelMod| Starts an emblem drop.");
 	RegAdminCmd("v_giveitem", Command_GiveItem, ADMFLAG_SLAY, "|CelMod| Gives an emblem or hat to a player.");
 	RegAdminCmd("v_tune", Command_Tune, ADMFLAG_SLAY, "|CelMod| Sets where held emblems, celweps or your hat sit, and saves it.");
@@ -1967,6 +1968,75 @@ public Action Command_Reward(int iClient, int iArgs)
 
 	Cel_ReplyToCommand(iClient, "Created reward pickup {green}#%d{default} (%s: %s) on this map.", iId, g_sKindName[iKind], sId);
 
+	return Plugin_Handled;
+}
+
+//!shell: a plain emblem model spawned as a normal prop, so !skin, !color, !alpha and the rest work on it, for trying
+//out how a new emblem could look. Looking at one, !shell prints the lines to put in collectibles.txt.
+public Action Command_Shell(int iClient, int iArgs)
+{
+	char sArg[16], sModel[PLATFORM_MAX_PATH], sName[64];
+	float fAngles[3], fOrigin[3];
+	
+	if (!IsRealClient(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	int iLook = Cel_GetClientAimTarget(iClient);
+	
+	if (iLook > MaxClients && IsValidEntity(iLook) && Cel_IsEntity(iLook))
+	{
+		Cel_GetPropName(iLook, sName, sizeof(sName));
+		
+		if (StrEqual(sName, "shell", false) || StrEqual(sName, "bigshell", false))
+		{
+			int iColor[4];
+			
+			Cel_GetColor(iLook, iColor);
+			GetEntPropString(iLook, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+			
+			int iSkin = GetEntProp(iLook, Prop_Send, "m_nSkin");
+			
+			Cel_ReplyToCommand(iClient, "This shell: skin {green}%d{default}, color {green}%d %d %d %d{default}. The lines are in your console.", iSkin, iColor[0], iColor[1], iColor[2], iColor[3]);
+			PrintToConsole(iClient, "\t\t\t\"model\"\t\t\t\"%s\"", sModel);
+			PrintToConsole(iClient, "\t\t\t\"skin\"\t\t\t\"%d\"", iSkin);
+			PrintToConsole(iClient, "\t\t\t\"color\"\t\t\t\"%d %d %d %d\"", iColor[0], iColor[1], iColor[2], iColor[3]);
+			
+			return Plugin_Handled;
+		}
+	}
+	
+	GetCmdArg(1, sArg, sizeof(sArg));
+	
+	bool bBig = StrEqual(sArg, "big", false);
+	
+	strcopy(sModel, sizeof(sModel), bBig ? BIG_EMBLEM_MODEL : "models/celmod/phys8.mdl");
+	
+	if (!FileExists(sModel, true))
+	{
+		Cel_ReplyToCommand(iClient, "The server doesn't have {green}%s{default}.", sModel);
+		return Plugin_Handled;
+	}
+	
+	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+	fOrigin[2] += bBig ? 24.0 : 12.0;
+	
+	GetClientEyeAngles(iClient, fAngles);
+	fAngles[0] = 0.0;
+	fAngles[2] = 0.0;
+	
+	int iShell = Cel_SpawnProp(iClient, bBig ? "bigshell" : "shell", "prop_physics_override", sModel, fAngles, fOrigin, 255, 255, 255, 255);
+	
+	if (iShell == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	int iSkins = StudioHdr.FromEntity(iShell).numskinfamilies;
+	
+	Cel_ReplyToCommand(iClient, "Spawned a shell with {green}%d{default} skins (0-%d). Try {green}!skin{default}, {green}!color{default} and {green}!alpha{default} on it, then look at it and type {green}!shell{default} for its emblem lines.", iSkins, iSkins > 0 ? iSkins - 1 : 0);
+	
 	return Plugin_Handled;
 }
 
