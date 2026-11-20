@@ -499,3 +499,5 @@
 		   click rewinds you to where you were 3 seconds ago, and a dark shadow of you trails 2 seconds behind while
 		   it's out. Like other powers it does nothing in event areas.
 		 - !anim and !cland are taken out of the shop until they're built (they were sold but never worked).
+		 - The Time emblem's shadow trails about a second behind you (it was two), moves smoothly, and copies your
+		   animations (walking, crouching, jumping, aiming) instead of standing in a T-pose.

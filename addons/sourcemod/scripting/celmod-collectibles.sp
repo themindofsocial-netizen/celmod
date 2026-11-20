@@ -242,6 +242,17 @@ int g_iTimeHead[MAXPLAYERS + 1];
 int g_iTimeFilled[MAXPLAYERS + 1];
 float g_fTimeBoostUntil[MAXPLAYERS + 1];
 int g_iTimeShadowRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+// The shadow's own frame-by-frame record (about 1.2 seconds), played back SHADOW_DELAY frames late.
+#define SHADOW_FRAMES 80
+#define SHADOW_DELAY 60
+#define SHADOW_POSES 24
+float g_fShadowPos[MAXPLAYERS + 1][SHADOW_FRAMES][3];
+float g_fShadowAng[MAXPLAYERS + 1][SHADOW_FRAMES][3];
+int g_iShadowSeq[MAXPLAYERS + 1][SHADOW_FRAMES];
+float g_fShadowCycle[MAXPLAYERS + 1][SHADOW_FRAMES];
+float g_fShadowPose[MAXPLAYERS + 1][SHADOW_FRAMES][SHADOW_POSES];
+int g_iShadowHead[MAXPLAYERS + 1];
+int g_iShadowFilled[MAXPLAYERS + 1];
 int g_iDigSwings[MAXPLAYERS + 1];
 ConVar g_cvDigEmblemChance;
 ConVar g_cvDigMoneyChance;
@@ -2626,10 +2637,6 @@ void ThinkTimeEmblem(int iClient, int iItem)
 		return;
 	}
 
-	// 2 seconds back (10 samples) or as far as there is.
-	int iBack = g_iTimeFilled[iClient] < 10 ? g_iTimeFilled[iClient] : 10;
-	int iSlot = (g_iTimeHead[iClient] - iBack + TIME_SAMPLES * 2) % TIME_SAMPLES;
-
 	if (iShadow == INVALID_ENT_REFERENCE)
 	{
 		char sModel[PLATFORM_MAX_PATH];
@@ -2650,14 +2657,74 @@ void ThinkTimeEmblem(int iClient, int iItem)
 		SetEntityRenderMode(iShadow, RENDER_TRANSCOLOR);
 		SetEntityRenderColor(iShadow, 60, 60, 60, 130);
 
+		// Driven frame by frame from the player's own animation (see ThinkTimeShadows), never by itself.
+		SetEntPropFloat(iShadow, Prop_Data, "m_flPlaybackRate", 0.0);
+
 		g_iTimeShadowRef[iClient] = EntIndexToEntRef(iShadow);
+		g_iShadowFilled[iClient] = 0;
 	}
+}
 
-	float fAngles[3];
+// Every frame: records each Time holder's position, angles and animation, and puts their shadow where and how they
+// were SHADOW_DELAY frames ago (about a second), so it follows smoothly and copies every animation.
+void ThinkTimeShadows()
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		int iShadow = EntRefToEntIndex(g_iTimeShadowRef[i]);
 
-	fAngles[1] = g_fTimeAng[iClient][iSlot][1];
+		if (g_iTimeShadowRef[i] == INVALID_ENT_REFERENCE || iShadow == INVALID_ENT_REFERENCE || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			continue;
+		}
 
-	TeleportEntity(iShadow, g_fTimePos[iClient][iSlot], fAngles, NULL_VECTOR);
+		int iHead = g_iShadowHead[i];
+
+		GetClientAbsOrigin(i, g_fShadowPos[i][iHead]);
+		GetClientAbsAngles(i, g_fShadowAng[i][iHead]);
+		g_iShadowSeq[i][iHead] = GetEntProp(i, Prop_Send, "m_nSequence");
+		g_fShadowCycle[i][iHead] = GetEntPropFloat(i, Prop_Data, "m_flCycle");
+
+		int iPoses = GetEntPropArraySize(i, Prop_Send, "m_flPoseParameter");
+		int iShadowPoses = GetEntPropArraySize(iShadow, Prop_Send, "m_flPoseParameter");
+
+		if (iShadowPoses < iPoses) iPoses = iShadowPoses;
+		if (iPoses > SHADOW_POSES) iPoses = SHADOW_POSES;
+
+		for (int k = 0; k < iPoses; k++)
+		{
+			g_fShadowPose[i][iHead][k] = GetEntPropFloat(i, Prop_Send, "m_flPoseParameter", k);
+		}
+
+		g_iShadowHead[i] = (iHead + 1) % SHADOW_FRAMES;
+
+		if (g_iShadowFilled[i] < SHADOW_FRAMES)
+		{
+			g_iShadowFilled[i]++;
+		}
+
+		// SHADOW_DELAY frames back, or the oldest there is.
+		int iBack = g_iShadowFilled[i] < SHADOW_DELAY ? g_iShadowFilled[i] : SHADOW_DELAY;
+		int iSlot = (g_iShadowHead[i] - iBack + SHADOW_FRAMES * 2) % SHADOW_FRAMES;
+
+		float fAngles[3];
+
+		fAngles[1] = g_fShadowAng[i][iSlot][1];
+
+		TeleportEntity(iShadow, g_fShadowPos[i][iSlot], fAngles, NULL_VECTOR);
+
+		if (GetEntProp(iShadow, Prop_Send, "m_nSequence") != g_iShadowSeq[i][iSlot])
+		{
+			SetEntProp(iShadow, Prop_Send, "m_nSequence", g_iShadowSeq[i][iSlot]);
+		}
+
+		SetEntPropFloat(iShadow, Prop_Data, "m_flCycle", g_fShadowCycle[i][iSlot]);
+
+		for (int k = 0; k < iPoses; k++)
+		{
+			SetEntPropFloat(iShadow, Prop_Send, "m_flPoseParameter", g_fShadowPose[i][iSlot][k], k);
+		}
+	}
 }
 
 void RemoveTimeShadow(int iClient)
@@ -5387,6 +5454,8 @@ public void OnGameFrame()
 	float fNow = GetGameTime();
 
 	UpdateThirdPersonCameras();
+
+	ThinkTimeShadows();
 
 	Fx_ThinkStreams();
 
