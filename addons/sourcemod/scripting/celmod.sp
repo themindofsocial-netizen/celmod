@@ -1634,10 +1634,9 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	//Nobody builds in another player's land unless they're on its build team. Admins with !zonebypass can.
 	if (iClient > 0 && iClient <= MaxClients && IsClientInGame(iClient))
 	{
-		int iLandOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+		int iLandOwner = Cel_OtherLandAt(iClient, fOrigin);
 		
-		if (iLandOwner > 0 && iLandOwner <= MaxClients && iLandOwner != iClient && IsClientInGame(iLandOwner)
-			&& !Cel_IsOnBuildTeam(iLandOwner, iClient) && !Cel_ZoneExempt(iClient))
+		if (iLandOwner != 0)
 		{
 			char sMessage[160];
 			

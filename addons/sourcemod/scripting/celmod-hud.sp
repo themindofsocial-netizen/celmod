@@ -223,6 +223,23 @@ public Action Handle_Chat(int iClient, char[] sCommand, int iArgs)
 	return Plugin_Continue;
 }
 
+//An entity CelMod has no type for (a turret, for one) shows its own name when it has one.
+char[] UnknownCelName(int iEntity)
+{
+	char sName[64];
+	
+	Cel_GetPropName(iEntity, sName, sizeof(sName));
+	
+	if (sName[0] == '\0')
+	{
+		strcopy(sName, sizeof(sName), "???");
+	} else {
+		sName[0] = CharToUpper(sName[0]);
+	}
+	
+	return sName;
+}
+
 //The title shown above a high-level player's name when someone looks at them.
 char[] LevelTitle(int iClient)
 {
@@ -482,11 +499,11 @@ public Action Timer_CommandHUD(Handle hTimer)
 						} else if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_UNKNOWN)) {
 							if (Cel_CheckOwner(i, iEntity))
 							{
-								Format(sMessage, sizeof(sMessage), "Cel: ???\nPrice: %i", Cel_GetEntityPrice(iEntity));
+								Format(sMessage, sizeof(sMessage), "Cel: %s\nPrice: %i", UnknownCelName(iEntity), Cel_GetEntityPrice(iEntity));
 
 								Cel_GetHudColor(i, iColor);
 							} else {
-								Format(sMessage, sizeof(sMessage), "Owner: %N\nCel: ???\nPrice: %i", Cel_GetOwner(iEntity), Cel_GetEntityPrice(iEntity));
+								Format(sMessage, sizeof(sMessage), "Owner: %N\nCel: %s\nPrice: %i", Cel_GetOwner(iEntity), UnknownCelName(iEntity), Cel_GetEntityPrice(iEntity));
 
 								Cel_GetHudColor(Cel_GetOwner(iEntity), iColor);
 							}
@@ -784,11 +801,11 @@ public Action Timer_HUD(Handle hTimer)
 					} else if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_UNKNOWN)) {
 						if (Cel_CheckOwner(i, iEntity))
 						{
-							Format(sHUDMessage, sizeof(sHUDMessage), "Cel: %s", "???");
+							Format(sHUDMessage, sizeof(sHUDMessage), "Cel: %s", UnknownCelName(iEntity));
 							
 							Cel_GetHudColor(i, iHUDColor);
 						} else {
-							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\nCel: %s", Cel_GetOwner(iEntity), "???");
+							Format(sHUDMessage, sizeof(sHUDMessage), "Owner: %N\nCel: %s", Cel_GetOwner(iEntity), UnknownCelName(iEntity));
 							
 							Cel_GetHudColor(Cel_GetOwner(iEntity), iHUDColor);
 						}

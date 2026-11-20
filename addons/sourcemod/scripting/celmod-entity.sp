@@ -3129,6 +3129,33 @@ public int Native_SetOwner(Handle hPlugin, int iNumParams)
 	
 	int iOldOwner = Cel_IsEntity(iEntity) ? Cel_GetOwner(iEntity) : -1;
 	
+	//A brand new cel (door, light, internet cel, bit, effect...) placed in another player's land is removed: nobody
+	//builds there without being on its build team. (Props are refused before they spawn. Cleers boxes are never
+	//removed, so no money is lost.)
+	if (bValidOwner && iOldOwner <= 0 && IsClientInGame(iClient) && iEntity > MaxClients && IsValidEntity(iEntity)
+		&& HasEntProp(iEntity, Prop_Data, "m_vecAbsOrigin"))
+	{
+		char sClass[32];
+		
+		GetEntityClassname(iEntity, sClass, sizeof(sClass));
+		
+		if (!StrEqual(sClass, "cel_cleerbox", false))
+		{
+			float fWhere[3];
+			
+			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fWhere);
+			
+			int iLandOwner = Cel_OtherLandAt(iClient, fWhere);
+			
+			if (iLandOwner != 0)
+			{
+				Cel_PrintToChat(iClient, "That's {green}%N{default}'s land: you can only build there if they add you with {green}!addteam{default}.", iLandOwner);
+				AcceptEntityInput(iEntity, "Kill");
+				return false;
+			}
+		}
+	}
+	
 	Entity_SetGlobalName(iEntity, "CelMod:%i", bValidOwner ? GetClientSerial(iClient) : -1);
 	
 	//An entity changing hands between two players (sale, trade, gift or admin command).

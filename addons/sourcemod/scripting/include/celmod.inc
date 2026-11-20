@@ -1862,6 +1862,30 @@ stock bool Cel_RefusePerm(int iClient, int iEntity)
 	return true;
 }
 
+// The other player whose land a spot is in, when iClient may not build there (0 = fine). The spot is tested a little
+// above too: a land's box starts at the height of the corner its owner aimed at, and the ground can dip below that.
+stock int Cel_OtherLandAt(int iClient, const float fPos[3])
+{
+	float fTest[3];
+	static const float fHeights[] = { 0.0, 16.0, 48.0 };
+	
+	for (int h = 0; h < sizeof(fHeights); h++)
+	{
+		fTest = fPos;
+		fTest[2] += fHeights[h];
+		
+		int iOwner = Cel_GetLandOwnerFromPosition(fTest);
+		
+		if (iOwner > 0 && iOwner <= MaxClients && iOwner != iClient && IsClientInGame(iOwner) && Cel_IsLandCreated(iOwner)
+			&& !Cel_IsOnBuildTeam(iOwner, iClient) && !Cel_ZoneExempt(iClient))
+		{
+			return iOwner;
+		}
+	}
+	
+	return 0;
+}
+
 stock int Cel_EdictReserve()
 {
 	ConVar cvReserve = FindConVar("cm_edict_reserve");

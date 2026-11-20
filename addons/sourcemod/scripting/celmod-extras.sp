@@ -866,13 +866,7 @@ public Action Timer_LandBans(Handle hTimer)
 			continue;
 		}
 		
-		//!nofly: flying into the land puts the player back on their feet.
-		if (g_bNoFly[iOwner] && GetEntityMoveType(i) == MOVETYPE_NOCLIP && NoFlyOwnerAt(i) == iOwner)
-		{
-			SetEntityMoveType(i, MOVETYPE_WALK);
-			
-			Cel_PrintToChat(i, "{green}%N{default} has turned noclip off in their land.", iOwner);
-		}
+		//(!nofly is enforced at the land's edge by Timer_BlockLands: a flying visitor never gets in.)
 		
 		//Remembered here (twice a second) so the weapon block below doesn't look up lands every frame.
 		if (g_bNoWeps[iOwner])

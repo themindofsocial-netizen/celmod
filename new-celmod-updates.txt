@@ -501,3 +501,6 @@
 		 - !anim and !cland are taken out of the shop until they're built (they were sold but never worked).
 		 - The Time emblem's shadow trails about a second behind you (it was two), moves smoothly, and copies your
 		   animations (walking, crouching, jumping, aiming) instead of standing in a T-pose.
+		 - Turrets (and other cels without a category) show their name on the HUD instead of "Cel: ???".
+		 - !nofly lands: a flying visitor is stopped at the edge every time, instead of getting in after a moment and losing noclip.
+		 - Building in another player's land is refused more reliably (the spot is checked a little above the floor too), and cels, bits and effects placed there are removed.
