@@ -107,7 +107,7 @@ public void CMHelp_OnConVarChanged(ConVar cvConVar, const char[] sOldValue, cons
 		g_cvPropListURL.GetString(g_sPropListURL, sizeof(g_sPropListURL));
 		PrintToServer("|CelMod| Prop list url updated to %s.", sNewValue);
 	} else if (cvConVar == g_cvUpdateListURL) {
-		g_cvPropListURL.GetString(g_sUpdateListURL, sizeof(g_sUpdateListURL));
+		g_cvUpdateListURL.GetString(g_sUpdateListURL, sizeof(g_sUpdateListURL));
 		PrintToServer("|CelMod| Update list url updated to %s.", sNewValue);
 	}
 }

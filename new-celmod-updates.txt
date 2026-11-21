@@ -582,3 +582,5 @@
 		   were. Each is named after its file (!sound alarm_citizen_loop1). !soundlist shows the folders, and
 		   !soundlist <word> searches names and folders. The website's Sounds List has them all by folder, searchable.
 		 - Land skins cover the whole floor even where props stand on it (a prop on a tile used to leave that tile bare).
+		 - !sounds opens the website's Sounds List in the game's web viewer, like !colors (cm_sound_list_url).
+		   !sounds <word> and !soundlist <word> still search in chat.

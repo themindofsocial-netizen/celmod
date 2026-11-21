@@ -42,6 +42,7 @@ ConVar g_cvLandFeeMax;
 char g_sMessage[MAXENTITIES + 1][192];
 char g_sSound[MAXENTITIES + 1][PLATFORM_MAX_PATH];
 char g_sSoundDB[PLATFORM_MAX_PATH];
+ConVar g_cvSoundListURL;
 char g_sMusic[MAXENTITIES + 1][PLATFORM_MAX_PATH];
 float g_fMusicLength[MAXENTITIES + 1];
 float g_fMusicEnds[MAXENTITIES + 1];
@@ -152,7 +153,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_music", Command_Music, "|CelMod| Spawns a music cel that plays a song when used (and stops it when used again).");
 	RegConsoleCmd("v_celmusic", Command_CelMusic, "|CelMod| Lists the songs the music cel can play.");
 	RegConsoleCmd("v_soundlist", Command_SoundList, "|CelMod| Lists the sounds a sound cel can play: !soundlist [part of a name].");
-	RegConsoleCmd("v_sounds", Command_SoundList, "|CelMod| Lists the sounds a sound cel can play (same as !soundlist).");
+	RegConsoleCmd("v_sounds", Command_Sounds, "|CelMod| Opens the sound list (the website's Sounds List); !sounds <word> searches in chat like !soundlist.");
+	g_cvSoundListURL = CreateConVar("cm_sound_list_url", "https://celmod.net/sounds.php", "URL !sounds opens: the website's Sounds List.");
 	RegConsoleCmd("v_sound", Command_Sound, "|CelMod| Spawns a sound cel that plays a sound when used.");
 	RegConsoleCmd("v_undo", Command_Undo, "|CelMod| Removes the last entity you spawned.");
 	RegConsoleCmd("v_weld", Command_Weld, "|CelMod| Welds one of your entities to another so they move together.");
@@ -2151,6 +2153,26 @@ public void Hook_MusicUse(int iEntity, int iActivator, int iCaller, UseType utTy
 	float fLength = (g_fMusicLength[iEntity] > 0.0) ? g_fMusicLength[iEntity] : 600.0;
 	
 	g_fMusicEnds[iEntity] = GetGameTime() + fLength * 100.0 / g_iMusicPitch[iEntity];
+}
+
+//!sounds: opens the website's Sounds List in the game's web viewer, like !colors. With a word, it searches instead.
+public Action Command_Sounds(int iClient, int iArgs)
+{
+	if (iArgs > 0 || iClient < 1)
+	{
+		return Command_SoundList(iClient, iArgs);
+	}
+	
+	char sSetting[PLATFORM_MAX_PATH], sURL[PLATFORM_MAX_PATH];
+	
+	g_cvSoundListURL.GetString(sSetting, sizeof(sSetting));
+	Cel_CheckInputURL(sSetting, sURL, sizeof(sURL));
+	
+	Cel_OpenMOTDOnClient(iClient, true, "Cel's Web Viewer", sURL, MOTDPANEL_TYPE_URL);
+	
+	Cel_ReplyToCommand(iClient, "Displaying the sound list. {green}[tag]soundlist <word>{default} searches it in chat.");
+	
+	return Plugin_Handled;
 }
 
 //!soundlist [search]: the sounds a sound cel can play (thousands: every Half-Life 2 sound). Without a search it shows
