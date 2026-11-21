@@ -567,3 +567,6 @@
 		   says to press E).
 		 - Ammo boxes spawned with !ammo are taken by pressing E too, not by walking into them. If the ammo is for a gun
 		   you aren't carrying, it says so.
+		 - A button can be linked to up to 3 things (doors, lights, effects, animated props): !link the button, then the
+		   next thing, as many as 3 times. One press works all of them. !unlink on a button clears its links. Saved
+		   builds keep all three.

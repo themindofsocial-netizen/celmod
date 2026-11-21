@@ -2791,9 +2791,21 @@ public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
 		kvSave.SetNum("x_weld", iParent);
 	}
 	
-	if (Cel_GetEntityType(iEntity) == ENTTYPE_TRIGGER && Cel_GetTriggerLink(iEntity) > 0)
+	//A button's links (up to 3): x_link, x_link2, x_link3.
+	if (Cel_GetEntityType(iEntity) == ENTTYPE_TRIGGER)
 	{
-		kvSave.SetNum("x_link", Cel_GetTriggerLink(iEntity));
+		static const char sLinkKeys[][] = { "x_link", "x_link2", "x_link3" };
+		int iSaved = 0;
+		
+		for (int l = 0; l < sizeof(sLinkKeys); l++)
+		{
+			int iTarget = Cel_GetTriggerLink(iEntity, l);
+			
+			if (iTarget > 0)
+			{
+				kvSave.SetNum(sLinkKeys[iSaved++], iTarget);
+			}
+		}
 	}
 }
 
@@ -2844,13 +2856,14 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 	}
 	
 	//Links are made once the whole build is in, the other entity may not exist yet. 0 = teleport, 1 = weld, 2 = button link.
-	static const char sKeys[][] = { "x_teleport", "x_weld", "x_link" };
+	static const char sKeys[][] = { "x_teleport", "x_weld", "x_link", "x_link2", "x_link3" };
+	static const int iKinds[] = { 0, 1, 2, 2, 2 };
 	
 	for (int i = 0; i < sizeof(sKeys); i++)
 	{
 		if (kvSave.GetNum(sKeys[i], -1) != -1)
 		{
-			iLink[0] = i;
+			iLink[0] = iKinds[i];
 			iLink[1] = EntIndexToEntRef(iEntity);
 			iLink[2] = kvSave.GetNum(sKeys[i]);
 			

@@ -1115,7 +1115,7 @@ native char Cel_GetRenderFXName(RenderFx rfRenderFX, char[] sRenderFX, int iMaxL
 
 native int Cel_GetSaveSystemVersion();
 
-native int Cel_GetTriggerLink(int iEntity);
+native int Cel_GetTriggerLink(int iEntity, int iSlot = 0);
 
 native void Cel_SetTriggerLink(int iEntity, int iTarget);
 

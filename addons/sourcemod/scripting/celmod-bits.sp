@@ -30,7 +30,8 @@ ControlTriggerType g_cttTriggerType[MAXENTITIES + 1];
 bool g_bCreatingLink[MAXPLAYERS + 1];
 bool g_bHasLink[MAXENTITIES + 1];
 
-int g_iLinkedEntity[MAXENTITIES + 1];
+#define MAX_LINKS 3
+int g_iLinkedEntity[MAXENTITIES + 1][MAX_LINKS]; // up to 3 things a button works (-1 = an empty slot)
 int g_iLinkingEntity[MAXPLAYERS + 1];
 int g_iLinkStage[MAXPLAYERS + 1];
 
@@ -110,7 +111,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_ammocrate", Command_SpawnAmmoCrateBit, "|CelMod| Creates an ammo crate bit that will give ammo to the player.");
 	RegConsoleCmd("v_button", Command_SpawnButton, "|CelMod| Spawns a button trigger bit: !button [model], where the model is switch, combine, elevator, keypad, firetrap, switchbox, lever or any prop's name (!button list).");
 	RegConsoleCmd("v_charger", Command_SpawnChargerBit, "|CelMod| Creates a health/suit charger bit that will give health/suit to the player.");
-	RegConsoleCmd("v_link", Command_Link, "|CelMod| Creates a link between a trigger bit and an entity.");
+	RegConsoleCmd("v_link", Command_Link, "|CelMod| Links a button to a door, light, effect or animated prop (up to 3 per button): !link on the button, then on the thing.");
+	RegConsoleCmd("v_unlink", Command_Unlink, "|CelMod| Clears the links of the button you are looking at.");
 	RegConsoleCmd("v_animate", Command_Animate, "|CelMod| Animates a prop: !animate <1-10> saves where it is now as that frame; !link a button to it to play the frames. !animate speed <seconds>, play, clear.");
 	RegConsoleCmd("v_anim", Command_Animate, "|CelMod| Animates a prop (same as !animate).");
 	RegConsoleCmd("v_setpass", Command_SetPass, "|CelMod| Gives the button you are looking at a passcode (off to remove it).");
@@ -167,8 +169,34 @@ public Action Command_Link(int iClient, int iArgs)
 		{
 			if(Cel_CheckEntityType(iEntity, "door") || Cel_CheckEntityType(iEntity, "effect") || Cel_CheckEntityType(iEntity, "light") || (iEntity <= MAXENTITIES && g_iAnimMask[iEntity] != 0))
 			{
-				g_iLinkedEntity[g_iLinkingEntity[iClient]] = iEntity;
-				g_bHasLink[g_iLinkingEntity[iClient]] = true;
+				int iButton = g_iLinkingEntity[iClient], iSlot = -1;
+				
+				for (int l = 0; l < MAX_LINKS; l++)
+				{
+					if (g_iLinkedEntity[iButton][l] == iEntity)
+					{
+						g_bCreatingLink[iClient] = false;
+						g_iLinkStage[iClient] = 0;
+						Cel_ReplyToCommand(iClient, "That button is already linked to it.");
+						return Plugin_Handled;
+					}
+					
+					if (iSlot == -1 && (g_iLinkedEntity[iButton][l] == -1 || !IsValidEntity(g_iLinkedEntity[iButton][l]) || !Cel_IsEntity(g_iLinkedEntity[iButton][l])))
+					{
+						iSlot = l;
+					}
+				}
+				
+				if (iSlot == -1)
+				{
+					g_bCreatingLink[iClient] = false;
+					g_iLinkStage[iClient] = 0;
+					Cel_ReplyToCommand(iClient, "That button already works {green}%d{default} things, the most it can. Look at it and type {green}!unlink{default} to clear its links.", MAX_LINKS);
+					return Plugin_Handled;
+				}
+				
+				g_iLinkedEntity[iButton][iSlot] = iEntity;
+				g_bHasLink[iButton] = true;
 				
 				g_bCreatingLink[iClient] = false;
 				g_iLinkStage[iClient] = 0;
@@ -1016,7 +1044,11 @@ public int Native_SpawnButton(Handle hPlugin, int iNumParams)
 	TeleportEntity(iBase, fOrigin, fAngles, NULL_VECTOR);
 	
 	g_bHasLink[iBase] = false;
-	g_iLinkedEntity[iBase] = -1;
+	
+	for (int l = 0; l < MAX_LINKS; l++)
+	{
+		g_iLinkedEntity[iBase][l] = -1;
+	}
 	
 	Cel_AddToCelCount(iClient);
 	Cel_SetColor(iBase, iColor[0], iColor[1], iColor[2], iColor[3]);
@@ -1258,29 +1290,36 @@ public int Native_TriggerEntity(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1), iEntity = GetNativeCell(2);
 	
-	if(Cel_IsEntity(g_iLinkedEntity[iEntity]))
+	//Everything the button is linked to, in the order they were linked.
+	for (int l = 0; l < MAX_LINKS; l++)
 	{
-		switch(Cel_GetEntityType(g_iLinkedEntity[iEntity]))
+		int iTarget = g_iLinkedEntity[iEntity][l];
+		
+		if (iTarget <= MaxClients || !IsValidEntity(iTarget) || !Cel_IsEntity(iTarget))
+		{
+			continue;
+		}
+		
+		switch(Cel_GetEntityType(iTarget))
 		{
 			case ENTTYPE_DOOR:
 			{
-				AcceptEntityInput(g_iLinkedEntity[iEntity], "Toggle", iClient);
+				AcceptEntityInput(iTarget, "Toggle", iClient);
 			}
 			
 			case ENTTYPE_LIGHT:
 			{
-				AcceptEntityInput(Entity_GetEntityAttachment(g_iLinkedEntity[iEntity]), "Toggle", iClient);
-				
+				AcceptEntityInput(Entity_GetEntityAttachment(iTarget), "Toggle", iClient);
 			}
 			
 			case ENTTYPE_EFFECT:
 			{
-				Cel_ActivateEffect(g_iLinkedEntity[iEntity]);
+				Cel_ActivateEffect(iTarget);
 			}
 			
 			default:
 			{
-				PlayAnimation(g_iLinkedEntity[iEntity]);
+				PlayAnimation(iTarget);
 			}
 		}
 	}
@@ -1489,21 +1528,93 @@ public void Hook_WeaponBitUse(int iEntity, int iActivator, int iCaller, UseType 
 	}
 }
 
+//Cel_GetTriggerLink(entity, slot = 0): one of the (up to 3) things a button is linked to, or -1.
 public int Native_GetTriggerLink(Handle hPlugin, int iNumParams)
 {
-	int iEntity = GetNativeCell(1);
+	int iEntity = GetNativeCell(1), iSlot = (iNumParams >= 2) ? GetNativeCell(2) : 0;
 	
-	return (iEntity > 0 && iEntity <= MAXENTITIES && g_bHasLink[iEntity]) ? g_iLinkedEntity[iEntity] : -1;
+	if (iEntity <= 0 || iEntity > MAXENTITIES || !g_bHasLink[iEntity] || iSlot < 0 || iSlot >= MAX_LINKS)
+	{
+		return -1;
+	}
+	
+	int iTarget = g_iLinkedEntity[iEntity][iSlot];
+	
+	return (iTarget > MaxClients && IsValidEntity(iTarget)) ? iTarget : -1;
 }
 
+//Cel_SetTriggerLink(entity, target): adds a link (a loaded build's), or -1 clears them all.
 public int Native_SetTriggerLink(Handle hPlugin, int iNumParams)
 {
 	int iEntity = GetNativeCell(1), iTarget = GetNativeCell(2);
 	
-	g_iLinkedEntity[iEntity] = iTarget;
-	g_bHasLink[iEntity] = (iTarget != -1);
+	if (iEntity <= 0 || iEntity > MAXENTITIES)
+	{
+		return false;
+	}
 	
-	return true;
+	if (iTarget == -1)
+	{
+		for (int l = 0; l < MAX_LINKS; l++)
+		{
+			g_iLinkedEntity[iEntity][l] = -1;
+		}
+		
+		g_bHasLink[iEntity] = false;
+		return true;
+	}
+	
+	for (int l = 0; l < MAX_LINKS; l++)
+	{
+		if (g_iLinkedEntity[iEntity][l] == iTarget)
+		{
+			return true;
+		}
+		
+		if (g_iLinkedEntity[iEntity][l] == -1 || !IsValidEntity(g_iLinkedEntity[iEntity][l]))
+		{
+			g_iLinkedEntity[iEntity][l] = iTarget;
+			g_bHasLink[iEntity] = true;
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+//!unlink: clears the links of the button you're looking at.
+public Action Command_Unlink(int iClient, int iArgs)
+{
+	int iEntity = Cel_GetClientAimTarget(iClient);
+	
+	if (iEntity == -1)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+	
+	if (Cel_GetEntityType(iEntity) != ENTTYPE_TRIGGER)
+	{
+		Cel_ReplyToCommand(iClient, "Look at a button to clear its links.");
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckOwner(iClient, iEntity))
+	{
+		Cel_NotYours(iClient, iEntity);
+		return Plugin_Handled;
+	}
+	
+	for (int l = 0; l < MAX_LINKS; l++)
+	{
+		g_iLinkedEntity[iEntity][l] = -1;
+	}
+	
+	g_bHasLink[iEntity] = false;
+	
+	Cel_ReplyToCommand(iClient, "The button's links are cleared. Link it again with {green}!link{default}.");
+	
+	return Plugin_Handled;
 }
 
 //Passcode buttons: the owner sets one with !setpass while looking at the button; anyone else pressing it is asked for
