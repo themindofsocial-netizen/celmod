@@ -528,3 +528,14 @@
 		 - Admins: !disputes lists the open disputes in a menu. Pick one to read it (Steam IDs and the demo's name go
 		   to the console) and mark it resolved, closed or open again; the website's Disputes tab shows the same.
 		   !disputes all includes finished ones.
+		 - The basic emblems work like the originals again, and each one's upgrade uses skin 2 with (S) in its name:
+		   - Fire: flamethrower. Fire (S): a redder, hotter flamethrower (255 50 50, more damage).
+		   - Blue (was Water): walk on water (hold crouch to swim). Blue (S): sprays water like a gas and puts out fires.
+		   - Pink: no power. Pink (S): sprays a pink gas that slowly heals the players it reaches.
+		   - Green (was Lime): jump.
+		   - Purple (was Speed): faster. Purple (S): just as fast, but jumps stay as high as without it.
+		   - Yellow (new): no power. Yellow (S): electric. Sparks crackle around you and its bolts jump between players.
+		   - Cyan: no power. Cyan (S): the skin 2 look.
+		   - Black turns its holder black, and White gives its holder a bright glow. Both still have big versions.
+		   Upgrades are made at the Power Booth (3 of the emblem). Fire's and Water's old upgrades (Inferno, Tsunami)
+		   stay with the players who have them.

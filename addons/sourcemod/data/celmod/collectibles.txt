@@ -146,9 +146,32 @@
 			"secondaryvalue"	"70"
 			"secondarycooldown"	"3.0"
 			"beamcolor"		"255 140 40 255"
-			"upgradesto"	"inferno"
+			"upgradesto"	"fire_s"
 			"upgradecost"	"3"
 			"dropweight"	"15"
+		}
+		// Fire (S): the upgraded Fire. A redder, hotter flamethrower.
+		"fire_s"
+		{
+			"name"			"Fire (S)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"255 50 50 255"
+			"handscale"		"1.0"
+			"handoffset"		"8 5 -2"
+			"handangles"		"0 -90 0"
+			"power"			"flamethrower"
+			"value"			"5"
+			"cooldown"		"0.08"
+			"range"			"380"
+			"ignite"			"2.5"
+			"sprite"			"sprites/flamelet1.vmt"
+			"secondary"		"fireball"
+			"secondaryvalue"	"90"
+			"secondarycooldown"	"3.0"
+			"beamcolor"		"255 50 50 255"
+			"dropweight"		"0"
+			"exclusive"		"upgrade"
 		}
 		"silver"
 {
@@ -208,25 +231,35 @@
 		}
 		"water"
 		{
-			"name"			"Water"
+			"name"			"Blue"
 			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
 			"color"			"0 0 255 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"shot"
-			"value"			"3"
-			"cooldown"		"0.15"
-			"range"			"700"
-			"dmgtype"		"drown"
-			"fx"			"waterbolt"
-			"sprite"		"sprites/glow04_noz.vmt"
-			"knockback"		"250"
-			"beamcolor"		"40 110 255 255"
-			"upgradesto"	"tsunami"
+			"power"			"waterwalk"
+			"upgradesto"	"blue_s"
 			"upgradecost"	"3"
 			"dropweight"	"12"
+		}
+		// Blue (S): sprays water like a gas. It puts out burning players, enemies and props.
+		"blue_s"
+		{
+			"name"			"Blue (S)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"0 0 255 255"
+			"handscale"		"1.0"
+			"handoffset"		"8 5 -2"
+			"handangles"		"0 -90 0"
+			"power"			"gas"
+			"gas"			"water"
+			"cooldown"		"0.1"
+			"range"			"320"
+			"beamcolor"		"60 140 255 255"
+			"dropweight"		"0"
+			"exclusive"		"upgrade"
 		}
 		"energy"
 		{
@@ -411,7 +444,7 @@
 		}
 		"speed"
 		{
-			"name"			"Speed"
+			"name"			"Purple"
 			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
 			"color"			"127 0 127 255"
@@ -421,6 +454,24 @@
 			"power"			"speed"
 			"value"			"1.4"
 			"dropweight"	"15"
+			"upgradesto"		"purple_s"
+			"upgradecost"		"3"
+		}
+		// Purple (S): the same speed as Purple, but jumps stay as high as without it.
+		"purple_s"
+		{
+			"name"			"Purple (S)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"127 0 127 255"
+			"handscale"		"1.0"
+			"handoffset"		"8 5 -2"
+			"handangles"		"0 -90 0"
+			"power"			"speed"
+			"value"			"1.4"
+			"normaljump"		"1"
+			"dropweight"		"0"
+			"exclusive"		"upgrade"
 		}
 		"orange"
 		{
@@ -523,12 +574,29 @@
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"medic"
-			"value"			"5"
-			"cooldown"		"0.25"
-			"range"			"1500"
-			"fx"			"lovebeam"
+			"power"			"none"
 			"dropweight"	"10"
+			"upgradesto"		"pink_s"
+			"upgradecost"		"3"
+		}
+		// Pink (S): sprays a pink gas that slowly heals the players it reaches.
+		"pink_s"
+		{
+			"name"			"Pink (S)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"255 100 255 255"
+			"handscale"		"1.0"
+			"handoffset"		"8 5 -2"
+			"handangles"		"0 -90 0"
+			"power"			"gas"
+			"gas"			"heal"
+			"value"			"1"
+			"cooldown"		"0.1"
+			"range"			"300"
+			"beamcolor"		"255 120 230 255"
+			"dropweight"		"0"
+			"exclusive"		"upgrade"
 		}
 		"abyss"
 		{
@@ -660,6 +728,8 @@
 			"handangles"	"0 -90 0"
 			"dropweight"	"0"
 			"exclusive"		"dig"
+			"power"			"none"
+			"playercolor"		"0 0 0 255"
 		}
 		"white"
 		{
@@ -672,6 +742,8 @@
 			"handangles"	"0 -90 0"
 			"dropweight"	"0"
 			"exclusive"		"dig"
+			"power"			"none"
+			"aura"			"radiant"
 		}
 		"inferno"
 		{
@@ -899,15 +971,16 @@
 }
 		"lime"
 		{
-			"name"			"Lime"
+			"name"			"Green"
 			"model"			"models/celmod/phys8.mdl"
 			"skin"			"0"
 			"color"			"50 255 50 255"
 			"handscale"		"1.0"
 			"handoffset"	"8 5 -2"
 			"handangles"	"0 -90 0"
-			"power"			"none"
+			"power"			"jump"
 			"dropweight"	"10"
+			"value"			"340"
 		}
 		"cyan"
 		{
@@ -920,6 +993,56 @@
 			"handangles"	"0 -90 0"
 			"power"			"none"
 			"dropweight"	"10"
+			"upgradesto"		"cyan_s"
+			"upgradecost"		"3"
+		}
+		"cyan_s"
+		{
+			"name"			"Cyan (S)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"30 140 255 255"
+			"handscale"		"1.0"
+			"handoffset"		"8 5 -2"
+			"handangles"		"0 -90 0"
+			"power"			"none"
+			"dropweight"		"0"
+			"exclusive"		"upgrade"
+		}
+		"yellow"
+		{
+			"name"			"Yellow"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"0"
+			"color"			"255 255 0 255"
+			"handscale"		"1.0"
+			"handoffset"		"8 5 -2"
+			"handangles"		"0 -90 0"
+			"power"			"none"
+			"upgradesto"		"yellow_s"
+			"upgradecost"		"3"
+			"dropweight"		"10"
+		}
+		// Yellow (S): electric. Sparks crackle around you and a bolt jumps between the players you shoot.
+		"yellow_s"
+		{
+			"name"			"Yellow (S)"
+			"model"			"models/celmod/phys8.mdl"
+			"skin"			"2"
+			"color"			"255 255 0 255"
+			"handscale"		"1.0"
+			"handoffset"		"8 5 -2"
+			"handangles"		"0 -90 0"
+			"power"			"shock"
+			"value"			"8"
+			"cooldown"		"0.5"
+			"range"			"700"
+			"chain"			"2"
+			"fx"			"chainspark"
+			"aura"			"crackle"
+			"beamcolor"		"255 255 90 255"
+			"dropweight"		"0"
+			"exclusive"		"upgrade"
 		}
 		"sunset"
 		{

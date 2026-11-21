@@ -56,6 +56,7 @@
 #define SOUND_DIG "physics/surfaces/sand_impact_bullet1.wav"
 #define SOUND_TRASH "physics/metal/metal_solid_impact_soft1.wav"
 #define SOUND_HEAL "items/medshot4.wav"
+#define SOUND_GAS "ambient/gas/steam2.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
 #define SOUND_BLINK "ambient/machines/teleport1.wav"
 #define SOUND_ICE "physics/glass/glass_impact_bullet4.wav"
@@ -131,7 +132,24 @@ enum struct Item
 	bool bBoneMerge;
 	char sBase[32];
 	float fDamage;
+	bool bNormalJump; // "speed": jumps stay as high as without the emblem (Purple (S))
+	char sGas[12];    // "gas": water (puts out fires) or heal (heals the players it reaches)
 }
+
+//Purple (S): while in the air the speed boost is swapped for real speed, so jumps are as high as without it.
+bool g_bAirSpeed[MAXPLAYERS + 1];
+float g_fAirScale[MAXPLAYERS + 1] = { 1.0, ... };
+bool g_bNormalJumpActive[MAXPLAYERS + 1];
+
+//Blue: an invisible platform under the holder's feet at the water's surface.
+int g_iWaterPadRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+bool g_bWaterWalkActive[MAXPLAYERS + 1];
+
+//The (S) gas emblems: a coloured jet (env_steam) from the holder, on while they keep firing.
+int g_iGasRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
+float g_fGasUntil[MAXPLAYERS + 1];
+
+#define WATERPAD_MODEL "models/props_junk/wood_pallet001a.mdl"
 
 enum struct PlayerModel
 {
@@ -653,6 +671,8 @@ public void OnMapStart()
 	PrecacheSound(SOUND_ICE, true);
 	PrecacheSound(SOUND_SHOCK, true);
 	PrecacheSound(SOUND_HEAL, true);
+	PrecacheSound(SOUND_GAS, true);
+	PrecacheModel(WATERPAD_MODEL, true);
 	PrecacheSound(SOUND_QUAKE, true);
 	PrecacheSound(SOUND_FLASH, true);
 	PrecacheSound(SOUND_CANISTER, true);
@@ -760,6 +780,11 @@ public void OnClientDisconnect(int iClient)
 
 	RemoveThirdPersonCamera(iClient);
 	RemoveTimeShadow(iClient);
+	RemoveWaterPad(iClient);
+	RemoveGas(iClient);
+	g_bAirSpeed[iClient] = false;
+	g_bNormalJumpActive[iClient] = false;
+	g_bWaterWalkActive[iClient] = false;
 	g_iTimeFilled[iClient] = 0;
 	g_fTimeBoostUntil[iClient] = 0.0;
 
@@ -2797,6 +2822,302 @@ void ThinkTimeShadows()
 	}
 }
 
+//Purple (S) and Blue, every frame.
+void ThinkSpecialMovement()
+{
+	float fVelocity[3], fNow = GetGameTime();
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			continue;
+		}
+
+		// The gas jet stops a moment after the player stops firing.
+		if (g_iGasRef[i] != INVALID_ENT_REFERENCE && fNow > g_fGasUntil[i])
+		{
+			RemoveGas(i);
+		}
+
+		bool bOnGround = (GetEntityFlags(i) & FL_ONGROUND) != 0;
+
+		// Purple (S): lagged movement speeds up the whole player, gravity included, which changes how jumps feel.
+		// In the air it is swapped for the same speed in the velocity, and swapped back on landing.
+		if (!bOnGround && !g_bAirSpeed[i] && g_bNormalJumpActive[i] && GetEntityMoveType(i) == MOVETYPE_WALK)
+		{
+			float fScale = GetEntPropFloat(i, Prop_Data, "m_flLaggedMovementValue");
+
+			if (fScale > 1.0)
+			{
+				GetEntPropVector(i, Prop_Data, "m_vecVelocity", fVelocity);
+				fVelocity[0] *= fScale;
+				fVelocity[1] *= fScale;
+				TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fVelocity);
+				SetEntPropFloat(i, Prop_Data, "m_flLaggedMovementValue", 1.0);
+
+				g_fAirScale[i] = fScale;
+				g_bAirSpeed[i] = true;
+			}
+		} else if (g_bAirSpeed[i] && (bOnGround || GetEntityMoveType(i) != MOVETYPE_WALK))
+		{
+			GetEntPropVector(i, Prop_Data, "m_vecVelocity", fVelocity);
+			fVelocity[0] /= g_fAirScale[i];
+			fVelocity[1] /= g_fAirScale[i];
+			TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fVelocity);
+			SetEntPropFloat(i, Prop_Data, "m_flLaggedMovementValue", g_fAirScale[i]);
+
+			g_bAirSpeed[i] = false;
+		}
+
+		ThinkWaterWalk(i);
+	}
+}
+
+bool IsWater(const float fPos[3])
+{
+	return (TR_GetPointContents(fPos) & (CONTENTS_WATER | CONTENTS_SLIME)) != 0;
+}
+
+//Blue: walk on water. When the holder's feet are in water, or just above it, a hidden platform sits under them at
+//the surface. Holding crouch lets them sink and swim as normal.
+void ThinkWaterWalk(int iClient)
+{
+	float fFeet[3], fTest[3], fSurface;
+	bool bFound = false;
+
+	if (!g_bWaterWalkActive[iClient] || (GetClientButtons(iClient) & IN_DUCK) || GetEntityMoveType(iClient) != MOVETYPE_WALK)
+	{
+		RemoveWaterPad(iClient);
+		return;
+	}
+
+	GetClientAbsOrigin(iClient, fFeet);
+	fTest = fFeet;
+	fTest[2] += 1.0;
+
+	if (IsWater(fTest))
+	{
+		// Feet under water: the surface is somewhere above (only near it: a player deep down stays down).
+		for (float fUp = 2.0; fUp <= 40.0; fUp += 2.0)
+		{
+			fTest[2] = fFeet[2] + fUp;
+
+			if (!IsWater(fTest))
+			{
+				fSurface = fTest[2] - 1.0;
+				bFound = true;
+				break;
+			}
+		}
+	} else {
+		// Just above the water: the surface is a little below.
+		for (float fDown = 1.0; fDown <= 24.0; fDown += 1.0)
+		{
+			fTest[2] = fFeet[2] - fDown;
+
+			if (IsWater(fTest))
+			{
+				fSurface = fTest[2] + 1.0;
+				bFound = true;
+				break;
+			}
+		}
+	}
+
+	if (!bFound)
+	{
+		RemoveWaterPad(iClient);
+		return;
+	}
+
+	int iPad = EntRefToEntIndex(g_iWaterPadRef[iClient]);
+
+	if (iPad == INVALID_ENT_REFERENCE)
+	{
+		iPad = CreateEntityByName("prop_dynamic_override");
+
+		if (iPad == -1)
+		{
+			return;
+		}
+
+		DispatchKeyValue(iPad, "model", WATERPAD_MODEL);
+		DispatchKeyValue(iPad, "solid", "6");
+		DispatchKeyValue(iPad, "disableshadows", "1");
+		DispatchSpawn(iPad);
+
+		SetEntityRenderMode(iPad, RENDER_NONE);
+
+		g_iWaterPadRef[iClient] = EntIndexToEntRef(iPad);
+	}
+
+	// Lift a player whose feet went under, then put the platform's top at the surface under them.
+	if (fFeet[2] < fSurface)
+	{
+		float fVelocity[3];
+
+		GetEntPropVector(iClient, Prop_Data, "m_vecVelocity", fVelocity);
+
+		if (fVelocity[2] < 0.0)
+		{
+			fVelocity[2] = 0.0;
+		}
+
+		fFeet[2] = fSurface + 0.5;
+		TeleportEntity(iClient, fFeet, NULL_VECTOR, fVelocity);
+	}
+
+	float fMaxs[3], fPad[3];
+
+	GetEntPropVector(iPad, Prop_Send, "m_vecMaxs", fMaxs);
+
+	fPad[0] = fFeet[0];
+	fPad[1] = fFeet[1];
+	fPad[2] = fSurface - fMaxs[2];
+
+	TeleportEntity(iPad, fPad, view_as<float>({ 0.0, 0.0, 0.0 }), NULL_VECTOR);
+}
+
+void RemoveWaterPad(int iClient)
+{
+	int iPad = EntRefToEntIndex(g_iWaterPadRef[iClient]);
+
+	if (iPad != INVALID_ENT_REFERENCE)
+	{
+		AcceptEntityInput(iPad, "Kill");
+	}
+
+	g_iWaterPadRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
+//The (S) gas emblems: a jet of coloured gas while firing. "gas" "water" puts out burning players, enemies and props
+//it reaches; "gas" "heal" heals the players it reaches by "value" each time it fires.
+void GasStream(int iClient, int iItem, float fStart[3], float fDirection[3])
+{
+	char sColor[32];
+	float fAngles[3], fMuzzle[3];
+
+	GetClientEyeAngles(iClient, fAngles);
+
+	fMuzzle[0] = fStart[0] + fDirection[0] * 24.0;
+	fMuzzle[1] = fStart[1] + fDirection[1] * 24.0;
+	fMuzzle[2] = fStart[2] + fDirection[2] * 24.0 - 10.0;
+
+	int iGas = EntRefToEntIndex(g_iGasRef[iClient]);
+
+	if (iGas == INVALID_ENT_REFERENCE)
+	{
+		iGas = CreateEntityByName("env_steam");
+
+		if (iGas == -1)
+		{
+			return;
+		}
+
+		FormatEx(sColor, sizeof(sColor), "%d %d %d", g_Items[iItem].iBeamColor[0], g_Items[iItem].iBeamColor[1], g_Items[iItem].iBeamColor[2]);
+
+		DispatchKeyValue(iGas, "rendercolor", sColor);
+		DispatchKeyValue(iGas, "renderamt", "220");
+		DispatchKeyValue(iGas, "SpreadSpeed", "18");
+		DispatchKeyValue(iGas, "Speed", "260");
+		DispatchKeyValue(iGas, "StartSize", "6");
+		DispatchKeyValue(iGas, "EndSize", "42");
+		DispatchKeyValue(iGas, "Rate", "40");
+		DispatchKeyValueFloat(iGas, "JetLength", g_Items[iItem].fRange * 0.8);
+		DispatchKeyValue(iGas, "type", "0");
+		DispatchKeyValue(iGas, "InitialState", "1");
+		DispatchSpawn(iGas);
+		ActivateEntity(iGas);
+		AcceptEntityInput(iGas, "TurnOn");
+
+		g_iGasRef[iClient] = EntIndexToEntRef(iGas);
+	}
+
+	TeleportEntity(iGas, fMuzzle, fAngles, NULL_VECTOR);
+
+	g_fGasUntil[iClient] = GetGameTime() + g_Items[iItem].fCooldown + 0.25;
+
+	PlayShotSound(iClient, SOUND_GAS);
+
+	bool bWater = StrEqual(g_Items[iItem].sGas, "water"), bHeal = StrEqual(g_Items[iItem].sGas, "heal");
+
+	if (!bWater && !bHeal)
+	{
+		return;
+	}
+
+	float fTarget[3], fTo[3];
+
+	for (int i = 1; i <= GetMaxEntities(); i++)
+	{
+		if (i == iClient || !IsValidEntity(i))
+		{
+			continue;
+		}
+
+		bool bPlayer = (i <= MaxClients);
+
+		if (bPlayer && (!IsClientInGame(i) || !IsPlayerAlive(i)))
+		{
+			continue;
+		}
+
+		// Healing is for players; putting fires out is for anything that's burning.
+		if (bHeal && (!bPlayer || GetClientHealth(i) >= ClientMaxHealth(i)))
+		{
+			continue;
+		}
+
+		if (bWater && (!HasEntProp(i, Prop_Data, "m_fFlags") || !(GetEntityFlags(i) & FL_ONFIRE)))
+		{
+			continue;
+		}
+
+		GetEntPropVector(i, Prop_Data, "m_vecAbsOrigin", fTarget);
+		fTarget[2] += bPlayer ? 40.0 : 8.0;
+
+		MakeVectorFromPoints(fStart, fTarget, fTo);
+
+		if (NormalizeVector(fTo, fTo) > g_Items[iItem].fRange || GetVectorDotProduct(fTo, fDirection) < 0.88)
+		{
+			continue;
+		}
+
+		Handle hTrace = TR_TraceRayFilterEx(fStart, fTarget, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+		bool bBlocked = TR_DidHit(hTrace);
+
+		CloseHandle(hTrace);
+
+		if (bBlocked)
+		{
+			continue;
+		}
+
+		if (bWater)
+		{
+			ExtinguishEntity(i);
+		} else {
+			int iHealth = GetClientHealth(i) + RoundToFloor(g_Items[iItem].fValue);
+
+			SetEntityHealth(i, iHealth > ClientMaxHealth(i) ? ClientMaxHealth(i) : iHealth);
+		}
+	}
+}
+
+void RemoveGas(int iClient)
+{
+	int iGas = EntRefToEntIndex(g_iGasRef[iClient]);
+
+	if (iGas != INVALID_ENT_REFERENCE)
+	{
+		AcceptEntityInput(iGas, "TurnOff");
+		AcceptEntityInput(iGas, "Kill");
+	}
+
+	g_iGasRef[iClient] = INVALID_ENT_REFERENCE;
+}
+
 void RemoveTimeShadow(int iClient)
 {
 	int iShadow = EntRefToEntIndex(g_iTimeShadowRef[iClient]);
@@ -2869,6 +3190,11 @@ public Action Timer_Think(Handle hTimer)
 		{
 			g_bHoldingGravGun[i] = false;
 			RemoveTimeShadow(i);
+			RemoveWaterPad(i);
+			RemoveGas(i);
+			g_bAirSpeed[i] = false;
+			g_bNormalJumpActive[i] = false;
+			g_bWaterWalkActive[i] = false;
 			continue;
 		}
 
@@ -3084,7 +3410,14 @@ public Action Timer_Think(Handle hTimer)
 			fSpeed *= WalkFactor(i);
 		}
 
-		if (fSpeed != 1.0 || g_bSpeedManaged[i])
+		g_bNormalJumpActive[i] = (iItem != -1 && g_bHoldingGravGun[i] && g_Items[iItem].bNormalJump && fSpeed > 1.0);
+		g_bWaterWalkActive[i] = (iItem != -1 && g_bHoldingGravGun[i] && StrEqual(g_Items[iItem].sPower, "waterwalk"));
+
+		if (g_bAirSpeed[i])
+		{
+			// In the air with Purple (S): the speed is carried by the velocity until the player lands.
+			g_fAirScale[i] = fSpeed;
+		} else if (fSpeed != 1.0 || g_bSpeedManaged[i])
 		{
 			SetEntPropFloat(i, Prop_Data, "m_flLaggedMovementValue", fSpeed);
 
@@ -3707,6 +4040,8 @@ void ReadItem(KeyValues kvItems, int iKind)
 	g_Items[iItem].iUpgradeTo = -1;
 	g_Items[iItem].iUpgradeCost = kvItems.GetNum("upgradecost", 2);
 	g_Items[iItem].fJump = kvItems.GetFloat("jumpboost", 0.0);
+	g_Items[iItem].bNormalJump = kvItems.GetNum("normaljump", 0) != 0;
+	kvItems.GetString("gas", g_Items[iItem].sGas, sizeof(Item::sGas), "none");
 	g_Items[iItem].fFallDamage = kvItems.GetFloat("falldamage", 1.0);
 	g_Items[iItem].bGlow = view_as<bool>(kvItems.GetNum("glow", 0));
 	g_Items[iItem].iUseHealth = kvItems.GetNum("usehealth", 0);
@@ -4634,7 +4969,7 @@ bool IsShotPower(const char[] sPower)
 {
 	return (StrEqual(sPower, "fire") || StrEqual(sPower, "blizzard") || StrEqual(sPower, "shock") || StrEqual(sPower, "push") || StrEqual(sPower, "blast") || StrEqual(sPower, "blink")
 		|| StrEqual(sPower, "flamethrower") || StrEqual(sPower, "shot") || StrEqual(sPower, "spray") || StrEqual(sPower, "medic") || StrEqual(sPower, "magnitude") || StrEqual(sPower, "chaos") || StrEqual(sPower, "portal") || StrEqual(sPower, "demon")
-		|| StrEqual(sPower, "flash") || StrEqual(sPower, "smog") || StrEqual(sPower, "nuke"));
+		|| StrEqual(sPower, "flash") || StrEqual(sPower, "smog") || StrEqual(sPower, "nuke") || StrEqual(sPower, "gas"));
 }
 
 // Primary fire with a shot emblem: a beam from the player to whatever they are aiming at.
@@ -4674,6 +5009,13 @@ void FireEmblemShot(int iClient, int iItem)
 	if (StrEqual(sPower, "flamethrower"))
 	{
 		Flamethrower(iClient, iItem, fStart, fDirection);
+
+		return;
+	}
+
+	if (StrEqual(sPower, "gas"))
+	{
+		GasStream(iClient, iItem, fStart, fDirection);
 
 		return;
 	}
@@ -5518,6 +5860,7 @@ void StartMover(int iEntity, float fStart[3], float fEnd[3], float fLife, bool b
 	AcceptEntityInput(iEntity, "kill");
 }
 
+
 public void OnGameFrame()
 {
 	float fPos[3];
@@ -5526,6 +5869,8 @@ public void OnGameFrame()
 	UpdateThirdPersonCameras();
 
 	ThinkTimeShadows();
+
+	ThinkSpecialMovement();
 
 	Fx_ThinkStreams();
 
