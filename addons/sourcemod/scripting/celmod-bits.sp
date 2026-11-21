@@ -23,6 +23,18 @@ int g_iLinkedEntity[MAXENTITIES + 1];
 int g_iLinkingEntity[MAXPLAYERS + 1];
 int g_iLinkStage[MAXPLAYERS + 1];
 
+//!animate: up to 10 frames (a position and angles) per prop. A button linked to the prop plays them in order, and
+//the next press plays them back. Frames are world positions; saved builds keep them as offsets from the prop, so a
+//build loaded somewhere else animates in its new place.
+#define ANIM_FRAMES 10
+float g_fAnimPos[MAXENTITIES + 1][ANIM_FRAMES][3];
+float g_fAnimAng[MAXENTITIES + 1][ANIM_FRAMES][3];
+int g_iAnimMask[MAXENTITIES + 1];        // which frames are set (bit 0 = frame 1)
+float g_fAnimStep[MAXENTITIES + 1];      // seconds per frame
+bool g_bAnimBackward[MAXENTITIES + 1];   // the next press plays the frames in reverse
+float g_fAnimStart[MAXENTITIES + 1];     // when the playing animation began (0 = not playing)
+bool g_bAnimPlayingBack[MAXENTITIES + 1];
+
 char g_sPasscode[MAXENTITIES + 1][32];
 int g_iPassButton[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... };
 
@@ -84,6 +96,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_button", Command_SpawnButton, "|CelMod| Spawns a button trigger bit.");
 	RegConsoleCmd("v_charger", Command_SpawnChargerBit, "|CelMod| Creates a health/suit charger bit that will give health/suit to the player.");
 	RegConsoleCmd("v_link", Command_Link, "|CelMod| Creates a link between a trigger bit and an entity.");
+	RegConsoleCmd("v_animate", Command_Animate, "|CelMod| Animates a prop: !animate <1-10> saves where it is now as that frame; !link a button to it to play the frames. !animate speed <seconds>, play, clear.");
+	RegConsoleCmd("v_anim", Command_Animate, "|CelMod| Animates a prop (same as !animate).");
 	RegConsoleCmd("v_setpass", Command_SetPass, "|CelMod| Gives the button you are looking at a passcode (off to remove it).");
 	RegConsoleCmd("v_pass", Command_Pass, "|CelMod| Uses a passcode button with its passcode: !pass <passcode>.");
 	RegConsoleCmd("v_wep", Command_SpawnWeaponBit, "|CelMod| Creates a weapon bit that will give a weapon when the player touches it.");
@@ -136,7 +150,7 @@ public Action Command_Link(int iClient, int iArgs)
 		}
 		case 1:
 		{
-			if(Cel_CheckEntityType(iEntity, "door") || Cel_CheckEntityType(iEntity, "effect") || Cel_CheckEntityType(iEntity, "light"))
+			if(Cel_CheckEntityType(iEntity, "door") || Cel_CheckEntityType(iEntity, "effect") || Cel_CheckEntityType(iEntity, "light") || (iEntity <= MAXENTITIES && g_iAnimMask[iEntity] != 0))
 			{
 				g_iLinkedEntity[g_iLinkingEntity[iClient]] = iEntity;
 				g_bHasLink[g_iLinkingEntity[iClient]] = true;
@@ -1171,6 +1185,11 @@ public int Native_TriggerEntity(Handle hPlugin, int iNumParams)
 			{
 				Cel_ActivateEffect(g_iLinkedEntity[iEntity]);
 			}
+			
+			default:
+			{
+				PlayAnimation(g_iLinkedEntity[iEntity]);
+			}
 		}
 	}
 	
@@ -1362,6 +1381,240 @@ public void OnEntityDestroyed(int iEntity)
 	if (iEntity > 0 && iEntity <= MAXENTITIES)
 	{
 		g_sPasscode[iEntity][0] = '\0';
+		g_iAnimMask[iEntity] = 0;
+		g_fAnimStart[iEntity] = 0.0;
+		g_bAnimBackward[iEntity] = false;
+	}
+}
+
+//Animation:
+public Action Command_Animate(int iClient, int iArgs)
+{
+	char sArg[16], sValue[16];
+	
+	int iProp = Cel_GetClientAimTarget(iClient);
+	
+	if (iProp == -1 || iProp > MAXENTITIES)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CheckOwner(iClient, iProp))
+	{
+		Cel_NotYours(iClient, iProp);
+		return Plugin_Handled;
+	}
+	
+	EntityType etType = Cel_GetEntityType(iProp);
+	
+	if (etType != ENTTYPE_PHYSICS && etType != ENTTYPE_DYNAMIC && etType != ENTTYPE_UNKNOWN && etType != ENTTYPE_CYCLER)
+	{
+		Cel_ReplyToCommand(iClient, "Only props can be animated.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sArg, sizeof(sArg));
+	GetCmdArg(2, sValue, sizeof(sValue));
+	
+	if (iArgs < 1)
+	{
+		ReplyAnimFrames(iClient, iProp);
+		Cel_ReplyToCommand(iClient, "Move the prop, then {green}!animate <1-10>{default} to save it as that frame. {green}!link{default} a button to it to play them. Also: {green}!animate speed <seconds>{default}, {green}play{default}, {green}clear{default}.");
+		return Plugin_Handled;
+	}
+	
+	if (StrEqual(sArg, "clear", false))
+	{
+		g_iAnimMask[iProp] = 0;
+		g_fAnimStart[iProp] = 0.0;
+		Cel_ReplyToCommand(iClient, "The prop's animation frames are cleared.");
+		return Plugin_Handled;
+	}
+	
+	if (StrEqual(sArg, "speed", false))
+	{
+		float fStep = StringToFloat(sValue);
+		
+		if (fStep < 0.1 || fStep > 10.0)
+		{
+			Cel_ReplyToCommand(iClient, "Give the seconds each frame takes, from {green}0.1{default} to {green}10{default}: {green}!animate speed 0.5{default}");
+			return Plugin_Handled;
+		}
+		
+		g_fAnimStep[iProp] = fStep;
+		Cel_ReplyToCommand(iClient, "Each frame now takes {green}%.1f{default} seconds.", fStep);
+		return Plugin_Handled;
+	}
+	
+	if (StrEqual(sArg, "play", false))
+	{
+		if (!PlayAnimation(iProp))
+		{
+			Cel_ReplyToCommand(iClient, "Save at least two frames first with {green}!animate <1-10>{default}.");
+		}
+		
+		return Plugin_Handled;
+	}
+	
+	int iFrame = StringToInt(sArg);
+	
+	if (iFrame < 1 || iFrame > ANIM_FRAMES)
+	{
+		Cel_ReplyToCommand(iClient, "Frames are numbered {green}1{default} to {green}%d{default}: {green}!animate 1{default}", ANIM_FRAMES);
+		return Plugin_Handled;
+	}
+	
+	if (g_fAnimStart[iProp] > 0.0)
+	{
+		Cel_ReplyToCommand(iClient, "Wait for the animation to finish first.");
+		return Plugin_Handled;
+	}
+	
+	GetEntPropVector(iProp, Prop_Data, "m_vecAbsOrigin", g_fAnimPos[iProp][iFrame - 1]);
+	GetEntPropVector(iProp, Prop_Data, "m_angAbsRotation", g_fAnimAng[iProp][iFrame - 1]);
+	
+	if (g_iAnimMask[iProp] == 0)
+	{
+		g_fAnimStep[iProp] = 0.5;
+		g_bAnimBackward[iProp] = false;
+	}
+	
+	g_iAnimMask[iProp] |= (1 << (iFrame - 1));
+	
+	Cel_ReplyToCommand(iClient, "Saved frame {green}%d{default}.", iFrame);
+	ReplyAnimFrames(iClient, iProp);
+	
+	return Plugin_Handled;
+}
+
+void ReplyAnimFrames(int iClient, int iProp)
+{
+	char sList[64] = "";
+	
+	for (int f = 0; f < ANIM_FRAMES; f++)
+	{
+		if (g_iAnimMask[iProp] & (1 << f))
+		{
+			Format(sList, sizeof(sList), "%s%s%d", sList, sList[0] != '\0' ? ", " : "", f + 1);
+		}
+	}
+	
+	if (sList[0] == '\0')
+	{
+		Cel_ReplyToCommand(iClient, "This prop has no animation frames yet.");
+	} else {
+		Cel_ReplyToCommand(iClient, "Frames: {green}%s{default} (%.1f seconds each).", sList, g_fAnimStep[iProp]);
+	}
+}
+
+int AnimFrameCount(int iProp)
+{
+	int iCount = 0;
+	
+	for (int f = 0; f < ANIM_FRAMES; f++)
+	{
+		if (g_iAnimMask[iProp] & (1 << f))
+		{
+			iCount++;
+		}
+	}
+	
+	return iCount;
+}
+
+//Plays the frames in order (or back, every other time). False when there's nothing to play.
+bool PlayAnimation(int iProp)
+{
+	if (iProp <= MaxClients || iProp > MAXENTITIES || !IsValidEntity(iProp) || AnimFrameCount(iProp) < 2 || g_fAnimStart[iProp] > 0.0)
+	{
+		return false;
+	}
+	
+	g_bAnimPlayingBack[iProp] = g_bAnimBackward[iProp];
+	g_bAnimBackward[iProp] = !g_bAnimBackward[iProp];
+	g_fAnimStart[iProp] = GetGameTime();
+	
+	return true;
+}
+
+//The n-th set frame, counting in play order.
+int NthFrame(int iProp, int n, bool bBack)
+{
+	int iSeen = 0;
+	
+	for (int k = 0; k < ANIM_FRAMES; k++)
+	{
+		int f = bBack ? (ANIM_FRAMES - 1 - k) : k;
+		
+		if (g_iAnimMask[iProp] & (1 << f))
+		{
+			if (iSeen == n)
+			{
+				return f;
+			}
+			
+			iSeen++;
+		}
+	}
+	
+	return -1;
+}
+
+float AngleLerp(float a, float b, float t)
+{
+	float d = b - a;
+	
+	while (d > 180.0) d -= 360.0;
+	while (d < -180.0) d += 360.0;
+	
+	return a + d * t;
+}
+
+public void OnGameFrame()
+{
+	float fNow = GetGameTime(), fPos[3], fAng[3];
+	
+	for (int i = MaxClients + 1; i <= MAXENTITIES; i++)
+	{
+		if (g_fAnimStart[i] <= 0.0)
+		{
+			continue;
+		}
+		
+		if (!IsValidEntity(i))
+		{
+			g_fAnimStart[i] = 0.0;
+			continue;
+		}
+		
+		int iSegments = AnimFrameCount(i) - 1;
+		float fT = (fNow - g_fAnimStart[i]) / g_fAnimStep[i];
+		
+		if (fT >= float(iSegments))
+		{
+			int iLast = NthFrame(i, iSegments, g_bAnimPlayingBack[i]);
+			
+			TeleportEntity(i, g_fAnimPos[i][iLast], g_fAnimAng[i][iLast], NULL_VECTOR);
+			g_fAnimStart[i] = 0.0;
+			continue;
+		}
+		
+		int iSeg = RoundToFloor(fT);
+		float fF = fT - float(iSeg);
+		
+		// Eased, so each frame starts and stops smoothly.
+		fF = fF * fF * (3.0 - 2.0 * fF);
+		
+		int a = NthFrame(i, iSeg, g_bAnimPlayingBack[i]), b = NthFrame(i, iSeg + 1, g_bAnimPlayingBack[i]);
+		
+		for (int k = 0; k < 3; k++)
+		{
+			fPos[k] = g_fAnimPos[i][a][k] + (g_fAnimPos[i][b][k] - g_fAnimPos[i][a][k]) * fF;
+			fAng[k] = AngleLerp(g_fAnimAng[i][a][k], g_fAnimAng[i][b][k], fF);
+		}
+		
+		TeleportEntity(i, fPos, fAng, NULL_VECTOR);
 	}
 }
 
@@ -1468,6 +1721,28 @@ public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
 	{
 		kvSave.SetString("x_passcode", g_sPasscode[iEntity]);
 	}
+	
+	//Animation frames, as offsets from the prop, so they follow the build wherever it's loaded.
+	if (iEntity > MaxClients && iEntity <= MAXENTITIES && g_iAnimMask[iEntity] != 0)
+	{
+		char sKey[16], sValue[128];
+		float fOrigin[3];
+		
+		GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+		
+		kvSave.SetNum("x_animmask", g_iAnimMask[iEntity]);
+		kvSave.SetFloat("x_animstep", g_fAnimStep[iEntity]);
+		
+		for (int f = 0; f < ANIM_FRAMES; f++)
+		{
+			if (g_iAnimMask[iEntity] & (1 << f))
+			{
+				FormatEx(sKey, sizeof(sKey), "x_anim%d", f + 1);
+				FormatEx(sValue, sizeof(sValue), "%.2f %.2f %.2f %.2f %.2f %.2f", g_fAnimPos[iEntity][f][0] - fOrigin[0], g_fAnimPos[iEntity][f][1] - fOrigin[1], g_fAnimPos[iEntity][f][2] - fOrigin[2], g_fAnimAng[iEntity][f][0], g_fAnimAng[iEntity][f][1], g_fAnimAng[iEntity][f][2]);
+				kvSave.SetString(sKey, sValue);
+			}
+		}
+	}
 }
 
 public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
@@ -1475,5 +1750,41 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 	if (iEntity > 0 && iEntity <= MAXENTITIES)
 	{
 		kvSave.GetString("x_passcode", g_sPasscode[iEntity], sizeof(g_sPasscode[]), "");
+		
+		g_iAnimMask[iEntity] = kvSave.GetNum("x_animmask", 0);
+		g_fAnimStep[iEntity] = kvSave.GetFloat("x_animstep", 0.5);
+		g_bAnimBackward[iEntity] = false;
+		g_fAnimStart[iEntity] = 0.0;
+		
+		if (g_iAnimMask[iEntity] != 0)
+		{
+			char sKey[16], sValue[128], sParts[6][16];
+			float fOrigin[3];
+			
+			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
+			
+			for (int f = 0; f < ANIM_FRAMES; f++)
+			{
+				if (!(g_iAnimMask[iEntity] & (1 << f)))
+				{
+					continue;
+				}
+				
+				FormatEx(sKey, sizeof(sKey), "x_anim%d", f + 1);
+				kvSave.GetString(sKey, sValue, sizeof(sValue), "");
+				
+				if (ExplodeString(sValue, " ", sParts, sizeof(sParts), sizeof(sParts[])) < 6)
+				{
+					g_iAnimMask[iEntity] &= ~(1 << f);
+					continue;
+				}
+				
+				for (int k = 0; k < 3; k++)
+				{
+					g_fAnimPos[iEntity][f][k] = fOrigin[k] + StringToFloat(sParts[k]);
+					g_fAnimAng[iEntity][f][k] = StringToFloat(sParts[k + 3]);
+				}
+			}
+		}
 	}
 }

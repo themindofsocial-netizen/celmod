@@ -539,3 +539,7 @@
 		   - Black turns its holder black, and White gives its holder a bright glow. Both still have big versions.
 		   Upgrades are made at the Power Booth (3 of the emblem). Fire's and Water's old upgrades (Inferno, Tsunami)
 		   stay with the players who have them.
+		 - !animate is back: look at your prop, move it and type !animate 1, move it again and type !animate 2, and so on
+		   up to 10 frames. !link a !button to the prop: each press plays the frames smoothly, and the next press plays
+		   them back. !animate speed <seconds> sets each frame's time, !animate play previews it, !animate clear starts
+		   over. Animations are saved with your build.

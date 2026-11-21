@@ -31,7 +31,7 @@ for cat, names in {
     'building': 'spawn p s save load saves builds clear copy paste +copy +move freeze freezeit freezeall unfreeze unfreezeit unfreezeall del delete remove delall deleteall removeall undo '
                 'r rotate flip roll turn stand straight straighten smove pmove drop moveto weld release stack stackinfo axis mark marker '
                 'replace model skin color paint palette fadecolor alpha amt renderfx solid god lock unlock perm unperm owner',
-    'cels': 'text door light ladder internet seturl turret fire effect emitter message music celmusic sound teleport spawnpoint button link setpass pass wep ammo ammocrate charger',
+    'cels': 'text door light ladder internet seturl turret fire effect emitter message music celmusic sound teleport spawnpoint button link animate anim setpass pass wep ammo ammocrate charger',
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
             'fee landban landunban landkick kick landslay weps nofly landnoclip extinguish buildmessage block unblock hide show zones',
     'money': 'bank balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
@@ -55,7 +55,7 @@ USAGE = {
     'landslay': '<player or #all>', 'buildmessage': '<message or off>', 'block': '<player>', 'unblock': '<player>', 'hide': '<player>', 'show': '<player>',
     'cl': '[amount]', 'buy': '[item]', 'bank': '[number or add]', 'sell': '<price>', 'give': '<player>', 'trade': '<player> <price>', 'buymodel': '<model>', 'playermodel': '<model or off>',
     'emblem': '<emblem or off>', 'hat': '<hat or off>', 'weapon': '<celwep or off>', 'wrap': '<item> <player>', 'guess': '<1, 2 or 3>', 'bid': '<amount>',
-    'spawnpad': '[enemy]', 'pungag': '<player> [minutes] [reason]', 'punungag': '<player>', 'punkick': '<player> [reason]', 'punban': '<player> <minutes, 0 = forever> [reason]', 'shell': '[big]', 'pmute': '<player>', 'punmute': '<player>', 'reportbug': '<what happened>',
+    'animate': '<1-10> | speed <seconds> | play | clear', 'spawnpad': '[enemy]', 'pungag': '<player> [minutes] [reason]', 'punungag': '<player>', 'punkick': '<player> [reason]', 'punban': '<player> <minutes, 0 = forever> [reason]', 'shell': '[big]', 'pmute': '<player>', 'punmute': '<player>', 'reportbug': '<what happened>',
     'setbalance': '<player> <amount>', 'givemoney': '<player> <amount>', 'takemoney': '<player> <amount>', 'giveitem': '<player> <kind> <item>',
     'givemodel': '<player> <model>', 'takemodel': '<player> <model>', 'auction': '<kind> <item> <starting bid> <minutes>',
     'emblemdrop': '[boxes]', 'dungeonspawner': '<enemy> [max alive] [seconds]', 'deldungeonspawner': '[number or all]',
