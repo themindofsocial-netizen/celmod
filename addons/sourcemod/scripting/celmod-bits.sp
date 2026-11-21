@@ -111,7 +111,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_ammocrate", Command_SpawnAmmoCrateBit, "|CelMod| Creates an ammo crate bit that will give ammo to the player.");
 	RegConsoleCmd("v_button", Command_SpawnButton, "|CelMod| Spawns a button trigger bit: !button [model], where the model is switch, combine, elevator, keypad, firetrap, switchbox, lever or any prop's name (!button list).");
 	RegConsoleCmd("v_charger", Command_SpawnChargerBit, "|CelMod| Creates a health/suit charger bit that will give health/suit to the player.");
-	RegConsoleCmd("v_link", Command_Link, "|CelMod| Links a button to a door, light, effect or animated prop (up to 3 per button): !link on the button, then on the thing.");
+	RegConsoleCmd("v_link", Command_Link, "|CelMod| Links a button to a door, light, effect, sound, music, message or animated prop (up to 3 per button): !link on the button, then on the thing.");
 	RegConsoleCmd("v_unlink", Command_Unlink, "|CelMod| Clears the links of the button you are looking at.");
 	RegConsoleCmd("v_animate", Command_Animate, "|CelMod| Animates a prop: !animate <1-10> saves where it is now as that frame; !link a button to it to play the frames. !animate speed <seconds>, play, clear.");
 	RegConsoleCmd("v_anim", Command_Animate, "|CelMod| Animates a prop (same as !animate).");
@@ -167,7 +167,7 @@ public Action Command_Link(int iClient, int iArgs)
 		}
 		case 1:
 		{
-			if(Cel_CheckEntityType(iEntity, "door") || Cel_CheckEntityType(iEntity, "effect") || Cel_CheckEntityType(iEntity, "light") || (iEntity <= MAXENTITIES && g_iAnimMask[iEntity] != 0))
+			if(Cel_CheckEntityType(iEntity, "door") || Cel_CheckEntityType(iEntity, "effect") || Cel_CheckEntityType(iEntity, "light") || (iEntity <= MAXENTITIES && g_iAnimMask[iEntity] != 0) || IsUsableCel(iEntity))
 			{
 				int iButton = g_iLinkingEntity[iClient], iSlot = -1;
 				
@@ -1319,7 +1319,11 @@ public int Native_TriggerEntity(Handle hPlugin, int iNumParams)
 			
 			default:
 			{
-				PlayAnimation(iTarget);
+				//An animated prop plays its frames; a sound, music or message cel is used as if pressed with E.
+				if (!PlayAnimation(iTarget) && IsUsableCel(iTarget))
+				{
+					AcceptEntityInput(iTarget, "Use", iClient, iClient);
+				}
 			}
 		}
 	}
@@ -1770,6 +1774,21 @@ int AnimFrameCount(int iProp)
 	}
 	
 	return iCount;
+}
+
+//Sound cans, music radios and message clipboards: cels that do their thing when used, so a button can use them.
+bool IsUsableCel(int iEntity)
+{
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity) || !Cel_IsEntity(iEntity))
+	{
+		return false;
+	}
+	
+	char sName[16];
+	
+	Cel_GetPropName(iEntity, sName, sizeof(sName));
+	
+	return StrEqual(sName, "sound", false) || StrEqual(sName, "music", false) || StrEqual(sName, "message", false);
 }
 
 //Plays the frames in order (or back, every other time). False when there's nothing to play.
