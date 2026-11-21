@@ -31,7 +31,7 @@
 		"weld"	"20000|!weld"
 		"light"	"30000|!light"
 		"text"	"50000|!text"
-		// "anim"	"50000|!anim"		(not built yet: keyframe animations with !view)
+		// "anim"	"50000|!anim"		(!animate is free for everyone now: sell it again here to lock it)
 		// "cland"	"100000|!cland"	(not built yet: round lands)
 		"landskin"	"100000|!landskin"
 		"turret"	"200000|!turret"
