@@ -913,6 +913,10 @@ public int Native_SpawnAmmoBit(Handle hPlugin, int iNumParams)
 	
 	g_abtAmmoType[iBase] = abtType;
 	
+	//Taken by pressing E on it, not by walking into it. Walking into it says so.
+	SetEntProp(iBase, Prop_Data, "m_spawnflags", GetEntProp(iBase, Prop_Data, "m_spawnflags") | 256);
+	
+	SDKHook(iBase, SDKHook_UsePost, Hook_AmmoBitUse);
 	SDKHook(iBase, SDKHook_StartTouchPost, Hook_AmmoBitTouch);
 	SDKHook(iBase, SDKHook_EndTouchPost, Hook_StopTouch);
 	
@@ -1285,13 +1289,35 @@ public int Native_TriggerEntity(Handle hPlugin, int iNumParams)
 }
 
 //Hooks:
+//Walking into an ammo box only says how to take the ammo.
 public void Hook_AmmoBitTouch(int iEntity, int iClient)
 {
-	//Anything can touch the box (props too): only living players get ammo.
-	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || !IsPlayerAlive(iClient) || Cel_IsLocked(iEntity) || g_bTouched[iClient])
+	//Anything can touch the box (props too): only living players are told.
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || IsFakeClient(iClient) || !IsPlayerAlive(iClient) || g_bTouched[iClient])
 	{
 		return;
 	}
+	
+	g_bTouched[iClient] = true;
+	
+	if (!Cel_IsLocked(iEntity))
+	{
+		PrintHintText(iClient, "Press E to take the ammo");
+	}
+}
+
+float g_fNextAmmoUse[MAXPLAYERS + 1];
+
+public void Hook_AmmoBitUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	int iClient = iActivator;
+	
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || !IsPlayerAlive(iClient) || Cel_IsLocked(iEntity) || GetGameTime() < g_fNextAmmoUse[iClient])
+	{
+		return;
+	}
+	
+	g_fNextAmmoUse[iClient] = GetGameTime() + 0.5;
 	
 	//Each box gives what Half-Life 2's own pickup of that ammo gives, on top of what you have (up to the maximum),
 	//for a weapon you're carrying.
@@ -1309,12 +1335,12 @@ public void Hook_AmmoBitTouch(int iEntity, int iClient)
 		default: { sWeapon = "weapon_pistol"; iAmount = 20; }
 	}
 	
-	g_bTouched[iClient] = true;
-	
+
 	int iWeapon = Client_GetWeapon(iClient, sWeapon);
 	
 	if (iWeapon == INVALID_ENT_REFERENCE || iWeapon == -1)
 	{
+		PrintHintText(iClient, "This ammo is for a gun you aren't carrying");
 		return;
 	}
 	

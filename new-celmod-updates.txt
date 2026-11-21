@@ -565,3 +565,5 @@
 		   isn't one of them is refused instead of quietly resetting the prop. The website has a Render Effects list.
 		 - Weapons spawned with !wep are picked up by pressing E on them, not by walking into them (walking into one
 		   says to press E).
+		 - Ammo boxes spawned with !ammo are taken by pressing E too, not by walking into them. If the ammo is for a gun
+		   you aren't carrying, it says so.
