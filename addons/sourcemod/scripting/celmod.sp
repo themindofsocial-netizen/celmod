@@ -669,6 +669,12 @@ public Action Handle_Spawn(int iClient, char[] sCommand, int iArgs)
 	
 	bool bTyped = (sPropAlias[0] == '!' || sPropAlias[0] == '/');
 	
+	//Only "!melon" or "/melon" spawns a prop: a plain word in chat is just chat.
+	if (!bTyped)
+	{
+		return Plugin_Continue;
+	}
+	
 	ReplaceString(sPropAlias, sizeof(sPropAlias), "!", "");
 	ReplaceString(sPropAlias, sizeof(sPropAlias), "/", "");
 	
@@ -676,12 +682,6 @@ public Action Handle_Spawn(int iClient, char[] sCommand, int iArgs)
 	
 	if (iShopProp == -1)
 	{
-		// Only answer "!rareprop" or "/rareprop"; a plain word in chat is just chat.
-		if (!bTyped)
-		{
-			return Plugin_Continue;
-		}
-		
 		Cel_ReplyToCommand(iClient, "{green}%s{default} is a shop prop. Buy it with {green}[tag]buy prop_%s{default} or in the web shop. Seasonal props are only sold in their season ({green}[tag]seasons{default}).", sPropAlias, sPropAlias);
 		return Plugin_Handled;
 	}
