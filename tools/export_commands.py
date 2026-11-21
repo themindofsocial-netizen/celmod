@@ -33,7 +33,7 @@ for cat, names in {
                 'replace model skin color paint palette fadecolor alpha amt renderfx solid god lock unlock perm unperm owner',
     'cels': 'text door light ladder internet seturl turret fire effect emitter message music celmusic sound teleport spawnpoint button link setpass pass wep ammo ammocrate charger',
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
-            'fee landban landunban landkick kick landslay weps nofly landnoclip buildmessage block unblock hide show zones',
+            'fee landban landunban landkick kick landslay weps nofly landnoclip extinguish buildmessage block unblock hide show zones',
     'money': 'bank balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
     'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid spawnpad spawnpads npckills tacticlvl tacticxp',
     'player': 'fly noclip nokill stuck switch hudcolor feed pmute punmute timeleft',
