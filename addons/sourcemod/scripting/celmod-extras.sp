@@ -915,7 +915,7 @@ int SpawnUsableProp(int iClient, const char[] sAlias, const char[] sModel, bool 
 {
 	float fAngles[3], fOrigin[3];
 	
-	//The music radio counts as a cel; the clipboard and can (message, sound) as props.
+	//The music radio and the sound can count as cels; the message clipboard as a prop.
 	if (bCel ? !Cel_CheckCelCount(iClient) : !Cel_CheckPropCount(iClient))
 	{
 		Cel_ReplyToCommand(iClient, bCel ? "You have reached your cel limit." : "You have reached your prop limit.");
@@ -1981,7 +1981,7 @@ public Action Command_Sound(int iClient, int iArgs)
 	}
 	
 	//A soda can: press E on it to play its sound.
-	int iProp = SpawnUsableProp(iClient, "sound", "models/props_junk/popcan01a.mdl");
+	int iProp = SpawnUsableProp(iClient, "sound", "models/props_junk/popcan01a.mdl", true);
 	
 	if (iProp == -1)
 	{
@@ -1995,6 +1995,9 @@ public Action Command_Sound(int iClient, int iArgs)
 	g_fNextSoundUse[iProp] = 0.0;
 	
 	SDKHook(iProp, SDKHook_UsePost, Hook_SoundUse);
+	
+	//Spawned as a prop, it now counts as a cel.
+	Cel_RecountClientEntities(iClient);
 	
 	Cel_ReplyToCommand(iClient, "Spawned a {green}%s{default} sound cel. Press {green}E{default} on it to play it.", sName);
 	
@@ -2687,6 +2690,9 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 		SetEntProp(iEntity, Prop_Data, "m_spawnflags", GetEntProp(iEntity, Prop_Data, "m_spawnflags") | 256);
 		
 		SDKHook(iEntity, SDKHook_UsePost, Hook_SoundUse);
+		
+		//Loaded as a prop, it counts as a cel.
+		Cel_RecountClientEntities(iClient);
 	}
 	
 	//Links are made once the whole build is in, the other entity may not exist yet. 0 = teleport, 1 = weld, 2 = button link.
