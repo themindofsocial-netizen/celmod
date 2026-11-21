@@ -584,3 +584,5 @@
 		 - Land skins cover the whole floor even where props stand on it (a prop on a tile used to leave that tile bare).
 		 - !sounds opens the website's Sounds List in the game's web viewer, like !colors (cm_sound_list_url).
 		   !sounds <word> and !soundlist <word> still search in chat.
+		 - Hoopies bounce you straight up off their flat faces (worked out from the hoopie's shape, so it's right
+		   whichever way the hoopie is turned), from its middle rather than its edge.

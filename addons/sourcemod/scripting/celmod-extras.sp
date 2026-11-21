@@ -2738,11 +2738,42 @@ public void Hook_HoopieTouch(int iEntity, int iOther)
 	g_fNextBounce[iOther] = GetGameTime() + 0.25;
 	
 	float fAngles[3], fUp[3], fPropOrigin[3], fPlayerOrigin[3], fToPlayer[3], fVelocity[3];
+	float fForward[3], fRight[3], fAxisUp[3], fMins[3], fMaxs[3], fCentre[3];
 	
+	//The flat faces are across the hoopie's thinnest side (from the model's own size), turned with the hoopie, so
+	//it bounces straight off its face whichever way the model was made or the prop is turned.
 	Cel_GetEntityAngles(iEntity, fAngles);
-	GetAngleVectors(fAngles, NULL_VECTOR, NULL_VECTOR, fUp);
+	GetAngleVectors(fAngles, fForward, fRight, fAxisUp);
 	
+	GetEntPropVector(iEntity, Prop_Send, "m_vecMins", fMins);
+	GetEntPropVector(iEntity, Prop_Send, "m_vecMaxs", fMaxs);
+	
+	float fSizeX = fMaxs[0] - fMins[0], fSizeY = fMaxs[1] - fMins[1], fSizeZ = fMaxs[2] - fMins[2];
+	
+	if (fSizeX < fSizeY && fSizeX < fSizeZ)
+	{
+		fUp = fForward;
+	} else if (fSizeY < fSizeX && fSizeY < fSizeZ)
+	{
+		fUp = fRight;
+	} else {
+		fUp = fAxisUp;
+	}
+	
+	//Measured from the middle of the hoopie, not its model origin (which can sit at one edge). The model's y axis
+	//points left, the opposite of "right".
 	Cel_GetEntityOrigin(iEntity, fPropOrigin);
+	
+	for (int k = 0; k < 3; k++)
+	{
+		fCentre[k] = (fMins[k] + fMaxs[k]) * 0.5;
+	}
+	
+	for (int k = 0; k < 3; k++)
+	{
+		fPropOrigin[k] += fForward[k] * fCentre[0] - fRight[k] * fCentre[1] + fAxisUp[k] * fCentre[2];
+	}
+	
 	GetClientAbsOrigin(iOther, fPlayerOrigin);
 	fPlayerOrigin[2] += 36.0;
 	
