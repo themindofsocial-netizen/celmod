@@ -553,3 +553,5 @@
 		 - !button <model> picks the button's look: switch (the default), combine, elevator, keypad, firetrap, switchbox,
 		   lever, or the name of any prop (!button oildrum001). !button list shows them, and saved builds keep each
 		   button's model.
+		 - !soundlist (or !sounds) lists the sounds a sound cel can play: the whole list goes to your console, and
+		   !soundlist <word> searches in chat. The website has an up-to-date, searchable Sounds List and Music List.

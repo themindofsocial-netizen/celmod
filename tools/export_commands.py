@@ -37,7 +37,7 @@ for cat, names in {
     'money': 'bank balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
     'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid spawnpad spawnpads npckills tacticlvl tacticxp',
     'player': 'fly noclip nokill stuck switch hudcolor feed pmute punmute timeleft',
-    'help': 'news reportbug dispute motd rules cmds commands commandlist colors colorlist props proplist effects effectlist updates updatelist',
+    'help': 'news reportbug dispute motd rules cmds commands commandlist soundlist sounds colors colorlist props proplist effects effectlist updates updatelist',
 }.items():
     for n in names.split():
         CATEGORY[n] = cat

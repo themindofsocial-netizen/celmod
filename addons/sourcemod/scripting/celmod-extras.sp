@@ -151,6 +151,8 @@ public void OnPluginStart()
 	RegConsoleCmd("v_show", Command_Show, "|CelMod| Shows a hidden player's entities again.");
 	RegConsoleCmd("v_music", Command_Music, "|CelMod| Spawns a music cel that plays a song when used (and stops it when used again).");
 	RegConsoleCmd("v_celmusic", Command_CelMusic, "|CelMod| Lists the songs the music cel can play.");
+	RegConsoleCmd("v_soundlist", Command_SoundList, "|CelMod| Lists the sounds a sound cel can play: !soundlist [part of a name].");
+	RegConsoleCmd("v_sounds", Command_SoundList, "|CelMod| Lists the sounds a sound cel can play (same as !soundlist).");
 	RegConsoleCmd("v_sound", Command_Sound, "|CelMod| Spawns a sound cel that plays a sound when used.");
 	RegConsoleCmd("v_undo", Command_Undo, "|CelMod| Removes the last entity you spawned.");
 	RegConsoleCmd("v_weld", Command_Weld, "|CelMod| Welds one of your entities to another so they move together.");
@@ -1960,7 +1962,7 @@ public Action Command_Sound(int iClient, int iArgs)
 	
 	if (iArgs < 1)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]sound{default} <sound name>");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]sound{default} <sound name>. Type {green}[tag]soundlist{default} for the list of sounds.");
 		return Plugin_Handled;
 	}
 	
@@ -1976,7 +1978,7 @@ public Action Command_Sound(int iClient, int iArgs)
 	
 	if (sPath[0] == '\0')
 	{
-		Cel_ReplyToCommand(iClient, "There is no sound called {green}%s{default}.", sName);
+		Cel_ReplyToCommand(iClient, "There is no sound called {green}%s{default}. Type {green}[tag]soundlist{default} for the list.", sName);
 		return Plugin_Handled;
 	}
 	
@@ -2147,6 +2149,107 @@ public void Hook_MusicUse(int iEntity, int iActivator, int iCaller, UseType utTy
 	float fLength = (g_fMusicLength[iEntity] > 0.0) ? g_fMusicLength[iEntity] : 600.0;
 	
 	g_fMusicEnds[iEntity] = GetGameTime() + fLength * 100.0 / g_iMusicPitch[iEntity];
+}
+
+//!soundlist [search]: the sounds a sound cel can play. A search shows the matches in chat; without one, the whole
+//list goes to the console (it's long) and chat says where to find it.
+public Action Command_SoundList(int iClient, int iArgs)
+{
+	char sSearch[64], sName[64], sLine[256] = "";
+	int iCount = 0, iShown = 0, iOnLine = 0;
+	
+	GetCmdArg(1, sSearch, sizeof(sSearch));
+	
+	KeyValues kvSounds = new KeyValues("Sounds");
+	
+	if (!kvSounds.ImportFromFile(g_sSoundDB) || !kvSounds.JumpToKey("Sounds", false) || !kvSounds.GotoFirstSubKey(false))
+	{
+		delete kvSounds;
+		
+		Cel_ReplyToCommand(iClient, "There are no sounds for the sound cel on this server.");
+		return Plugin_Handled;
+	}
+	
+	bool bSearch = (sSearch[0] != '\0');
+	
+	if (!bSearch && iClient > 0)
+	{
+		PrintToConsole(iClient, "|CelMod| Sounds for !sound <name>:");
+	}
+	
+	do
+	{
+		kvSounds.GetSectionName(sName, sizeof(sName));
+		iCount++;
+		
+		if (bSearch && StrContains(sName, sSearch, false) == -1)
+		{
+			continue;
+		}
+		
+		iShown++;
+		
+		if (!bSearch)
+		{
+			if (iClient > 0)
+			{
+				Format(sLine, sizeof(sLine), "%s%s%s", sLine, iOnLine > 0 ? ", " : "  ", sName);
+				
+				if (++iOnLine == 8)
+				{
+					PrintToConsole(iClient, "%s", sLine);
+					sLine[0] = '\0';
+					iOnLine = 0;
+				}
+			} else {
+				PrintToServer("  %s", sName);
+			}
+			
+			continue;
+		}
+		
+		//Search results: a few to a line in chat, at most 40.
+		if (iShown <= 40)
+		{
+			Format(sLine, sizeof(sLine), "%s%s{green}%s{default}", sLine, iOnLine > 0 ? ", " : "", sName);
+			
+			if (++iOnLine == 6)
+			{
+				Cel_ReplyToCommand(iClient, "%s", sLine);
+				sLine[0] = '\0';
+				iOnLine = 0;
+			}
+		}
+	}
+	while (kvSounds.GotoNextKey(false));
+	
+	delete kvSounds;
+	
+	if (!bSearch)
+	{
+		if (iOnLine > 0 && iClient > 0)
+		{
+			PrintToConsole(iClient, "%s", sLine);
+		}
+		
+		Cel_ReplyToCommand(iClient, "There are {green}%d{default} sounds: the list is in your console (press {green}~{default}), and on the website. {green}[tag]soundlist <word>{default} searches, {green}[tag]sound <name>{default} spawns one.", iCount);
+		return Plugin_Handled;
+	}
+	
+	if (iOnLine > 0)
+	{
+		Cel_ReplyToCommand(iClient, "%s", sLine);
+	}
+	
+	if (iShown == 0)
+	{
+		Cel_ReplyToCommand(iClient, "No sound has {green}%s{default} in its name. {green}[tag]soundlist{default} shows them all.", sSearch);
+	} else if (iShown > 40)
+	{
+		Cel_ReplyToCommand(iClient, "...and {green}%d{default} more. Try a longer search.", iShown - 40);
+	}
+	
+	return Plugin_Handled;
 }
 
 //The songs a music cel can play, with how long each one is.
