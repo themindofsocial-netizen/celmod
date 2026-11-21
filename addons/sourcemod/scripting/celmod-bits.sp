@@ -1240,6 +1240,10 @@ public int Native_SpawnWeaponBit(Handle hPlugin, int iNumParams)
 	
 	g_wbtWeaponType[iBase] = wbtType;
 	
+	//Picked up by pressing E on it, not by walking into it. Walking into it says so.
+	SetEntProp(iBase, Prop_Data, "m_spawnflags", GetEntProp(iBase, Prop_Data, "m_spawnflags") | 256);
+	
+	SDKHook(iBase, SDKHook_UsePost, Hook_WeaponBitUse);
 	SDKHook(iBase, SDKHook_StartTouchPost, Hook_WeaponBitTouch);
 	SDKHook(iBase, SDKHook_EndTouchPost, Hook_StopTouch);
 	
@@ -1368,16 +1372,37 @@ public void Hook_StopTouch(int iEntity, int iClient)
 	}
 }
 
+//Walking into a weapon bit only says how to take the weapon.
 public void Hook_WeaponBitTouch(int iEntity, int iClient)
 {
-	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || IsFakeClient(iClient) || !IsPlayerAlive(iClient) || g_bTouched[iClient])
 	{
 		return;
 	}
 	
+	g_bTouched[iClient] = true;
+	
+	if (!Cel_IsLocked(iEntity))
+	{
+		PrintHintText(iClient, "Press E to pick up the weapon");
+	}
+}
+
+float g_fNextWeaponUse[MAXPLAYERS + 1];
+
+public void Hook_WeaponBitUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	int iClient = iActivator;
+	
+	if (iClient < 1 || iClient > MaxClients || !IsClientInGame(iClient) || !IsPlayerAlive(iClient) || GetGameTime() < g_fNextWeaponUse[iClient])
+	{
+		return;
+	}
+	
+	g_fNextWeaponUse[iClient] = GetGameTime() + 0.5;
+	
 	if(!Cel_IsLocked(iEntity))
 	{
-		if(!g_bTouched[iClient])
 		{
 			switch(Cel_GetWeaponType(iEntity))
 			{
@@ -1434,8 +1459,6 @@ public void Hook_WeaponBitTouch(int iEntity, int iClient)
 					Client_GiveWeapon(iClient, "weapon_smg1", false);
 				}
 			}
-			
-			g_bTouched[iClient] = true;
 		}
 	}
 }

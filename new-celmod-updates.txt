@@ -563,3 +563,5 @@
 		   music cel plays for everyone, not only for players who already had the files.
 		 - !renderfx on its own (or !renderfxlist) lists the render effects with what each looks like, and a name that
 		   isn't one of them is refused instead of quietly resetting the prop. The website has a Render Effects list.
+		 - Weapons spawned with !wep are picked up by pressing E on them, not by walking into them (walking into one
+		   says to press E).
