@@ -484,6 +484,12 @@ public Action Timer_CommandHUD(Handle hTimer)
 
 								strcopy(sPropname, sizeof(sPropname), sBufferArray[0]);
 
+								//A cel that is a prop underneath (the music radio) is named after what it is.
+								if (Cel_GetEntityType(iEntity) == ENTTYPE_PHYSICS || Cel_GetEntityType(iEntity) == ENTTYPE_DYNAMIC)
+								{
+									strcopy(sPropname, sizeof(sPropname), UnknownCelName(iEntity));
+								}
+
 								if (Cel_CheckOwner(i, iEntity))
 								{
 									Format(sMessage, sizeof(sMessage), "Cel: %s\nPrice: %i", sPropname, Cel_GetEntityPrice(iEntity));
@@ -544,6 +550,12 @@ public Action Timer_CommandHUD(Handle hTimer)
 								ExplodeString(sBuffer, " ", sBufferArray, 2, 128, true);
 
 								strcopy(sPropname, sizeof(sPropname), sBufferArray[0]);
+
+								//A cel that is a prop underneath (the music radio) is named after what it is.
+								if (Cel_GetEntityType(iEntity) == ENTTYPE_PHYSICS || Cel_GetEntityType(iEntity) == ENTTYPE_DYNAMIC)
+								{
+									strcopy(sPropname, sizeof(sPropname), UnknownCelName(iEntity));
+								}
 
 								if (Cel_CheckOwner(i, iEntity))
 								{
@@ -785,6 +797,12 @@ public Action Timer_HUD(Handle hTimer)
 							ExplodeString(sCelBuffer, " ", sCelBufferArray, 2, 128, true);
 							
 							strcopy(sPropName, sizeof(sPropName), sCelBufferArray[0]);
+							
+							//A cel that is a prop underneath (the music radio) is named after what it is.
+							if (Cel_GetEntityType(iEntity) == ENTTYPE_PHYSICS || Cel_GetEntityType(iEntity) == ENTTYPE_DYNAMIC)
+							{
+								strcopy(sPropName, sizeof(sPropName), UnknownCelName(iEntity));
+							}
 							
 							if (Cel_CheckOwner(i, iEntity))
 							{

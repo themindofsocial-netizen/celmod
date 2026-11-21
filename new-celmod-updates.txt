@@ -548,3 +548,5 @@
 		 - Admins: !zonebypass is now !adminmode (the old name still works). With it on, area and land rules don't apply
 		   to you, and +move picks up players: carry them around like a Garry's Mod physgun and let go to drop (or
 		   throw) them. Admins can't pick up admins above them.
+		 - Music radios (!music) are cels now: they count toward your cel limit instead of your props, and the HUD
+		   shows them as "Cel: Music".

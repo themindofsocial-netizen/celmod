@@ -911,13 +911,14 @@ public void Hook_SoundUse(int iEntity, int iActivator, int iCaller, UseType utTy
 }
 
 //Spawns a usable prop at the client's crosshair for the message and sound cels.
-int SpawnUsableProp(int iClient, const char[] sAlias, const char[] sModel)
+int SpawnUsableProp(int iClient, const char[] sAlias, const char[] sModel, bool bCel = false)
 {
 	float fAngles[3], fOrigin[3];
 	
-	if (!Cel_CheckPropCount(iClient))
+	//The music radio counts as a cel; the clipboard and can (message, sound) as props.
+	if (bCel ? !Cel_CheckCelCount(iClient) : !Cel_CheckPropCount(iClient))
 	{
-		Cel_ReplyToCommand(iClient, "You have reached your prop limit.");
+		Cel_ReplyToCommand(iClient, bCel ? "You have reached your cel limit." : "You have reached your prop limit.");
 		return -1;
 	}
 	
@@ -2086,7 +2087,7 @@ public Action Command_Music(int iClient, int iArgs)
 	}
 	
 	//A radio: press E on it to play its song, and again to stop it.
-	int iProp = SpawnUsableProp(iClient, "music", "models/props_lab/citizenradio.mdl");
+	int iProp = SpawnUsableProp(iClient, "music", "models/props_lab/citizenradio.mdl", true);
 	
 	if (iProp == -1)
 	{
@@ -2094,6 +2095,9 @@ public Action Command_Music(int iClient, int iArgs)
 	}
 	
 	SetupMusicCel(iProp, sPath, fLength, iPitch);
+	
+	//Spawned as a prop, it now counts as a cel.
+	Cel_RecountClientEntities(iClient);
 	
 	Cel_ReplyToCommand(iClient, "Spawned a {green}%s{default} music cel. Press {green}E{default} on it to play it, and again to stop it.", sName);
 	
@@ -2667,6 +2671,9 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 	if (sMusic[0] != '\0')
 	{
 		SetupMusicCel(iEntity, sMusic, kvSave.GetFloat("x_musiclength", 0.0), kvSave.GetNum("x_musicpitch", 100));
+		
+		//Loaded as a prop, it counts as a cel.
+		Cel_RecountClientEntities(iClient);
 	}
 	
 	kvSave.GetString("x_sound", g_sSound[iEntity], sizeof(g_sSound[]), "");

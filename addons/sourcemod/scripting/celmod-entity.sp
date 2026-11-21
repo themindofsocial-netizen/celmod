@@ -2617,6 +2617,19 @@ public int Native_GetEntityCatagory(Handle hPlugin, int iNumParams)
 		return view_as<int>(ENTCATAGORY_CEL);
 	} else if (etEntityType == ENTTYPE_CYCLER || etEntityType == ENTTYPE_DYNAMIC || etEntityType == ENTTYPE_PHYSICS || etEntityType == ENTTYPE_CLEER)
 	{
+		//A music radio (!music) is a cel, though it's a prop underneath.
+		if (etEntityType == ENTTYPE_PHYSICS || etEntityType == ENTTYPE_DYNAMIC)
+		{
+			char sPropName[16];
+			
+			Cel_GetPropName(iEntity, sPropName, sizeof(sPropName));
+			
+			if (StrEqual(sPropName, "music", false))
+			{
+				return view_as<int>(ENTCATAGORY_CEL);
+			}
+		}
+		
 		return view_as<int>(ENTCATAGORY_PROP);
 	} else {
 		return view_as<int>(ENTCATAGORY_UNKNOWN);
