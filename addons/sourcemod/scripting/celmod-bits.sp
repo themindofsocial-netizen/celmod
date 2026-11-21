@@ -40,6 +40,9 @@ int g_iLinkStage[MAXPLAYERS + 1];
 #define ANIM_FRAMES 10
 float g_fAnimPos[MAXENTITIES + 1][ANIM_FRAMES][3];
 float g_fAnimAng[MAXENTITIES + 1][ANIM_FRAMES][3];
+int g_iAnimColor[MAXENTITIES + 1][ANIM_FRAMES][4]; // color and opacity, blended smoothly between frames
+int g_iAnimSkin[MAXENTITIES + 1][ANIM_FRAMES];     // skin and render effect switch halfway between frames
+int g_iAnimFx[MAXENTITIES + 1][ANIM_FRAMES];
 int g_iAnimMask[MAXENTITIES + 1];        // which frames are set (bit 0 = frame 1)
 float g_fAnimStep[MAXENTITIES + 1];      // seconds per frame
 bool g_bAnimBackward[MAXENTITIES + 1];   // the next press plays the frames in reverse
@@ -1501,7 +1504,7 @@ public Action Command_Animate(int iClient, int iArgs)
 	if (iArgs < 1)
 	{
 		ReplyAnimFrames(iClient, iProp);
-		Cel_ReplyToCommand(iClient, "Move the prop, then {green}!animate <1-10>{default} to save it as that frame. {green}!link{default} a button to it to play them. Also: {green}!animate speed <seconds>{default}, {green}play{default}, {green}clear{default}.");
+		Cel_ReplyToCommand(iClient, "Move, turn, color, fade ({green}!alpha{default}) or reskin the prop, then {green}!animate <1-10>{default} to save it as that frame. {green}!link{default} a button to it to play them. Also: {green}!animate speed <seconds>{default}, {green}play{default}, {green}clear{default}.");
 		return Plugin_Handled;
 	}
 	
@@ -1554,6 +1557,11 @@ public Action Command_Animate(int iClient, int iArgs)
 	
 	GetEntPropVector(iProp, Prop_Data, "m_vecAbsOrigin", g_fAnimPos[iProp][iFrame - 1]);
 	GetEntPropVector(iProp, Prop_Data, "m_angAbsRotation", g_fAnimAng[iProp][iFrame - 1]);
+	
+	//The look is part of the frame too: color, opacity (!alpha), skin and render effect.
+	Cel_GetColor(iProp, g_iAnimColor[iProp][iFrame - 1]);
+	g_iAnimSkin[iProp][iFrame - 1] = GetEntProp(iProp, Prop_Send, "m_nSkin");
+	g_iAnimFx[iProp][iFrame - 1] = view_as<int>(Cel_GetRenderFX(iProp));
 	
 	if (g_iAnimMask[iProp] == 0)
 	{
@@ -1677,6 +1685,16 @@ public void OnGameFrame()
 			int iLast = NthFrame(i, iSegments, g_bAnimPlayingBack[i]);
 			
 			TeleportEntity(i, g_fAnimPos[i][iLast], g_fAnimAng[i][iLast], NULL_VECTOR);
+			
+			//The last frame's look is kept (saved with the prop, like a !color would be).
+			if (!Cel_IsRainbow(i))
+			{
+				Cel_SetColor(i, g_iAnimColor[i][iLast][0], g_iAnimColor[i][iLast][1], g_iAnimColor[i][iLast][2], g_iAnimColor[i][iLast][3]);
+			}
+			
+			SetEntProp(i, Prop_Send, "m_nSkin", g_iAnimSkin[i][iLast]);
+			Cel_SetRenderFX(i, view_as<RenderFx>(g_iAnimFx[i][iLast]));
+			
 			g_fAnimStart[i] = 0.0;
 			continue;
 		}
@@ -1696,6 +1714,32 @@ public void OnGameFrame()
 		}
 		
 		TeleportEntity(i, fPos, fAng, NULL_VECTOR);
+		
+		//Color and opacity blend; skin and render effect change halfway. A rainbow prop keeps cycling its own colors.
+		if (!Cel_IsRainbow(i))
+		{
+			int iColor[4];
+			
+			for (int k = 0; k < 4; k++)
+			{
+				iColor[k] = RoundToNearest(float(g_iAnimColor[i][a][k]) + float(g_iAnimColor[i][b][k] - g_iAnimColor[i][a][k]) * fF);
+			}
+			
+			SetEntityRenderMode(i, (iColor[3] < 255 || g_iAnimColor[i][a][3] < 255 || g_iAnimColor[i][b][3] < 255) ? RENDER_TRANSCOLOR : RENDER_NORMAL);
+			SetEntityRenderColor(i, iColor[0], iColor[1], iColor[2], iColor[3]);
+		}
+		
+		int iHalf = (fF < 0.5) ? a : b;
+		
+		if (GetEntProp(i, Prop_Send, "m_nSkin") != g_iAnimSkin[i][iHalf])
+		{
+			SetEntProp(i, Prop_Send, "m_nSkin", g_iAnimSkin[i][iHalf]);
+		}
+		
+		if (view_as<int>(GetEntityRenderFx(i)) != g_iAnimFx[i][iHalf])
+		{
+			SetEntityRenderFx(i, view_as<RenderFx>(g_iAnimFx[i][iHalf]));
+		}
 	}
 }
 
@@ -1819,7 +1863,8 @@ public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
 			if (g_iAnimMask[iEntity] & (1 << f))
 			{
 				FormatEx(sKey, sizeof(sKey), "x_anim%d", f + 1);
-				FormatEx(sValue, sizeof(sValue), "%.2f %.2f %.2f %.2f %.2f %.2f", g_fAnimPos[iEntity][f][0] - fOrigin[0], g_fAnimPos[iEntity][f][1] - fOrigin[1], g_fAnimPos[iEntity][f][2] - fOrigin[2], g_fAnimAng[iEntity][f][0], g_fAnimAng[iEntity][f][1], g_fAnimAng[iEntity][f][2]);
+				FormatEx(sValue, sizeof(sValue), "%.2f %.2f %.2f %.2f %.2f %.2f %d %d %d %d %d %d", g_fAnimPos[iEntity][f][0] - fOrigin[0], g_fAnimPos[iEntity][f][1] - fOrigin[1], g_fAnimPos[iEntity][f][2] - fOrigin[2], g_fAnimAng[iEntity][f][0], g_fAnimAng[iEntity][f][1], g_fAnimAng[iEntity][f][2],
+					g_iAnimColor[iEntity][f][0], g_iAnimColor[iEntity][f][1], g_iAnimColor[iEntity][f][2], g_iAnimColor[iEntity][f][3], g_iAnimSkin[iEntity][f], g_iAnimFx[iEntity][f]);
 				kvSave.SetString(sKey, sValue);
 			}
 		}
@@ -1839,7 +1884,11 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 		
 		if (g_iAnimMask[iEntity] != 0)
 		{
-			char sKey[16], sValue[128], sParts[6][16];
+			char sKey[16], sValue[160], sParts[12][16];
+			int iSaved[4];
+			
+			//Frames saved before the look was part of them use the prop's look as it loaded.
+			Cel_GetColor(iEntity, iSaved);
 			float fOrigin[3];
 			
 			GetEntPropVector(iEntity, Prop_Data, "m_vecAbsOrigin", fOrigin);
@@ -1854,7 +1903,9 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 				FormatEx(sKey, sizeof(sKey), "x_anim%d", f + 1);
 				kvSave.GetString(sKey, sValue, sizeof(sValue), "");
 				
-				if (ExplodeString(sValue, " ", sParts, sizeof(sParts), sizeof(sParts[])) < 6)
+				int iParts = ExplodeString(sValue, " ", sParts, sizeof(sParts), sizeof(sParts[]));
+				
+				if (iParts < 6)
 				{
 					g_iAnimMask[iEntity] &= ~(1 << f);
 					continue;
@@ -1864,6 +1915,21 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 				{
 					g_fAnimPos[iEntity][f][k] = fOrigin[k] + StringToFloat(sParts[k]);
 					g_fAnimAng[iEntity][f][k] = StringToFloat(sParts[k + 3]);
+				}
+				
+				if (iParts >= 12)
+				{
+					for (int k = 0; k < 4; k++)
+					{
+						g_iAnimColor[iEntity][f][k] = StringToInt(sParts[6 + k]);
+					}
+					
+					g_iAnimSkin[iEntity][f] = StringToInt(sParts[10]);
+					g_iAnimFx[iEntity][f] = StringToInt(sParts[11]);
+				} else {
+					g_iAnimColor[iEntity][f] = iSaved;
+					g_iAnimSkin[iEntity][f] = GetEntProp(iEntity, Prop_Send, "m_nSkin");
+					g_iAnimFx[iEntity][f] = view_as<int>(Cel_GetRenderFX(iEntity));
 				}
 			}
 		}

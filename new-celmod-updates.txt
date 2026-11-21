@@ -555,3 +555,6 @@
 		   button's model.
 		 - !soundlist (or !sounds) lists the sounds a sound cel can play: the whole list goes to your console, and
 		   !soundlist <word> searches in chat. The website has an up-to-date, searchable Sounds List and Music List.
+		 - !animate frames also save the prop's look: its color and opacity blend smoothly from frame to frame, and
+		   its skin and render effect change halfway between frames. Color, !alpha, !skin or !renderfx the prop before
+		   saving each frame. (Frames saved before this keep the prop's look as it is.)
