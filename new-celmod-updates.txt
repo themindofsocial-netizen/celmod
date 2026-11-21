@@ -558,3 +558,6 @@
 		 - !animate frames also save the prop's look: its color and opacity blend smoothly from frame to frame, and
 		   its skin and render effect change halfway between frames. Color, !alpha, !skin or !renderfx the prop before
 		   saving each frame. (Frames saved before this keep the prop's look as it is.)
+		 - New song for !music: summersolace (4:11).
+		 - Players now download CelMod's own songs and sounds (the ones in sounds.txt that aren't Half-Life's), so the
+		   music cel plays for everyone, not only for players who already had the files.

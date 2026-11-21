@@ -449,6 +449,8 @@ public void OnClientPutInServer(int iClient)
 
 public void OnMapStart()
 {
+	AddSoundDownloads();
+	
 	PrecacheSound("ambient/machines/teleport1.wav", true);
 	PrecacheSound(HOOPIE_SOUND, true);
 	PrecacheModel(TELEPORT_MODEL, true);
@@ -2250,6 +2252,49 @@ public Action Command_SoundList(int iClient, int iArgs)
 	}
 	
 	return Plugin_Handled;
+}
+
+//Every song and sound in sounds.txt that is a file of the server's own (not one of the game's) is sent to players,
+//so they hear CelMod's custom music. The game's own sounds live in its VPKs and are never sent.
+void AddSoundDownloads()
+{
+	char sValue[PLATFORM_MAX_PATH], sParts[2][PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+	static const char sSections[][] = { "Music", "Sounds" };
+	
+	KeyValues kvSounds = new KeyValues("Sounds");
+	
+	if (!kvSounds.ImportFromFile(g_sSoundDB))
+	{
+		delete kvSounds;
+		return;
+	}
+	
+	for (int s = 0; s < sizeof(sSections); s++)
+	{
+		kvSounds.Rewind();
+		
+		if (!kvSounds.JumpToKey(sSections[s], false) || !kvSounds.GotoFirstSubKey(false))
+		{
+			continue;
+		}
+		
+		do
+		{
+			kvSounds.GetString(NULL_STRING, sValue, sizeof(sValue), "");
+			ExplodeString(sValue, "|", sParts, sizeof(sParts), sizeof(sParts[]));
+			
+			FormatEx(sFile, sizeof(sFile), "sound/%s", sParts[0]);
+			
+			//A loose file on the server (false = not looking inside the game's VPKs).
+			if (sParts[0][0] != '\0' && FileExists(sFile, false))
+			{
+				AddFileToDownloadsTable(sFile);
+			}
+		}
+		while (kvSounds.GotoNextKey(false));
+	}
+	
+	delete kvSounds;
 }
 
 //The songs a music cel can play, with how long each one is.

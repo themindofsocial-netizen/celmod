@@ -162,5 +162,6 @@
 		"nosup"	"celmod/nosup.mp3|229.5"
 		"arctic"	"celmod/smb1_arctic.mp3|79.5"
 		"storm"	"celmod/smb1_storm.mp3|82.5"
+		"summersolace"	"celmod/summersolace.mp3|251.1"
 	}
 }
