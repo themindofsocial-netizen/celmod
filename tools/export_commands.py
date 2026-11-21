@@ -30,7 +30,7 @@ CATEGORY = {}
 for cat, names in {
     'building': 'spawn p s save load saves builds clear copy paste +copy +move freeze freezeit freezeall unfreeze unfreezeit unfreezeall del delete remove delall deleteall removeall undo '
                 'r rotate flip roll turn stand straight straighten smove pmove drop moveto weld release stack stackinfo axis mark marker '
-                'replace model skin color paint palette fadecolor alpha amt renderfx solid god lock unlock perm unperm owner',
+                'replace model skin color paint palette fadecolor alpha amt renderfx renderfxlist solid god lock unlock perm unperm owner',
     'cels': 'text door light ladder internet seturl turret fire effect emitter message music celmusic sound teleport spawnpoint button link animate anim setpass pass wep ammo ammocrate charger',
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
             'fee landban landunban landkick kick landslay weps nofly landnoclip extinguish buildmessage block unblock hide show zones',
@@ -47,7 +47,7 @@ USAGE = {
     'r': '<degrees>', 'flip': '<degrees>', 'roll': '<degrees>', 'turn': '<degrees>', 'rotate': '<flip> <r> <roll>',
     'stack': '<x> <y> <z> [copies]', 'smove': '<x> <y> <z>', 'replace': '<prop name>', 'skin': '<number>',
     'color': '<color> (#all for everything you own)', 'fadecolor': '<color 1> <color 2>', 'palette': '<red> <green> <blue>',
-    'alpha': '<0-255>', 'renderfx': '<effect>', 'door': '<door skin>', 'light': '[distance]', 'ladder': '<1 or 2>',
+    'alpha': '<0-255>', 'renderfx': '<effect> (no effect: the list)', 'door': '<door skin>', 'light': '[distance]', 'ladder': '<1 or 2>',
     'seturl': '<url>', 'text': '<words> (^ in front for small text)', 'effect': '<effect name>', 'message': '<text>', 'music': '<song>', 'sound': '<sound name>',
     'setpass': '<passcode or off>', 'pass': '<passcode>', 'wep': '<weapon>', 'ammo': '<ammo type>', 'ammocrate': '<smg, ar2, rpg, grenade or cball>',
     'charger': '<health or suit>', 'gravity': '<amount>', 'landskin': '<1-26 or off>', 'landcolor': '<color>',

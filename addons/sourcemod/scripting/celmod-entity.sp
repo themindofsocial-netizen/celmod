@@ -170,6 +170,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_remove", Command_Delete, "|CelMod| Removes the prop you are looking at.");
 	RegConsoleCmd("v_removeall", Command_DeleteAll, "|CelMod| Removes all the entities that you own.");
 	RegConsoleCmd("v_renderfx", Command_RenderFX, "|CelMod| Changes the RenderFX on the prop you are looking at.");
+	RegConsoleCmd("v_renderfxlist", Command_RenderFXList, "|CelMod| Lists the render effects for !renderfx.");
 	RegConsoleCmd("v_replace", Command_Replace, "|CelMod| Replaces the model on the entity you are looking at.");
 	RegConsoleCmd("v_roll", Command_HookRoll, "|CelMod| Rolls the prop you are looking at.");
 	RegConsoleCmd("v_rotate", Command_Rotate, "|CelMod| Flips, rotates and rolls the prop you are looking at.");
@@ -1314,17 +1315,56 @@ public Action Command_Replace(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+//The render effects !renderfx knows, with what each looks like.
+static const char g_sRenderFXList[][][] = {
+	{ "default", "No effect (back to normal)" },
+	{ "pulse", "Fades in and out quickly" },
+	{ "fade", "Fades away" },
+	{ "strobe", "Flashes on and off" },
+	{ "flicker", "Flickers like a bad light" },
+	{ "distort", "Wobbles and flickers" },
+	{ "hologram", "Looks like a fading hologram" }
+};
+
+public Action Command_RenderFXList(int iClient, int iArgs)
+{
+	Cel_ReplyToCommand(iClient, "Render effects for {green}!renderfx <effect>{default} (look at a prop):");
+	
+	for (int i = 0; i < sizeof(g_sRenderFXList); i++)
+	{
+		Cel_ReplyToCommand(iClient, "  {green}%s{default}: %s", g_sRenderFXList[i][0], g_sRenderFXList[i][1]);
+	}
+	
+	return Plugin_Handled;
+}
+
 public Action Command_RenderFX(int iClient, int iArgs)
 {
 	char sRenderFX[PLATFORM_MAX_PATH];
 	
-	if (iArgs < 1)
+	GetCmdArg(1, sRenderFX, sizeof(sRenderFX));
+	
+	if (iArgs < 1 || StrEqual(sRenderFX, "list", false))
 	{
-		Cel_ReplyToCommand(iClient, "%t", "CMD_RenderFX");
-		return Plugin_Handled;
+		return Command_RenderFXList(iClient, iArgs);
 	}
 	
-	GetCmdArg(1, sRenderFX, sizeof(sRenderFX));
+	//A name that isn't one of them would quietly reset the prop: say so instead.
+	bool bKnown = false;
+	
+	for (int i = 0; i < sizeof(g_sRenderFXList); i++)
+	{
+		if (StrContains(g_sRenderFXList[i][0], sRenderFX, false) != -1)
+		{
+			bKnown = true;
+		}
+	}
+	
+	if (!bKnown)
+	{
+		Cel_ReplyToCommand(iClient, "There's no render effect called {green}%s{default}. Type {green}!renderfx{default} for the list.", sRenderFX);
+		return Plugin_Handled;
+	}
 	
 	if (Cel_GetClientAimTarget(iClient) == -1)
 	{
