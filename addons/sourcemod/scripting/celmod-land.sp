@@ -173,6 +173,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_landcoop", Command_LandCoop, "|CelMod| Changes the mode to co-op within the land.");
 	RegConsoleCmd("v_landdeathmatch", Command_LandDeathmatch, "|CelMod| Changes the mode to deathmatch within the land.");
 	RegConsoleCmd("v_landgravity", Command_LandGravity, "|CelMod| Changes the gravity within the land.");
+	RegConsoleCmd("v_extinguish", Command_Extinguish, "|CelMod| Puts out every fire in your land (props set alight by a fire emblem, burning players and NPCs).");
 	RegConsoleCmd("v_landshop", Command_LandShop, "|CelMod| Changes the mode to shop (merchant) within the land.");
 	RegConsoleCmd("v_shop", Command_LandShop, "|CelMod| Changes the mode to shop (merchant) within the land.");
 }
@@ -792,6 +793,58 @@ public Action Command_LandDeathmatch(int iClient, int iArgs)
 	g_liLand[iClient].bModeShop = false;
 	
 	Cel_ReplyToCommand(iClient, "%t", g_liLand[iClient].bModeDeathmatch ? "DeathmatchOn" : "DeathmatchOff");
+	
+	return Plugin_Handled;
+}
+
+public Action Command_Extinguish(int iClient, int iArgs)
+{
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_IsLandCreated(iClient))
+	{
+		Cel_ReplyToCommand(iClient, "You need a land first: make one with {green}!land{default}.");
+		return Plugin_Handled;
+	}
+	
+	float fPos[3];
+	int iCount = 0;
+	
+	//Everything burning (FL_ONFIRE) whose middle is in the land: props, players and NPCs. Fire cels made with
+	//!effect are left alone, they are meant to burn.
+	for (int i = 1; i <= GetMaxEntities(); i++)
+	{
+		if (!IsValidEntity(i) || !HasEntProp(i, Prop_Data, "m_fFlags") || !(GetEntityFlags(i) & FL_ONFIRE))
+		{
+			continue;
+		}
+		
+		if (i <= MaxClients && (!IsClientInGame(i) || !IsPlayerAlive(i)))
+		{
+			continue;
+		}
+		
+		GetEntPropVector(i, Prop_Data, "m_vecAbsOrigin", fPos);
+		fPos[2] += 8.0;
+		
+		if (Cel_GetLandOwnerFromPosition(fPos) != iClient)
+		{
+			continue;
+		}
+		
+		ExtinguishEntity(i);
+		iCount++;
+	}
+	
+	if (iCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "Nothing is burning in your land.");
+	} else {
+		Cel_ReplyToCommand(iClient, "Put out {green}%d{default} fire%s in your land.", iCount, iCount == 1 ? "" : "s");
+	}
 	
 	return Plugin_Handled;
 }

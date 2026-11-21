@@ -521,3 +521,7 @@
 		 - New FastDL: every current map, CelMod's content and the maps' textures, in fastdl/ with a setup guide
 		   (fastdl/README.md). tools/build_fastdl.py rebuilds it from the game server and lists anything missing.
 		 - New emblems: Silver, Wireframe and Blood. Crimson and Curse have a new look, and Error is white again.
+		 - !extinguish puts out every fire in your land: props a fire emblem set alight, burning players and NPCs.
+		 - The treegroup prop is gone: it was a flat skybox tree that came apart when you grabbed it.
+		 - NPC kills outside dungeons count toward spawn pads and !npckills too, including enemies from other players'
+		   spawn pads. Only enemies from your own pads don't count, so a pad can't be farmed.

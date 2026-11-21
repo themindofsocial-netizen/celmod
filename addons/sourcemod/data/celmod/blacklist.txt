@@ -7,5 +7,6 @@
 		"hoopie"		"blacklist"
 		"pineapple"		"blacklist"
 		"sbc"		"blacklist"
+		"treegroup"		"blacklist"	// a flat skybox tree card: it looked broken up close
 	}
 }

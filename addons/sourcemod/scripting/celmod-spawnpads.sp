@@ -15,7 +15,8 @@
  * Killing an enemy (in a map's dungeon, for example) counts toward its spawn pad. Every cm_spawnpad_kills kills
  * earns one pad of that kind, and each pad earned lets the player have one more of them placed at a time, so a
  * deleted pad is never lost. A placed pad keeps a few of its enemies alive on top of it. Enemies that come out of a
- * spawn pad never count toward kills, so pads can't be farmed. The kinds are listed in data/celmod/spawnpads.txt.
+ * player's own spawn pads never count toward their kills, so pads can't be farmed (other players' pads do). The
+ * kinds are listed in data/celmod/spawnpads.txt.
  */
 
 bool g_bLate;
@@ -66,6 +67,10 @@ float g_fDungeonOrigin[MAX_DUNGEON][3];
 float g_fDungeonYaw[MAX_DUNGEON];
 float g_fDungeonNext[MAX_DUNGEON];
 int g_iDungeonOf[MAXENTITIES + 1] = { -1, ... };
+
+//The userid of the player whose spawn pad made an enemy (0 = not from a pad). Their own pads' enemies never count
+//for them, so a pad can't be farmed for more pads; anyone else's do.
+int g_iPadOwnerOf[MAXENTITIES + 1];
 int g_iBeamSprite;
 ConVar g_cvDungeonInterval;
 ConVar g_cvDungeonRange;
@@ -299,6 +304,17 @@ int FindPadTypeBySkin(int iSkin)
 	return -1;
 }
 
+//True when an enemy came out of one of this player's own spawn pads (a pad whose owner is unknown counts as theirs).
+bool FromOwnPad(int iEnemy, int iClient)
+{
+	if (g_iSpawnedBy[iEnemy] == INVALID_ENT_REFERENCE)
+	{
+		return false;
+	}
+	
+	return g_iPadOwnerOf[iEnemy] == -1 || g_iPadOwnerOf[iEnemy] == GetClientUserId(iClient);
+}
+
 public void Output_NpcKill(const char[] sOutput, int iCaller, int iActivator, float fDelay)
 {
 	if (iCaller <= MaxClients || iCaller > MAXENTITIES || iActivator < 1 || iActivator > MaxClients || !IsClientInGame(iActivator) || IsFakeClient(iActivator))
@@ -306,8 +322,8 @@ public void Output_NpcKill(const char[] sOutput, int iCaller, int iActivator, fl
 		return;
 	}
 
-	//Enemies from a spawn pad never count (they could be farmed), the same as for earning pads.
-	if (g_iSpawnedBy[iCaller] != INVALID_ENT_REFERENCE)
+	//Enemies from the player's own spawn pads never count (they could be farmed), the same as for earning pads.
+	if (FromOwnPad(iCaller, iActivator))
 	{
 		return;
 	}
@@ -401,7 +417,7 @@ public Action Command_NpcKills(int iClient, int iArgs)
 
 	if (bAll)
 	{
-		Cel_ReplyToCommand(iClient, "  Total: {green}%d{default}. Spawn pad enemies don't count.", iTotal);
+		Cel_ReplyToCommand(iClient, "  Total: {green}%d{default}. Enemies from your own spawn pads don't count.", iTotal);
 	}
 
 	return Plugin_Handled;
@@ -414,8 +430,9 @@ public void Output_EnemyDeath(const char[] sOutput, int iCaller, int iActivator,
 		return;
 	}
 
-	//Enemies from a spawn pad never count.
-	if (g_iSpawnedBy[iCaller] != INVALID_ENT_REFERENCE)
+	//Kills count anywhere (dungeons, other players' spawn pads, NPCs an admin made), except enemies from the
+	//player's own spawn pads.
+	if (FromOwnPad(iCaller, iActivator))
 	{
 		return;
 	}
@@ -699,6 +716,7 @@ public void OnEntityCreated(int iEntity, const char[] sClassname)
 	{
 		g_iPadType[iEntity] = -1;
 		g_iSpawnedBy[iEntity] = INVALID_ENT_REFERENCE;
+		g_iPadOwnerOf[iEntity] = 0;
 		g_iDungeonOf[iEntity] = -1;
 
 		RequestFrame(Frame_CheckPad, EntIndexToEntRef(iEntity));
@@ -760,6 +778,7 @@ public void OnEntityDestroyed(int iEntity)
 
 	g_iPadType[iEntity] = -1;
 	g_iSpawnedBy[iEntity] = INVALID_ENT_REFERENCE;
+	g_iPadOwnerOf[iEntity] = 0;
 	g_iDungeonOf[iEntity] = -1;
 }
 
@@ -880,6 +899,10 @@ void SpawnEnemy(int iPad, int iType)
 
 	//Enemies from a player's pad never count toward kills.
 	g_iSpawnedBy[iEnemy] = EntIndexToEntRef(iPad);
+	
+	int iPadOwner = Cel_GetOwner(iPad);
+	
+	g_iPadOwnerOf[iEnemy] = (iPadOwner > 0 && iPadOwner <= MaxClients && IsClientInGame(iPadOwner)) ? GetClientUserId(iPadOwner) : -1;
 
 	EmitAmbientSound(SPAWNPAD_SOUND, fOrigin, iPad, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
 }
