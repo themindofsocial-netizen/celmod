@@ -4,6 +4,17 @@
 
 #define BUTTON_MODEL "models/dav0r/buttons/switch.mdl"
 
+//!button <style>: the button models to pick from (any spawnable prop's name works too).
+static const char g_sButtonStyles[][][] = {
+	{ "switch", "models/dav0r/buttons/switch.mdl" },
+	{ "combine", "models/props_combine/combinebutton.mdl" },
+	{ "elevator", "models/props_lab/freightelevatorbutton.mdl" },
+	{ "keypad", "models/props_lab/keypad.mdl" },
+	{ "firetrap", "models/props_citizen_tech/firetrap_button01a.mdl" },
+	{ "switchbox", "models/props_wasteland/prison_switchbox001a.mdl" },
+	{ "lever", "models/props_lab/tpswitch.mdl" }
+};
+
 #pragma newdecls required
 
 bool g_bLate;
@@ -59,6 +70,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_SpawnAmmoBit", Native_SpawnAmmoBit);
 	CreateNative("Cel_SpawnAmmoCrate", Native_SpawnAmmoCrate);
 	CreateNative("Cel_SpawnButton", Native_SpawnButton);
+	MarkNativeAsOptional("Cel_CheckShopProp");
 	CreateNative("Cel_SpawnCharger", Native_SpawnCharger);
 	//CreateNative("Cel_SpawnTrigger", Native_SpawnTrigger);
 	CreateNative("Cel_SpawnWeaponBit", Native_SpawnWeaponBit);
@@ -93,7 +105,7 @@ public void OnPluginStart()
 	
 	RegConsoleCmd("v_ammo", Command_SpawnAmmoBit, "|CelMod| Creates an ammo bit that will give ammo when the player touches it.");
 	RegConsoleCmd("v_ammocrate", Command_SpawnAmmoCrateBit, "|CelMod| Creates an ammo crate bit that will give ammo to the player.");
-	RegConsoleCmd("v_button", Command_SpawnButton, "|CelMod| Spawns a button trigger bit.");
+	RegConsoleCmd("v_button", Command_SpawnButton, "|CelMod| Spawns a button trigger bit: !button [model], where the model is switch, combine, elevator, keypad, firetrap, switchbox, lever or any prop's name (!button list).");
 	RegConsoleCmd("v_charger", Command_SpawnChargerBit, "|CelMod| Creates a health/suit charger bit that will give health/suit to the player.");
 	RegConsoleCmd("v_link", Command_Link, "|CelMod| Creates a link between a trigger bit and an entity.");
 	RegConsoleCmd("v_animate", Command_Animate, "|CelMod| Animates a prop: !animate <1-10> saves where it is now as that frame; !link a button to it to play the frames. !animate speed <seconds>, play, clear.");
@@ -261,10 +273,60 @@ public Action Command_SpawnAmmoCrateBit(int iClient, int iArgs)
 
 public Action Command_SpawnButton(int iClient, int iArgs)
 {
-	char sOption[64];
+	char sOption[64], sModel[PLATFORM_MAX_PATH] = "", sSpawn[PLATFORM_MAX_PATH], sStyles[192] = "";
 	float fAngles[3], fOrigin[3];
 	
 	GetCmdArg(1, sOption, sizeof(sOption));
+	
+	for (int i = 0; i < sizeof(g_sButtonStyles); i++)
+	{
+		Format(sStyles, sizeof(sStyles), "%s%s%s", sStyles, i > 0 ? ", " : "", g_sButtonStyles[i][0]);
+	}
+	
+	if (StrEqual(sOption, "list", false))
+	{
+		Cel_ReplyToCommand(iClient, "Button models: {green}%s{default}. Any prop's name works too: {green}!button oildrum001{default}", sStyles);
+		return Plugin_Handled;
+	}
+	
+	//A style, or the name of any prop players can spawn.
+	if (sOption[0] != '\0')
+	{
+		for (int i = 0; i < sizeof(g_sButtonStyles); i++)
+		{
+			if (StrEqual(sOption, g_sButtonStyles[i][0], false))
+			{
+				strcopy(sModel, sizeof(sModel), g_sButtonStyles[i][1]);
+			}
+		}
+		
+		//Shop props are bought one copy at a time, so they can't become free buttons.
+		if (sModel[0] == '\0' && GetFeatureStatus(FeatureType_Native, "Cel_CheckShopProp") == FeatureStatus_Available
+			&& Cel_CheckShopProp(iClient, sOption, sSpawn, sizeof(sSpawn)) != 0)
+		{
+			Cel_ReplyToCommand(iClient, "Shop props can't be used as buttons.");
+			return Plugin_Handled;
+		}
+		
+		if (sModel[0] == '\0' && !Cel_CheckBlacklistDB(sOption) && Cel_CheckSpawnDB(sOption, sSpawn, sizeof(sSpawn)))
+		{
+			int iBar = FindCharInString(sSpawn, '|');
+			
+			strcopy(sModel, sizeof(sModel), sSpawn[iBar + 1]);
+		}
+		
+		if (sModel[0] == '\0')
+		{
+			Cel_ReplyToCommand(iClient, "There's no button model or prop called {green}%s{default}. Button models: {green}%s{default}, or any prop's name.", sOption, sStyles);
+			return Plugin_Handled;
+		}
+		
+		if (!Cel_IsPhysicsModelComplete(sModel))
+		{
+			Cel_ReplyToCommand(iClient, "{green}%s{default} can't be a button: the server doesn't have that model's collision.", sOption);
+			return Plugin_Handled;
+		}
+	}
 	
 	GetClientAbsAngles(iClient, fAngles);
 	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
@@ -275,11 +337,21 @@ public Action Command_SpawnButton(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	int iBit = Cel_SpawnButton(iClient, fAngles, fOrigin, 255, 255, 255, 255);
+	int iBit = Cel_SpawnButton(iClient, fAngles, fOrigin, 255, 255, 255, 255, sModel);
+	
+	if (iBit == -1)
+	{
+		return Plugin_Handled;
+	}
 	
 	Cel_TeleportInfrontOfClient(iClient, iBit, 35.0);
 	
 	Cel_ReplyToCommand(iClient, "%t", "SpawnButton");
+	
+	if (sOption[0] == '\0')
+	{
+		Cel_ReplyToCommand(iClient, "Pick another look with {green}!button <model>{default}: {green}%s{default}, or any prop's name.", sStyles);
+	}
 	
 	return Plugin_Handled;
 }
@@ -912,10 +984,19 @@ public int Native_SpawnButton(Handle hPlugin, int iNumParams)
 	
 	iBase = CreateEntityByName("prop_physics_override");
 	
-	//The CelMod switch when the server has it, otherwise the Combine button.
-	char sButtonModel[PLATFORM_MAX_PATH];
+	//The model asked for (a style or prop: !button <model>, or the one a saved build had), else the CelMod switch
+	//when the server has it, else the Combine button.
+	char sButtonModel[PLATFORM_MAX_PATH] = "";
 	
-	strcopy(sButtonModel, sizeof(sButtonModel), Cel_IsPhysicsModelComplete(BUTTON_MODEL) ? BUTTON_MODEL : "models/props_combine/combinebutton.mdl");
+	if (iNumParams >= 8)
+	{
+		GetNativeString(8, sButtonModel, sizeof(sButtonModel));
+	}
+	
+	if (sButtonModel[0] == '\0' || !Cel_IsPhysicsModelComplete(sButtonModel))
+	{
+		strcopy(sButtonModel, sizeof(sButtonModel), Cel_IsPhysicsModelComplete(BUTTON_MODEL) ? BUTTON_MODEL : "models/props_combine/combinebutton.mdl");
+	}
 	
 	PrecacheModel(sButtonModel);
 	

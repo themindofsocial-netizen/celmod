@@ -550,3 +550,6 @@
 		   throw) them. Admins can't pick up admins above them.
 		 - Music radios (!music) and sound cans (!sound) are cels now: they count toward your cel limit instead of your
 		   props, and the HUD shows them as "Cel: Music" and "Cel: Sound".
+		 - !button <model> picks the button's look: switch (the default), combine, elevator, keypad, firetrap, switchbox,
+		   lever, or the name of any prop (!button oildrum001). !button list shows them, and saved builds keep each
+		   button's model.

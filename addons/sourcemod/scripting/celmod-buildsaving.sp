@@ -415,7 +415,7 @@ void LoadBuildEntry(int iClient, KeyValues kvLoadBuild)
 		}
 		case ENTTYPE_TRIGGER:
 		{
-			iProp = Cel_SpawnButton(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"));
+			iProp = Cel_SpawnButton(iClient, fEnt[0], fOrigin, kvLoadBuild.GetNum("c1"), kvLoadBuild.GetNum("c2"), kvLoadBuild.GetNum("c3"), kvLoadBuild.GetNum("c4"), sBuffer[2]);
 		}
 		case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP:
 		{

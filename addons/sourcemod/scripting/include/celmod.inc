@@ -1554,7 +1554,7 @@ native int Cel_SpawnAmmoBit(int iClient, AmmoBitType abtType, float fAngles[3], 
 
 native int Cel_SpawnAmmoCrate(int iClient, AmmoCrateType actType, float fAngles[3], float fOrigin[3], int iR, int iG, int iB, int iA);
 
-native int Cel_SpawnButton(iClient, float fAngles[3], float fOrigin[3], int iR, int iG, int iB, int iA);
+native int Cel_SpawnButton(iClient, float fAngles[3], float fOrigin[3], int iR, int iG, int iB, int iA, const char[] sModel = "");
 
 native int Cel_SpawnCharger(int iClient, ChargerType ctType, float fAngles[3], float fOrigin[3], int iR, int iG, int iB, int iA);
 
