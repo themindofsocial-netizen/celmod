@@ -1925,8 +1925,9 @@ void ApplyLandSkin(int iClient)
 			fEnd = fStart;
 			fEnd[2] = fMin[2] - 64.0;
 
-			//The decal goes on the map's floor right under the tile.
-			Handle hTrace = TR_TraceRayEx(fStart, fEnd, MASK_SOLID_BRUSHONLY, RayType_EndPoint);
+			//The decal goes on the map's floor right under the tile. Props, players and everything else are looked
+			//through (a prop standing on a tile used to leave that tile out).
+			Handle hTrace = TR_TraceRayFilterEx(fStart, fEnd, MASK_SOLID_BRUSHONLY, RayType_EndPoint, Filter_WorldOnlySkin);
 
 			bool bHit = TR_DidHit(hTrace) && TR_GetEntityIndex(hTrace) == 0;
 
@@ -1947,6 +1948,11 @@ void ApplyLandSkin(int iClient)
 	} else {
 		SendLandSkin(iClient, 0);
 	}
+}
+
+public bool Filter_WorldOnlySkin(int iEntity, int iContentsMask)
+{
+	return iEntity == 0;
 }
 
 float SkinTileCentre(float fLow, float fHigh, float fTile, int iIndex)

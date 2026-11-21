@@ -581,3 +581,4 @@
 		 - Every Half-Life 2 sound can go on a sound cel now: about 5,500 effects and voice lines on top of the 131 there
 		   were. Each is named after its file (!sound alarm_citizen_loop1). !soundlist shows the folders, and
 		   !soundlist <word> searches names and folders. The website's Sounds List has them all by folder, searchable.
+		 - Land skins cover the whole floor even where props stand on it (a prop on a tile used to leave that tile bare).
