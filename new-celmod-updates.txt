@@ -570,3 +570,6 @@
 		 - A button can be linked to up to 3 things (doors, lights, effects, animated props): !link the button, then the
 		   next thing, as many as 3 times. One press works all of them. !unlink on a button clears its links. Saved
 		   builds keep all three.
+		 - Celweps and emblems hurt NPCs (dungeon enemies, spawn pad enemies and the rest), not just players: celwep
+		   swings, shots and thrown blades, and the emblems' shots, Shock, Push, Magnitude, Demon towers, Smog clouds,
+		   Chaos, Icestorm, Big Shot and fireballs. Players' own turrets are left alone.

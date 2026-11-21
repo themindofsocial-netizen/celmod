@@ -5151,11 +5151,41 @@ void FireEmblemShot(int iClient, int iItem)
 			}
 		}
 
+		HurtNpcsNear(iClient, fEnd, g_Items[iItem].fValue, 0.0, DMG_BURN, g_Items[iItem].fDuration);
+
 		return;
 	}
 
 	if (StrEqual(sPower, "spray"))
 	{
+		return;
+	}
+
+	// NPCs aimed at take the hit too (shot, shock and push; magnitude throws them above).
+	if (IsHurtableNpc(iTarget))
+	{
+		if (StrEqual(sPower, "shot") || StrEqual(sPower, "shock") || StrEqual(sPower, "fire") || StrEqual(sPower, "blizzard"))
+		{
+			if (g_Items[iItem].fValue > 0.0)
+			{
+				SDKHooks_TakeDamage(iTarget, iClient, iClient, g_Items[iItem].fValue, StrEqual(sPower, "shock") ? DMG_SHOCK : g_Items[iItem].iDamageType);
+			}
+
+			if (g_Items[iItem].fIgnite > 0.0 && IsValidEntity(iTarget) && !(GetEntityFlags(iTarget) & FL_ONFIRE))
+			{
+				IgniteEntity(iTarget, g_Items[iItem].fIgnite);
+			}
+		} else if (StrEqual(sPower, "push"))
+		{
+			float fPush[3];
+
+			fPush[0] = fDirection[0] * g_Items[iItem].fValue;
+			fPush[1] = fDirection[1] * g_Items[iItem].fValue;
+			fPush[2] = fDirection[2] * g_Items[iItem].fValue + 250.0;
+
+			TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fPush);
+		}
+
 		return;
 	}
 
@@ -5522,6 +5552,76 @@ int GetEnemies(int[] iList, int iMax)
 	}
 
 	return iCount;
+}
+
+//An NPC a celwep can hurt: a living enemy (zombies, antlions, Combine...) that isn't a player's own cel (a !turret).
+bool IsHurtableNpc(int iEntity)
+{
+	if (iEntity <= MaxClients || !IsValidEntity(iEntity) || Cel_IsEntity(iEntity))
+	{
+		return false;
+	}
+
+	char sClass[32];
+
+	GetEntityClassname(iEntity, sClass, sizeof(sClass));
+
+	return (strncmp(sClass, "npc_", 4) == 0 && HasEntProp(iEntity, Prop_Data, "m_iHealth") && GetEntProp(iEntity, Prop_Data, "m_iHealth") > 0
+		&& GetEntProp(iEntity, Prop_Data, "m_takedamage") == 2);
+}
+
+//Hurts (and/or sets alight) every NPC within fRadius of a spot that a wall doesn't hide. fLift: upward throw (0 = none).
+void HurtNpcsNear(int iAttacker, const float fCenter[3], float fRadius, float fDamage, int iDamageType, float fIgnite = 0.0, float fLift = 0.0)
+{
+	int iEnemies[128];
+	int iCount = GetEnemies(iEnemies, sizeof(iEnemies));
+	float fPos[3];
+
+	for (int e = 0; e < iCount; e++)
+	{
+		int iEnemy = iEnemies[e];
+
+		if (!IsHurtableNpc(iEnemy))
+		{
+			continue;
+		}
+
+		GetEntPropVector(iEnemy, Prop_Data, "m_vecAbsOrigin", fPos);
+		fPos[2] += 24.0;
+
+		if (GetVectorDistance(fPos, fCenter) > fRadius)
+		{
+			continue;
+		}
+
+		Handle hTrace = TR_TraceRayFilterEx(fCenter, fPos, MASK_SOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+		bool bBlocked = TR_DidHit(hTrace);
+
+		CloseHandle(hTrace);
+
+		if (bBlocked)
+		{
+			continue;
+		}
+
+		if (fLift > 0.0)
+		{
+			float fThrow[3];
+
+			fThrow[2] = fLift;
+			TeleportEntity(iEnemy, NULL_VECTOR, NULL_VECTOR, fThrow);
+		}
+
+		if (fDamage > 0.0)
+		{
+			SDKHooks_TakeDamage(iEnemy, iAttacker, iAttacker, fDamage, iDamageType);
+		}
+
+		if (fIgnite > 0.0 && IsValidEntity(iEnemy) && !(GetEntityFlags(iEnemy) & FL_ONFIRE))
+		{
+			IgniteEntity(iEnemy, fIgnite);
+		}
+	}
 }
 
 bool CanBeHurt(int iAttacker, int iVictim)
@@ -6044,6 +6144,8 @@ void DemonTower(int iClient, int iItem, float fEnd[3], int iColor[4])
 
 		SDKHooks_TakeDamage(i, iClient, iClient, g_Items[iItem].fValue, DMG_ENERGYBEAM);
 	}
+
+	HurtNpcsNear(iClient, fBase, 80.0, g_Items[iItem].fValue, DMG_ENERGYBEAM, 0.0, 500.0);
 }
 
 // Solar: blinds everyone who can see the holder and is facing them, like a combine scanner's flash.
@@ -6215,6 +6317,12 @@ void ThinkSmog()
 				{
 					SDKHooks_TakeDamage(i, iOwner, iOwner, (iItem >= 0 && iItem < g_iItemCount) ? g_Items[iItem].fValue : 1.0, DMG_POISON);
 				}
+			}
+
+			// NPCs in the cloud choke too.
+			if (IsClientInGame(iOwner))
+			{
+				HurtNpcsNear(iOwner, fCloud, 160.0, (iItem >= 0 && iItem < g_iItemCount) ? g_Items[iItem].fValue : 1.0, DMG_POISON);
 			}
 		}
 	}
@@ -6625,6 +6733,8 @@ void SecondaryAttack(int iClient, int iItem)
 			SetEntityRenderColor(i, 90, 160, 255, 255);
 		}
 
+		HurtNpcsNear(iClient, fEnd, 160.0, g_Items[iItem].fSecondaryValue, DMG_DROWN);
+
 		return;
 	}
 
@@ -6644,7 +6754,7 @@ void SecondaryAttack(int iClient, int iItem)
 
 		EmitSoundToAll(SOUND_SHOCK, iClient);
 
-		if (CanBeHurt(iClient, iTarget))
+		if (CanBeHurt(iClient, iTarget) || IsHurtableNpc(iTarget))
 		{
 			SDKHooks_TakeDamage(iTarget, iClient, iClient, g_Items[iItem].fSecondaryValue, g_Items[iItem].iDamageType);
 		}
@@ -6818,6 +6928,8 @@ void FireballExploded(int iBall)
 			IgniteEntity(i, 4.0);
 		}
 	}
+
+	HurtNpcsNear(iClient, fOrigin, 170.0, 0.0, DMG_BURN, 4.0);
 }
 
 // Right click with the emblem in hand.
@@ -6960,6 +7072,15 @@ void ThrowTarget(int iClient, int iTarget, float fDirection[3], float fForce)
 		}
 
 		fVelocity[2] = 150.0;
+	} else if (IsHurtableNpc(iTarget))
+	{
+		// NPCs are flung like players.
+		fVelocity[0] = fDirection[0] * fForce;
+		fVelocity[1] = fDirection[1] * fForce;
+		fVelocity[2] = fDirection[2] * fForce + 250.0;
+
+		TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fVelocity);
+		return;
 	} else {
 		// Another player's build is never touched, and frozen props do not move anyway.
 		if (GetEntityMoveType(iTarget) != MOVETYPE_VPHYSICS || (Cel_IsEntity(iTarget) && !Cel_CheckOwner(iClient, iTarget)))
@@ -9007,6 +9128,21 @@ public void CG_OnPrimaryAttack(int iClient, int iWeapon)
 		return;
 	}
 
+	// NPCs (dungeon enemies and the rest) are hit the same way.
+	if (IsHurtableNpc(iHit))
+	{
+		SDKHooks_TakeDamage(iHit, iClient, iClient, g_Items[iItem].fHitDamage, DMG_CLUB);
+
+		if (g_Items[iItem].fIgnite > 0.0 && !(GetEntityFlags(iHit) & FL_ONFIRE))
+		{
+			IgniteEntity(iHit, g_Items[iItem].fIgnite);
+		}
+
+		CelWepHitEffect(iItem, fHit);
+
+		return;
+	}
+
 	CelWepHitEffect(iItem, fHit);
 
 	// Loose physics props get knocked about; nobody else's frozen build is touched.
@@ -9900,6 +10036,17 @@ void CelWepShoot(int iClient, int iItem)
 
 	DrawShotEffect(iClient, iItem, fStart, fEnd, fDirection, iColor);
 
+	// NPCs take the shot too.
+	if (IsHurtableNpc(iHit))
+	{
+		SDKHooks_TakeDamage(iHit, iClient, iClient, g_Items[iItem].fHitDamage, DMG_BULLET);
+
+		if (g_Items[iItem].fIgnite > 0.0 && !(GetEntityFlags(iHit) & FL_ONFIRE))
+		{
+			IgniteEntity(iHit, g_Items[iItem].fIgnite);
+		}
+	}
+
 	if (CanBeHurt(iClient, iHit))
 	{
 		SDKHooks_TakeDamage(iHit, iClient, iClient, g_Items[iItem].fHitDamage, DMG_BULLET);
@@ -10020,6 +10167,7 @@ int g_iShotItem[MAX_CELWEP_SHOTS];
 float g_fShotStart[MAX_CELWEP_SHOTS];
 bool g_bShotStuck[MAX_CELWEP_SHOTS];
 bool g_bShotHit[MAX_CELWEP_SHOTS][MAXPLAYERS + 1];
+int g_iShotNpcHit[MAX_CELWEP_SHOTS][8]; // NPCs a thrown blade already hit (references), so each is hit once
 
 void LaunchCelWepProjectile(int iClient, int iItem, float fStart[3], float fAngles[3], float fDirection[3])
 {
@@ -10126,6 +10274,11 @@ void LaunchCelWepProjectile(int iClient, int iItem, float fStart[3], float fAngl
 	for (int i = 0; i <= MaxClients; i++)
 	{
 		g_bShotHit[iSlot][i] = false;
+	}
+
+	for (int n = 0; n < sizeof(g_iShotNpcHit[]); n++)
+	{
+		g_iShotNpcHit[iSlot][n] = INVALID_ENT_REFERENCE;
 	}
 
 	if (!bMelon)
@@ -10278,6 +10431,61 @@ void ThinkCelWepProjectiles()
 			}
 
 			EmitSoundToAll("physics/flesh/flesh_impact_bullet1.wav", i);
+		}
+
+		// And every NPC, once each.
+		int iEnemies[64];
+		int iEnemyCount = GetEnemies(iEnemies, sizeof(iEnemies));
+
+		for (int e = 0; e < iEnemyCount; e++)
+		{
+			int iEnemy = iEnemies[e], iRef = EntIndexToEntRef(iEnemy), iFree = -1;
+			bool bHitBefore = false;
+
+			if (iOwner < 1 || !IsHurtableNpc(iEnemy))
+			{
+				continue;
+			}
+
+			for (int n = 0; n < sizeof(g_iShotNpcHit[]); n++)
+			{
+				if (g_iShotNpcHit[s][n] == iRef)
+				{
+					bHitBefore = true;
+				} else if (iFree == -1 && g_iShotNpcHit[s][n] == INVALID_ENT_REFERENCE)
+				{
+					iFree = n;
+				}
+			}
+
+			if (bHitBefore || iFree == -1)
+			{
+				continue;
+			}
+
+			float fEnemy[3];
+
+			GetEntPropVector(iEnemy, Prop_Data, "m_vecAbsOrigin", fEnemy);
+
+			float fDz = fShot[2] - fEnemy[2];
+
+			fEnemy[2] = fShot[2];
+
+			if (fDz < -8.0 || fDz > 72.0 || GetVectorDistance(fShot, fEnemy) > 34.0)
+			{
+				continue;
+			}
+
+			g_iShotNpcHit[s][iFree] = iRef;
+
+			SDKHooks_TakeDamage(iEnemy, iShot, iOwner, g_Items[iItem].fHitDamage, DMG_SLASH);
+
+			if (g_Items[iItem].fIgnite > 0.0 && IsValidEntity(iEnemy) && !(GetEntityFlags(iEnemy) & FL_ONFIRE))
+			{
+				IgniteEntity(iEnemy, g_Items[iItem].fIgnite);
+			}
+
+			EmitSoundToAll("physics/flesh/flesh_impact_bullet1.wav", iShot);
 		}
 	}
 }
