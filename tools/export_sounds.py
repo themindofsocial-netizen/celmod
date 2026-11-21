@@ -30,20 +30,11 @@ def natural(name):
 
 
 def group_of(path):
-    """A heading for a sound, from the folder it lives in."""
-    folder = path.replace('\\', '/').lower().split('/')
-    top = folder[0] if folder else ''
-    if top == 'hl1':
-        return 'Half-Life 1 (the HEV suit voice and more)'
-    if top == 'buttons':
-        return 'Buttons'
-    if top == 'vo':
-        return 'Voices'
-    if top in ('ambient', 'common'):
-        return 'Ambient and alarms'
-    if top in ('npc',):
-        return 'Creatures and Combine'
-    return 'Other'
+    """A sound's folder: the top one (vo and npc one level further, they have so many)."""
+    parts = path.replace('\\', '/').lower().split('/')
+    if len(parts) >= 3 and parts[0] in ('vo', 'npc'):
+        return parts[0] + '/' + parts[1]
+    return parts[0] if len(parts) > 1 else 'other'
 
 
 def page(title, intro, body, script):
@@ -67,7 +58,9 @@ SEARCH_JS = r"""<<<'JS'
 			if (ok) { shown++; }
 		});
 		groups.forEach(function (g) {
-			g.style.display = g.querySelector('[data-name]:not([style*="none"])') ? '' : 'none';
+			var any = g.querySelector('[data-name]:not([style*="none"])');
+			g.style.display = any ? '' : 'none';
+			if (g.tagName === 'DETAILS') { g.open = q !== '' && !!any; }
 		});
 		count.textContent = q === '' ? '' : (shown === 0 ? 'Nothing matches' : shown + ' match' + (shown === 1 ? '' : 'es'));
 	});
@@ -82,23 +75,21 @@ def main():
 
     sounds = section(text, 'Sounds')
     groups = {}
+    paths = dict(sounds)
     for name, path in sounds:
         groups.setdefault(group_of(path), []).append(name)
-    order = ['Half-Life 1 (the HEV suit voice and more)', 'Buttons', 'Voices', 'Ambient and alarms', 'Creatures and Combine', 'Other']
 
     blocks = []
-    for g in order:
-        names = groups.get(g)
-        if not names:
-            continue
-        chips = '\n'.join('  <button type="button" data-name="%s" data-copy="!sound %s" title="Copy !sound %s">%s</button>'
-                          % (html.escape(n.lower()), html.escape(n), html.escape(n), html.escape(n)) for n in sorted(names, key=natural))
-        blocks.append('<div class="soundgroup"><div class="group-title">- %s -</div>\n<div class="search-results soundlist">\n%s\n</div></div>'
-                      % (html.escape(g), chips))
+    for g in sorted(groups, key=natural):
+        names = groups[g]
+        chips = '\n'.join('  <button type="button" data-name="%s %s" data-copy="!sound %s" title="%s">%s</button>'
+                          % (html.escape(n.lower()), html.escape(paths[n].lower()), html.escape(n), html.escape(paths[n]), html.escape(n)) for n in sorted(names, key=natural))
+        blocks.append('<details class="soundgroup"><summary><b>%s</b> <span class="muted">(%d)</span></summary>\n'
+                      '<div class="search-results soundlist">\n%s\n</div></details>' % (html.escape(g), len(names), chips))
 
-    intro = ('<p>%d sounds for the sound cel. Spawn one with <span class="h">!sound &lt;name&gt;</span>, then press '
-             '<b>E</b> on the can to play it. In game, <span class="h">!soundlist</span> lists them and '
-             '<span class="h">!soundlist &lt;word&gt;</span> searches.<br>\n'
+    intro = ('<p>%d sounds for the sound cel: every Half-Life 2 sound, by folder. Spawn one with '
+             '<span class="h">!sound &lt;name&gt;</span>, then press <b>E</b> on the can (or link a button to it) to play it. '
+             'In game, <span class="h">!soundlist</span> shows the folders and <span class="h">!soundlist &lt;word&gt;</span> searches.<br>\n'
              'Click a sound to copy its command, ready to paste into the chat.</p>\n'
              '<div class="searchbar"><input type="search" id="soundfind" placeholder="Find a sound... (press /)" '
              'aria-label="Find a sound" autocomplete="off"> <span class="count" id="soundcount" aria-live="polite"></span></div>\n'

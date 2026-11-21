@@ -2153,14 +2153,17 @@ public void Hook_MusicUse(int iEntity, int iActivator, int iCaller, UseType utTy
 	g_fMusicEnds[iEntity] = GetGameTime() + fLength * 100.0 / g_iMusicPitch[iEntity];
 }
 
-//!soundlist [search]: the sounds a sound cel can play. A search shows the matches in chat; without one, the whole
-//list goes to the console (it's long) and chat says where to find it.
+//!soundlist [search]: the sounds a sound cel can play (thousands: every Half-Life 2 sound). Without a search it shows
+//the groups (folders) with how many sounds each has; a search matches names and folders, up to 40 in chat and up to
+//300 in the console.
 public Action Command_SoundList(int iClient, int iArgs)
 {
-	char sSearch[64], sName[64], sLine[256] = "";
+	char sSearch[64], sName[64], sPath[PLATFORM_MAX_PATH], sLine[256] = "";
 	int iCount = 0, iShown = 0, iOnLine = 0;
 	
-	GetCmdArg(1, sSearch, sizeof(sSearch));
+	GetCmdArgString(sSearch, sizeof(sSearch));
+	TrimString(sSearch);
+	StripQuotes(sSearch);
 	
 	KeyValues kvSounds = new KeyValues("Sounds");
 	
@@ -2172,45 +2175,98 @@ public Action Command_SoundList(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	bool bSearch = (sSearch[0] != '\0');
-	
-	if (!bSearch && iClient > 0)
+	if (sSearch[0] == '\0')
 	{
-		PrintToConsole(iClient, "|CelMod| Sounds for !sound <name>:");
+		//The groups: each sound's top folder (vo and npc split one level further).
+		StringMap smGroups = new StringMap();
+		ArrayList alOrder = new ArrayList(ByteCountToCells(48));
+		char sGroup[48], sParts[3][48];
+		int iInGroup;
+		
+		do
+		{
+			kvSounds.GetString(NULL_STRING, sPath, sizeof(sPath), "");
+			ReplaceString(sPath, sizeof(sPath), "\\", "/");
+			
+			int iParts = ExplodeString(sPath, "/", sParts, sizeof(sParts), sizeof(sParts[]));
+			
+			if (iParts >= 3 && (StrEqual(sParts[0], "vo", false) || StrEqual(sParts[0], "npc", false)))
+			{
+				FormatEx(sGroup, sizeof(sGroup), "%s/%s", sParts[0], sParts[1]);
+			} else {
+				strcopy(sGroup, sizeof(sGroup), iParts > 1 ? sParts[0] : "other");
+			}
+			
+			CStrToLower(sGroup);
+			
+			if (!smGroups.GetValue(sGroup, iInGroup))
+			{
+				iInGroup = 0;
+				alOrder.PushString(sGroup);
+			}
+			
+			smGroups.SetValue(sGroup, iInGroup + 1);
+			iCount++;
+		}
+		while (kvSounds.GotoNextKey(false));
+		
+		delete kvSounds;
+		
+		if (iClient > 0)
+		{
+			PrintToConsole(iClient, "|CelMod| %d sounds, by folder (!soundlist <folder or word> lists them):", iCount);
+			
+			for (int g = 0; g < alOrder.Length; g++)
+			{
+				alOrder.GetString(g, sGroup, sizeof(sGroup));
+				smGroups.GetValue(sGroup, iInGroup);
+				
+				Format(sLine, sizeof(sLine), "%s%s%s (%d)", sLine, iOnLine > 0 ? ", " : "  ", sGroup, iInGroup);
+				
+				if (++iOnLine == 6)
+				{
+					PrintToConsole(iClient, "%s", sLine);
+					sLine[0] = '\0';
+					iOnLine = 0;
+				}
+			}
+			
+			if (iOnLine > 0)
+			{
+				PrintToConsole(iClient, "%s", sLine);
+			}
+		}
+		
+		delete smGroups;
+		delete alOrder;
+		
+		Cel_ReplyToCommand(iClient, "There are {green}%d{default} sounds, every Half-Life 2 sound among them. The folders are in your console; {green}[tag]soundlist <folder or word>{default} lists sounds (e.g. {green}[tag]soundlist alarm{default}), and the website has them all.", iCount);
+		return Plugin_Handled;
+	}
+	
+	//A search: names and folders.
+	if (iClient > 0)
+	{
+		PrintToConsole(iClient, "|CelMod| Sounds matching \"%s\" (!sound <name>):", sSearch);
 	}
 	
 	do
 	{
 		kvSounds.GetSectionName(sName, sizeof(sName));
-		iCount++;
+		kvSounds.GetString(NULL_STRING, sPath, sizeof(sPath), "");
 		
-		if (bSearch && StrContains(sName, sSearch, false) == -1)
+		if (StrContains(sName, sSearch, false) == -1 && StrContains(sPath, sSearch, false) == -1)
 		{
 			continue;
 		}
 		
 		iShown++;
 		
-		if (!bSearch)
+		if (iShown <= 300 && iClient > 0)
 		{
-			if (iClient > 0)
-			{
-				Format(sLine, sizeof(sLine), "%s%s%s", sLine, iOnLine > 0 ? ", " : "  ", sName);
-				
-				if (++iOnLine == 8)
-				{
-					PrintToConsole(iClient, "%s", sLine);
-					sLine[0] = '\0';
-					iOnLine = 0;
-				}
-			} else {
-				PrintToServer("  %s", sName);
-			}
-			
-			continue;
+			PrintToConsole(iClient, "  %s  (%s)", sName, sPath);
 		}
 		
-		//Search results: a few to a line in chat, at most 40.
 		if (iShown <= 40)
 		{
 			Format(sLine, sizeof(sLine), "%s%s{green}%s{default}", sLine, iOnLine > 0 ? ", " : "", sName);
@@ -2227,17 +2283,6 @@ public Action Command_SoundList(int iClient, int iArgs)
 	
 	delete kvSounds;
 	
-	if (!bSearch)
-	{
-		if (iOnLine > 0 && iClient > 0)
-		{
-			PrintToConsole(iClient, "%s", sLine);
-		}
-		
-		Cel_ReplyToCommand(iClient, "There are {green}%d{default} sounds: the list is in your console (press {green}~{default}), and on the website. {green}[tag]soundlist <word>{default} searches, {green}[tag]sound <name>{default} spawns one.", iCount);
-		return Plugin_Handled;
-	}
-	
 	if (iOnLine > 0)
 	{
 		Cel_ReplyToCommand(iClient, "%s", sLine);
@@ -2245,10 +2290,10 @@ public Action Command_SoundList(int iClient, int iArgs)
 	
 	if (iShown == 0)
 	{
-		Cel_ReplyToCommand(iClient, "No sound has {green}%s{default} in its name. {green}[tag]soundlist{default} shows them all.", sSearch);
+		Cel_ReplyToCommand(iClient, "No sound or folder has {green}%s{default} in its name. {green}[tag]soundlist{default} shows the folders.", sSearch);
 	} else if (iShown > 40)
 	{
-		Cel_ReplyToCommand(iClient, "...and {green}%d{default} more. Try a longer search.", iShown - 40);
+		Cel_ReplyToCommand(iClient, "...{green}%d{default} in all: %s in your console. Try a longer search.", iShown, iShown > 300 ? "the first 300 are" : "they're all");
 	}
 	
 	return Plugin_Handled;

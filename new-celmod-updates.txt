@@ -578,3 +578,6 @@
 		   be hurt and can't use any commands (chat still works).
 		 - Buttons can be linked to sound cans, music radios and message clipboards: pressing the button plays the
 		   sound, starts (or stops) the song, or shows the message, like pressing E on them.
+		 - Every Half-Life 2 sound can go on a sound cel now: about 5,500 effects and voice lines on top of the 131 there
+		   were. Each is named after its file (!sound alarm_citizen_loop1). !soundlist shows the folders, and
+		   !soundlist <word> searches names and folders. The website's Sounds List has them all by folder, searchable.
