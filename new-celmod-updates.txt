@@ -543,3 +543,5 @@
 		   up to 10 frames. !link a !button to the prop: each press plays the frames smoothly, and the next press plays
 		   them back. !animate speed <seconds> sets each frame's time, !animate play previews it, !animate clear starts
 		   over. Animations are saved with your build.
+		 - Fixed the gas emblems' (Blue (S), Pink (S)) hissing sound piling up and never stopping: it now plays once
+		   while the gas is spraying and stops when you let go.

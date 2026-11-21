@@ -56,7 +56,9 @@
 #define SOUND_DIG "physics/surfaces/sand_impact_bullet1.wav"
 #define SOUND_TRASH "physics/metal/metal_solid_impact_soft1.wav"
 #define SOUND_HEAL "items/medshot4.wav"
-#define SOUND_GAS "ambient/gas/steam2.wav"
+//A looping hiss: started once when a gas jet turns on and stopped when it turns off (replaying a looping sound on
+//every shot stacked up copies that never stopped).
+#define SOUND_GAS "ambient/gas/steam_loop1.wav"
 #define SOUND_SHOCK "ambient/energy/zap1.wav"
 #define SOUND_BLINK "ambient/machines/teleport1.wav"
 #define SOUND_ICE "physics/glass/glass_impact_bullet4.wav"
@@ -3032,13 +3034,14 @@ void GasStream(int iClient, int iItem, float fStart[3], float fDirection[3])
 		AcceptEntityInput(iGas, "TurnOn");
 
 		g_iGasRef[iClient] = EntIndexToEntRef(iGas);
+
+		EmitSoundToAll(SOUND_GAS, iGas, SNDCHAN_STATIC, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.6);
 	}
 
 	TeleportEntity(iGas, fMuzzle, fAngles, NULL_VECTOR);
 
 	g_fGasUntil[iClient] = GetGameTime() + g_Items[iItem].fCooldown + 0.25;
 
-	PlayShotSound(iClient, SOUND_GAS);
 
 	bool bWater = StrEqual(g_Items[iItem].sGas, "water"), bHeal = StrEqual(g_Items[iItem].sGas, "heal");
 
@@ -3111,6 +3114,7 @@ void RemoveGas(int iClient)
 
 	if (iGas != INVALID_ENT_REFERENCE)
 	{
+		StopSound(iGas, SNDCHAN_STATIC, SOUND_GAS);
 		AcceptEntityInput(iGas, "TurnOff");
 		AcceptEntityInput(iGas, "Kill");
 	}
