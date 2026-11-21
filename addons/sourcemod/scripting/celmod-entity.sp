@@ -45,6 +45,10 @@ int g_iMoveEntity[MAXPLAYERS + 1];
 int g_iMovePlayer[MAXPLAYERS + 1];
 float g_fMovePlayerDist[MAXPLAYERS + 1];
 float g_fMovePlayerOffset[MAXPLAYERS + 1][3];
+float g_fHeldLast[MAXPLAYERS + 1][3];   // where the held player was put last frame (for the throw on release)
+float g_fHeldSpeed[MAXPLAYERS + 1][3];  // how fast that spot was moving
+int g_iHeldBy[MAXPLAYERS + 1];          // the admin (userid) holding this player, 0 = nobody
+float g_fHeldNotice[MAXPLAYERS + 1];
 int g_iStackInfoEnt[MAXPLAYERS + 1];
 int g_iStackInfoStatus[MAXPLAYERS + 1];
 
@@ -144,6 +148,10 @@ public void OnPluginStart()
 	RegAdminCmd("v_autobuild", Command_AutoBuild, ADMFLAG_SLAY, "|CelMod| Stacks props on the x, y and z axis.");
 	RegConsoleCmd("+copy", Command_StartCopy, "|CelMod| Starts copying and moving the prop you are looking at.");
 	RegConsoleCmd("+move", Command_StartGrab, "|CelMod| Starts moving the prop you are looking at.");
+	
+	//A player held in admin mode can chat, but not use !commands.
+	AddCommandListener(Listener_HeldChat, "say");
+	AddCommandListener(Listener_HeldChat, "say_team");
 	RegConsoleCmd("-copy", Command_StopCopy, "|CelMod| Stops copying and moving the prop you are looking at.");
 	RegConsoleCmd("-move", Command_StopGrab, "|CelMod| Stops moving the prop you are looking at.");
 	RegConsoleCmd("v_alpha", Command_Alpha, "|CelMod| Changes the transparency on the prop you are looking at.");
@@ -219,6 +227,7 @@ public void OnClientPutInServer(int iClient)
 public void OnClientDisconnect(int iClient)
 {
 	ReleasePlayer(iClient, false);
+	g_iHeldBy[iClient] = 0;
 	
 	g_bCopyFading[iClient] = false;
 	g_bCopyRainbow[iClient] = false;
@@ -2275,6 +2284,7 @@ bool InOtherLand(int iClient, const float fPropPos[3])
 }
 
 //Admin mode +move on players.
+
 void GrabPlayer(int iClient, int iTarget)
 {
 	if (g_iMovePlayer[iClient] != 0 || g_iMoveEntity[iClient] != -1)
@@ -2290,13 +2300,10 @@ void GrabPlayer(int iClient, int iTarget)
 	}
 	
 	//Only one admin holds a player at a time.
-	for (int i = 1; i <= MaxClients; i++)
+	if (g_iHeldBy[iTarget] != 0 && GetClientOfUserId(g_iHeldBy[iTarget]) > 0)
 	{
-		if (g_iMovePlayer[i] == GetClientUserId(iTarget))
-		{
-			Cel_ReplyToCommand(iClient, "{green}%N{default} is already being held.", iTarget);
-			return;
-		}
+		Cel_ReplyToCommand(iClient, "{green}%N{default} is already being held.", iTarget);
+		return;
 	}
 	
 	float fOrigin[3];
@@ -2305,6 +2312,13 @@ void GrabPlayer(int iClient, int iTarget)
 	
 	g_fMovePlayerDist[iClient] = StartHold(iClient, fOrigin, g_fMovePlayerOffset[iClient]);
 	g_iMovePlayer[iClient] = GetClientUserId(iTarget);
+	g_iHeldBy[iTarget] = GetClientUserId(iClient);
+	
+	g_fHeldLast[iClient] = fOrigin;
+	g_fHeldSpeed[iClient] = g_fZero;
+	
+	//While held: no damage, and no commands (see OnClientCommand).
+	SDKHook(iTarget, SDKHook_OnTakeDamage, Hook_HeldTakeDamage);
 	
 	SetEntityRenderColor(iTarget, 120, 255, 120, 255);
 	
@@ -2314,7 +2328,75 @@ void GrabPlayer(int iClient, int iTarget)
 	RequestFrame(Frame_MovePlayer, GetClientUserId(iClient));
 }
 
-//Lets go: the held player keeps the speed they had, so they can be thrown. bMessage: false when the admin left.
+public Action Hook_HeldTakeDamage(int iVictim, int &iAttacker, int &iInflictor, float &fDamage, int &iDamageType)
+{
+	if (g_iHeldBy[iVictim] != 0)
+	{
+		fDamage = 0.0;
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
+}
+
+//A held player can't use commands (kill, noclip, CelMod's...). Chat and menus still work.
+public Action OnClientCommand(int iClient, int iArgs)
+{
+	if (iClient < 1 || iClient > MaxClients || g_iHeldBy[iClient] == 0)
+	{
+		return Plugin_Continue;
+	}
+	
+	if (GetClientOfUserId(g_iHeldBy[iClient]) < 1)
+	{
+		g_iHeldBy[iClient] = 0;
+		return Plugin_Continue;
+	}
+	
+	char sCommand[32];
+	
+	GetCmdArg(0, sCommand, sizeof(sCommand));
+	
+	static const char sAllowed[][] = { "say", "say_team", "menuselect", "vban", "vmodenable", "spec_next", "spec_prev", "spec_mode" };
+	
+	for (int i = 0; i < sizeof(sAllowed); i++)
+	{
+		if (StrEqual(sCommand, sAllowed[i], false))
+		{
+			return Plugin_Continue;
+		}
+	}
+	
+	if (GetGameTime() >= g_fHeldNotice[iClient])
+	{
+		g_fHeldNotice[iClient] = GetGameTime() + 2.0;
+		Cel_PrintToChat(iClient, "An admin is holding you: you can't use commands until they let go.");
+	}
+	
+	return Plugin_Handled;
+}
+
+public Action Listener_HeldChat(int iClient, const char[] sCommand, int iArgs)
+{
+	if (iClient < 1 || iClient > MaxClients || g_iHeldBy[iClient] == 0 || GetClientOfUserId(g_iHeldBy[iClient]) < 1)
+	{
+		return Plugin_Continue;
+	}
+	
+	char sText[8];
+	
+	GetCmdArg(1, sText, sizeof(sText));
+	
+	if (sText[0] == '!' || sText[0] == '/')
+	{
+		Cel_PrintToChat(iClient, "An admin is holding you: you can't use commands until they let go.");
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
+}
+
+//Lets go: the held player is thrown with the speed the admin was moving them at. bMessage: false when the admin left.
 void ReleasePlayer(int iClient, bool bMessage)
 {
 	int iTarget = GetClientOfUserId(g_iMovePlayer[iClient]);
@@ -2323,7 +2405,26 @@ void ReleasePlayer(int iClient, bool bMessage)
 	
 	if (iTarget > 0 && IsClientInGame(iTarget))
 	{
+		g_iHeldBy[iTarget] = 0;
+		
+		SDKUnhook(iTarget, SDKHook_OnTakeDamage, Hook_HeldTakeDamage);
 		SetEntityRenderColor(iTarget, 255, 255, 255, 255);
+		
+		if (IsPlayerAlive(iTarget))
+		{
+			float fThrow[3];
+			
+			fThrow = g_fHeldSpeed[iClient];
+			
+			float fSpeed = GetVectorLength(fThrow);
+			
+			if (fSpeed > 1500.0)
+			{
+				ScaleVector(fThrow, 1500.0 / fSpeed);
+			}
+			
+			TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fThrow);
+		}
 		
 		PrecacheSound("weapons/physcannon/physcannon_drop.wav");
 		EmitSoundToAll("weapons/physcannon/physcannon_drop.wav", iTarget);
@@ -2333,6 +2434,11 @@ void ReleasePlayer(int iClient, bool bMessage)
 	{
 		Cel_PrintToChat(iClient, "The player you were holding is gone.");
 	}
+}
+
+public bool Filter_NotHeld(int iEntity, int iMask, any iTarget)
+{
+	return iEntity != iTarget && (iEntity < 1 || iEntity > MaxClients);
 }
 
 public void Frame_MovePlayer(any iUserId)
@@ -2353,29 +2459,42 @@ public void Frame_MovePlayer(any iUserId)
 		return;
 	}
 	
-	float fHold[3], fWant[3], fNow[3], fVelocity[3];
+	float fHold[3], fWant[3], fNow[3];
 	
 	HoldPoint(iClient, g_fMovePlayerDist[iClient], fHold);
 	AddVectors(fHold, g_fMovePlayerOffset[iClient], fWant);
 	GetClientAbsOrigin(iTarget, fNow);
 	
-	//Pulled toward the held spot with a springy velocity (like the physgun), so walls still stop them and letting go
-	//throws them.
-	SubtractVectors(fWant, fNow, fVelocity);
-	ScaleVector(fVelocity, 12.0);
+	//Put exactly where the admin is aiming (no springy overshoot), but walls still stop them: the player's own shape
+	//is traced from where they are to the spot.
+	float fMins[3], fMaxs[3];
 	
-	float fSpeed = GetVectorLength(fVelocity);
+	GetClientMins(iTarget, fMins);
+	GetClientMaxs(iTarget, fMaxs);
 	
-	if (fSpeed > 2500.0)
+	Handle hTrace = TR_TraceHullFilterEx(fNow, fWant, fMins, fMaxs, MASK_PLAYERSOLID, Filter_NotHeld, iTarget);
+	
+	if (TR_DidHit(hTrace))
 	{
-		ScaleVector(fVelocity, 2500.0 / fSpeed);
+		TR_GetEndPosition(fWant, hTrace);
 	}
 	
-	//Off the ground, so the ground's friction doesn't hold them back.
+	CloseHandle(hTrace);
+	
+	//How fast the held spot is moving, smoothed, for the throw when they're let go.
+	float fFrame = GetTickInterval();
+	
+	for (int k = 0; k < 3; k++)
+	{
+		g_fHeldSpeed[iClient][k] = g_fHeldSpeed[iClient][k] * 0.6 + ((fWant[k] - g_fHeldLast[iClient][k]) / fFrame) * 0.4;
+	}
+	
+	g_fHeldLast[iClient] = fWant;
+	
 	SetEntPropEnt(iTarget, Prop_Send, "m_hGroundEntity", -1);
 	SetEntityFlags(iTarget, GetEntityFlags(iTarget) & ~FL_ONGROUND);
 	
-	TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fVelocity);
+	TeleportEntity(iTarget, fWant, NULL_VECTOR, g_fZero);
 	
 	RequestFrame(Frame_MovePlayer, iUserId);
 }

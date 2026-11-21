@@ -573,3 +573,6 @@
 		 - Celweps and emblems hurt NPCs (dungeon enemies, spawn pad enemies and the rest), not just players: celwep
 		   swings, shots and thrown blades, and the emblems' shots, Shock, Push, Magnitude, Demon towers, Smog clouds,
 		   Chaos, Icestorm, Big Shot and fireballs. Players' own turrets are left alone.
+		 - Admin mode +move on players: the player now stays exactly where you aim instead of swinging past it (walls
+		   still stop them), and letting go throws them only as fast as you were moving them. While held they can't
+		   be hurt and can't use any commands (chat still works).
