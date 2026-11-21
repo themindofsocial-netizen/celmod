@@ -184,6 +184,7 @@ public void OnPluginStart()
 	g_cvDisputeDemoSeconds = CreateConVar("cm_dispute_demo_seconds", "180", "How long a dispute demo records, in seconds. Another dispute while recording makes it longer.", _, true, 30.0, true, 1800.0);
 	RegConsoleCmd("v_news", Command_News, "|CelMod| Shows what's new: the latest updates posted on the website.");
 	RegConsoleCmd("v_dispute", Command_Dispute, "|CelMod| Reports a player who is causing you problems to the admins.");
+	RegAdminCmd("v_disputes", Command_Disputes, ADMFLAG_GENERIC, "|CelMod| Admins: lists the open disputes; pick one to read it and mark it resolved or closed. !disputes all includes finished ones.");
 	AddCommandListener(Listener_DisputeChat, "say");
 	AddCommandListener(Listener_DisputeChat, "say_team");
 	RegConsoleCmd("v_reportbug", Command_ReportBug, "|CelMod| Reports a bug or glitch to the admins: !reportbug <what happened>.");
@@ -1751,6 +1752,264 @@ void SendDispute(int iClient, int iReason, const char[] sMessage)
 	}
 
 	Cel_PrintToChat(iClient, "Thanks! Your dispute about {green}%N{default} was sent to the admins. Use {green}!landban{default} to keep them off your land meanwhile.", iTarget);
+}
+
+//!disputes: the open disputes (newest first) in a menu, read from the database the website's Disputes tab uses.
+//Without the database, the last ones from data/celmod/disputes.txt are printed in the console.
+public Action Command_Disputes(int iClient, int iArgs)
+{
+	char sArg[16], sQuery[512];
+	
+	GetCmdArg(1, sArg, sizeof(sArg));
+	
+	bool bAll = StrEqual(sArg, "all", false);
+	
+	if (g_dbCelMod == null)
+	{
+		PrintDisputeLog(iClient);
+		return Plugin_Handled;
+	}
+	
+	FormatEx(sQuery, sizeof(sQuery), "SELECT id, name, target_name, reason, status, TIMESTAMPDIFF(MINUTE, created_at, NOW()) FROM cm_disputes %s ORDER BY id DESC LIMIT 50", bAll ? "" : "WHERE status = 'open'");
+	
+	g_dbCelMod.Query(SQL_OnDisputeList, sQuery, iClient > 0 ? GetClientUserId(iClient) : 0);
+	
+	return Plugin_Handled;
+}
+
+void PrintDisputeLog(int iClient)
+{
+	char sPath[PLATFORM_MAX_PATH], sLine[512];
+	ArrayList alLines = new ArrayList(ByteCountToCells(sizeof(sLine)));
+	
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/disputes.txt");
+	
+	File fLog = OpenFile(sPath, "r");
+	
+	if (fLog != null)
+	{
+		while (fLog.ReadLine(sLine, sizeof(sLine)))
+		{
+			TrimString(sLine);
+			
+			if (sLine[0] != '\0')
+			{
+				alLines.PushString(sLine);
+			}
+		}
+		
+		delete fLog;
+	}
+	
+	if (alLines.Length == 0)
+	{
+		Cel_ReplyToCommand(iClient, "There are no disputes.");
+	} else {
+		int iFrom = alLines.Length > 15 ? alLines.Length - 15 : 0;
+		
+		Cel_ReplyToCommand(iClient, "The database is offline: the last {green}%d{default} disputes are in your console.", alLines.Length - iFrom);
+		
+		for (int i = iFrom; i < alLines.Length; i++)
+		{
+			alLines.GetString(i, sLine, sizeof(sLine));
+			
+			if (iClient > 0)
+			{
+				PrintToConsole(iClient, "%s", sLine);
+			} else {
+				PrintToServer("%s", sLine);
+			}
+		}
+	}
+	
+	delete alLines;
+}
+
+//A short "5m", "3h" or "2d" for how long ago a dispute was sent.
+void FormatAgo(int iMinutes, char[] sAgo, int iMaxLength)
+{
+	if (iMinutes < 60)
+	{
+		FormatEx(sAgo, iMaxLength, "%dm", iMinutes);
+	} else if (iMinutes < 1440)
+	{
+		FormatEx(sAgo, iMaxLength, "%dh", iMinutes / 60);
+	} else {
+		FormatEx(sAgo, iMaxLength, "%dd", iMinutes / 1440);
+	}
+}
+
+public void SQL_OnDisputeList(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aUserId)
+{
+	int iClient = GetClientOfUserId(aUserId);
+	
+	if (aUserId != 0 && (iClient < 1 || !IsClientInGame(iClient)))
+	{
+		return;
+	}
+	
+	if (rsResults == null)
+	{
+		LogError("|CelMod| Could not read disputes: %s", sError);
+		Cel_ReplyToCommand(iClient, "Couldn't read the disputes from the database right now.");
+		return;
+	}
+	
+	if (rsResults.RowCount == 0)
+	{
+		Cel_ReplyToCommand(iClient, "There are no open disputes. {green}!disputes all{default} shows finished ones too.");
+		return;
+	}
+	
+	char sName[64], sTarget[64], sReason[64], sStatus[16], sAgo[16], sItem[192], sId[16];
+	
+	//From the server console: a plain list.
+	if (iClient == 0)
+	{
+		while (rsResults.FetchRow())
+		{
+			rsResults.FetchString(1, sName, sizeof(sName));
+			rsResults.FetchString(2, sTarget, sizeof(sTarget));
+			rsResults.FetchString(3, sReason, sizeof(sReason));
+			rsResults.FetchString(4, sStatus, sizeof(sStatus));
+			FormatAgo(rsResults.FetchInt(5), sAgo, sizeof(sAgo));
+			PrintToServer("#%d [%s, %s ago] %s against %s: %s", rsResults.FetchInt(0), sStatus, sAgo, sName, sTarget, sReason);
+		}
+		
+		return;
+	}
+	
+	Menu mList = new Menu(Menu_DisputeList);
+	
+	mList.SetTitle("|CelMod| Disputes (%d)\nPick one to read it", rsResults.RowCount);
+	
+	while (rsResults.FetchRow())
+	{
+		int iId = rsResults.FetchInt(0);
+		
+		rsResults.FetchString(1, sName, sizeof(sName));
+		rsResults.FetchString(2, sTarget, sizeof(sTarget));
+		rsResults.FetchString(3, sReason, sizeof(sReason));
+		rsResults.FetchString(4, sStatus, sizeof(sStatus));
+		FormatAgo(rsResults.FetchInt(5), sAgo, sizeof(sAgo));
+		
+		FormatEx(sItem, sizeof(sItem), "%s%s vs %s: %s (%s)", StrEqual(sStatus, "open") ? "" : "[done] ", sName, sTarget, sReason, sAgo);
+		IntToString(iId, sId, sizeof(sId));
+		mList.AddItem(sId, sItem);
+	}
+	
+	mList.Display(iClient, MENU_TIME_FOREVER);
+}
+
+public int Menu_DisputeList(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_End)
+	{
+		delete mMenu;
+	} else if (maAction == MenuAction_Select && g_dbCelMod != null)
+	{
+		char sId[16], sQuery[512];
+		
+		mMenu.GetItem(iItem, sId, sizeof(sId));
+		
+		FormatEx(sQuery, sizeof(sQuery), "SELECT id, name, steamid64, target_name, target_steamid64, map, reason, message, demo, status, admin_note, TIMESTAMPDIFF(MINUTE, created_at, NOW()) FROM cm_disputes WHERE id = %d", StringToInt(sId));
+		
+		g_dbCelMod.Query(SQL_OnDisputeDetail, sQuery, GetClientUserId(iClient));
+	}
+	
+	return 0;
+}
+
+public void SQL_OnDisputeDetail(Database dbDatabase, DBResultSet rsResults, const char[] sError, any aUserId)
+{
+	int iClient = GetClientOfUserId(aUserId);
+	
+	if (iClient < 1 || !IsClientInGame(iClient) || rsResults == null || !rsResults.FetchRow())
+	{
+		return;
+	}
+	
+	char sName[64], sSteam[24], sTarget[64], sTargetSteam[24], sMap[64], sReason[64], sMessage[256], sDemo[128], sStatus[16], sNote[256], sAgo[16], sText[1024], sId[16];
+	
+	int iId = rsResults.FetchInt(0);
+	
+	rsResults.FetchString(1, sName, sizeof(sName));
+	rsResults.FetchString(2, sSteam, sizeof(sSteam));
+	rsResults.FetchString(3, sTarget, sizeof(sTarget));
+	rsResults.FetchString(4, sTargetSteam, sizeof(sTargetSteam));
+	rsResults.FetchString(5, sMap, sizeof(sMap));
+	rsResults.FetchString(6, sReason, sizeof(sReason));
+	rsResults.FetchString(7, sMessage, sizeof(sMessage));
+	rsResults.FetchString(8, sDemo, sizeof(sDemo));
+	rsResults.FetchString(9, sStatus, sizeof(sStatus));
+	rsResults.FetchString(10, sNote, sizeof(sNote));
+	FormatAgo(rsResults.FetchInt(11), sAgo, sizeof(sAgo));
+	
+	//The full details (Steam IDs, the demo's file name) go to the console, where they can be copied.
+	PrintToConsole(iClient, "|CelMod| Dispute #%d (%s, %s ago, on %s)", iId, sStatus, sAgo, sMap);
+	PrintToConsole(iClient, "  From:    %s (%s)", sName, sSteam);
+	PrintToConsole(iClient, "  Against: %s (%s)", sTarget, sTargetSteam);
+	PrintToConsole(iClient, "  Reason:  %s%s%s", sReason, sMessage[0] != '\0' ? ": " : "", sMessage);
+	
+	if (sDemo[0] != '\0')
+	{
+		PrintToConsole(iClient, "  Demo:    %s (on the server)", sDemo);
+	}
+	
+	if (sNote[0] != '\0')
+	{
+		PrintToConsole(iClient, "  Note:    %s", sNote);
+	}
+	
+	FormatEx(sText, sizeof(sText), "|CelMod| Dispute #%d (%s, %s ago)\n \nFrom: %s\nAgainst: %s\nMap: %s\nReason: %s%s%s%s%s\n ", iId, sStatus, sAgo, sName, sTarget, sMap, sReason, sMessage[0] != '\0' ? "\n" : "", sMessage, sDemo[0] != '\0' ? "\nDemo: " : "", sDemo);
+	
+	Menu mDetail = new Menu(Menu_DisputeDetail);
+	
+	mDetail.SetTitle("%s\n(Steam IDs are in your console)", sText);
+	
+	IntToString(iId, sId, sizeof(sId));
+	
+	char sInfo[24];
+	
+	FormatEx(sInfo, sizeof(sInfo), "resolved:%s", sId);
+	mDetail.AddItem(sInfo, "Mark resolved", StrEqual(sStatus, "resolved") ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+	FormatEx(sInfo, sizeof(sInfo), "closed:%s", sId);
+	mDetail.AddItem(sInfo, "Close (no action needed)", StrEqual(sStatus, "closed") ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+	FormatEx(sInfo, sizeof(sInfo), "open:%s", sId);
+	mDetail.AddItem(sInfo, "Reopen", StrEqual(sStatus, "open") ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+	
+	mDetail.ExitBackButton = true;
+	mDetail.Display(iClient, MENU_TIME_FOREVER);
+}
+
+public int Menu_DisputeDetail(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_End)
+	{
+		delete mMenu;
+	} else if (maAction == MenuAction_Cancel && iItem == MenuCancel_ExitBack)
+	{
+		FakeClientCommand(iClient, "v_disputes");
+	} else if (maAction == MenuAction_Select && g_dbCelMod != null)
+	{
+		char sInfo[24], sParts[2][16], sQuery[256], sAdmin[64], sNote[200], sEscNote[420];
+		
+		mMenu.GetItem(iItem, sInfo, sizeof(sInfo));
+		ExplodeString(sInfo, ":", sParts, sizeof(sParts), sizeof(sParts[]));
+		
+		//The note says who handled it, in game, like the website's admin panel does.
+		GetClientName(iClient, sAdmin, sizeof(sAdmin));
+		FormatEx(sNote, sizeof(sNote), "%s in game by %s", sParts[0], sAdmin);
+		g_dbCelMod.Escape(sNote, sEscNote, sizeof(sEscNote));
+		
+		FormatEx(sQuery, sizeof(sQuery), "UPDATE cm_disputes SET status = '%s', admin_note = IF(admin_note = '', '%s', admin_note) WHERE id = %d", sParts[0], sEscNote, StringToInt(sParts[1]));
+		g_dbCelMod.Query(SQL_Generic, sQuery);
+		
+		Cel_PrintToChat(iClient, "Dispute #%s is now {green}%s{default}.", sParts[1], sParts[0]);
+		LogAction(iClient, -1, "\"%L\" set dispute #%s to %s", iClient, sParts[1], sParts[0]);
+	}
+	
+	return 0;
 }
 
 //The SourceTV bot, or 0 when SourceTV is off.

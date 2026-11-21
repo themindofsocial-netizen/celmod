@@ -525,3 +525,6 @@
 		 - The treegroup prop is gone: it was a flat skybox tree that came apart when you grabbed it.
 		 - NPC kills outside dungeons count toward spawn pads and !npckills too, including enemies from other players'
 		   spawn pads. Only enemies from your own pads don't count, so a pad can't be farmed.
+		 - Admins: !disputes lists the open disputes in a menu. Pick one to read it (Steam IDs and the demo's name go
+		   to the console) and mark it resolved, closed or open again; the website's Disputes tab shows the same.
+		   !disputes all includes finished ones.
