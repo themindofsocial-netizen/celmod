@@ -1623,7 +1623,7 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	iColor[3] = GetNativeCell(10);
 	
 	//Nothing is built inside an event area (a maze or parkour course), even by aiming into it from outside or
-	//loading a build over it. Admins with !zonebypass on are the exception.
+	//loading a build over it. Admins with !adminmode on are the exception.
 	if (iClient > 0 && iClient <= MaxClients && GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available
 		&& Cel_GetZoneType(fOrigin) == CEL_ZONE_EVENT && !Cel_ZoneExempt(iClient))
 	{
@@ -1631,7 +1631,7 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 		return -1;
 	}
 	
-	//Nobody builds in another player's land unless they're on its build team. Admins with !zonebypass can.
+	//Nobody builds in another player's land unless they're on its build team. Admins with !adminmode can.
 	if (iClient > 0 && iClient <= MaxClients && IsClientInGame(iClient))
 	{
 		int iLandOwner = Cel_OtherLandAt(iClient, fOrigin);

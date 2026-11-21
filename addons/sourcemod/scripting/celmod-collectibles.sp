@@ -1934,7 +1934,7 @@ int ZoneTypeAt(float fPos[3])
 	return Cel_GetZoneType(fPos);
 }
 
-// Only an admin with !zonebypass on; otherwise admins follow the area rules like everyone.
+// Only an admin with !adminmode on; otherwise admins follow the area rules like everyone.
 bool IsZoneExempt(int iClient)
 {
 	return Cel_ZoneExempt(iClient);

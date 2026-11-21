@@ -545,3 +545,6 @@
 		   over. Animations are saved with your build.
 		 - Fixed the gas emblems' (Blue (S), Pink (S)) hissing sound piling up and never stopping: it now plays once
 		   while the gas is spraying and stops when you let go.
+		 - Admins: !zonebypass is now !adminmode (the old name still works). With it on, area and land rules don't apply
+		   to you, and +move picks up players: carry them around like a Garry's Mod physgun and let go to drop (or
+		   throw) them. Admins can't pick up admins above them.

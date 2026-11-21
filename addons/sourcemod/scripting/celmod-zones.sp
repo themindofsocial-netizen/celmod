@@ -24,7 +24,7 @@
  *				   player back where they were. For hidden parts of a map that are only reached through the map's own
  *				   teleporters. No phasing, blinking, portals or teleport pads in either.
  *
- * Admins are held to the same rules, so they see events the way players do. !zonebypass (slay flag) turns the
+ * Admins are held to the same rules, so they see events the way players do. !adminmode (slay flag) turns the
  * rules off for that admin until they use it again or leave.
  */
 
@@ -91,7 +91,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	return APLRes_Success;
 }
 
-//Whether a player has the area rules turned off (an admin's !zonebypass).
+//Whether a player has the area rules turned off (an admin's !adminmode).
 public int Native_IsZoneExempt(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
@@ -126,7 +126,8 @@ public void OnPluginStart()
 	
 	RegAdminCmd("v_zone", Command_Zone, ADMFLAG_SLAY, "|CelMod| Creates an event or restricted area. Use it at one corner, then at the opposite corner.");
 	RegAdminCmd("v_delzone", Command_DelZone, ADMFLAG_SLAY, "|CelMod| Deletes the area you are standing in.");
-	RegAdminCmd("v_zonebypass", Command_ZoneBypass, ADMFLAG_SLAY, "|CelMod| Turns the event and restricted area rules off for you (use again to turn them back on).");
+	RegAdminCmd("v_adminmode", Command_ZoneBypass, ADMFLAG_SLAY, "|CelMod| Admin mode: area and land rules off for you, and +move picks up players (use again to turn it off).");
+	RegAdminCmd("v_zonebypass", Command_ZoneBypass, ADMFLAG_SLAY, "|CelMod| Same as !adminmode.");
 	RegConsoleCmd("v_zones", Command_Zones, "|CelMod| Lists the event and restricted areas on this map.");
 	
 	//Every command passes through here, so building commands can be refused inside an area.
@@ -271,9 +272,10 @@ public Action Command_ZoneBypass(int iClient, int iArgs)
 	
 	if (g_bBypass[iClient])
 	{
-		Cel_ReplyToCommand(iClient, "Area bypass {green}on{default}: event and restricted areas don't apply to you. Type {green}[tag]zonebypass{default} again to play by the rules.");
+		Cel_ReplyToCommand(iClient, "Admin mode {green}on{default}: event and restricted areas and other players' lands don't apply to you, and {green}+move{default} picks up players. Type {green}[tag]adminmode{default} again to turn it off.");
+		LogAction(iClient, -1, "\"%L\" turned admin mode on", iClient);
 	} else {
-		Cel_ReplyToCommand(iClient, "Area bypass {green}off{default}: event and restricted areas apply to you like everyone else.");
+		Cel_ReplyToCommand(iClient, "Admin mode {green}off{default}: you play by the same rules as everyone else.");
 	}
 	
 	return Plugin_Handled;
@@ -449,7 +451,7 @@ public Action Listener_AnyCommand(int iClient, const char[] sCommand, int iArgs)
 	}
 	
 	//Admins can always manage areas and turn the bypass on, even standing inside one.
-	if ((StrEqual(sLower, "v_zonebypass") || StrEqual(sLower, "v_zone") || StrEqual(sLower, "v_delzone") || StrEqual(sLower, "v_zones"))
+	if ((StrEqual(sLower, "v_zonebypass") || StrEqual(sLower, "v_adminmode") || StrEqual(sLower, "v_zone") || StrEqual(sLower, "v_delzone") || StrEqual(sLower, "v_zones"))
 		&& CheckCommandAccess(iClient, "celmod_zone_admin", ADMFLAG_SLAY, true))
 	{
 		return Plugin_Continue;

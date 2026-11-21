@@ -40,6 +40,11 @@ int g_iFadeColor[MAXENTITIES + 1][6];
 int g_iEntityDissolve;
 int g_iMoveCopyEntity[MAXPLAYERS + 1];
 int g_iMoveEntity[MAXPLAYERS + 1];
+
+//Admin mode: +move on a player carries them around like a Garry's Mod physgun. userid of the player held (0 = none).
+int g_iMovePlayer[MAXPLAYERS + 1];
+float g_fMovePlayerDist[MAXPLAYERS + 1];
+float g_fMovePlayerOffset[MAXPLAYERS + 1][3];
 int g_iStackInfoEnt[MAXPLAYERS + 1];
 int g_iStackInfoStatus[MAXPLAYERS + 1];
 
@@ -212,6 +217,8 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
+	ReleasePlayer(iClient, false);
+	
 	g_bCopyFading[iClient] = false;
 	g_bCopyRainbow[iClient] = false;
 	g_bHasCopyEntity[iClient] = false;
@@ -1923,6 +1930,18 @@ public Action Command_StartGrab(int iClient, int iArgs)
 {
 	float fOrigin[2][3];
 	
+	//Admin mode: looking at a player picks them up.
+	if (iClient > 0 && IsClientInGame(iClient) && Cel_ZoneExempt(iClient))
+	{
+		int iTarget = GetClientAimTarget(iClient, true);
+		
+		if (iTarget > 0 && IsClientInGame(iTarget) && IsPlayerAlive(iTarget))
+		{
+			GrabPlayer(iClient, iTarget);
+			return Plugin_Handled;
+		}
+	}
+	
 	if (Cel_GetClientAimTarget(iClient) == -1)
 	{
 		Cel_NotLooking(iClient);
@@ -2000,6 +2019,12 @@ public Action Command_StopCopy(int iClient, int iArgs)
 
 public Action Command_StopGrab(int iClient, int iArgs)
 {
+	if (g_iMovePlayer[iClient] != 0)
+	{
+		ReleasePlayer(iClient, true);
+		return Plugin_Handled;
+	}
+	
 	if(g_iMoveEntity[iClient] == -1)
 	{
 		Cel_ReplyToCommand(iClient, "%t", "NotGrabbingProp");
@@ -2178,7 +2203,7 @@ public void Frame_FadeColor(any iProp)
 }
 
 //+move and +copy are off in restricted and event areas (dungeons, mazes, parkour): for the player standing in
-//one, or the prop being carried into one. Admins with !zonebypass on are the exception.
+//one, or the prop being carried into one. Admins with !adminmode on are the exception.
 bool InNoMoveArea(int iClient, const float fPropPos[3])
 {
 	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") != FeatureStatus_Available || Cel_ZoneExempt(iClient))
@@ -2207,6 +2232,112 @@ bool InOtherLand(int iClient, const float fPropPos[3])
 	
 	return (iOwner > 0 && iOwner <= MaxClients && iOwner != iClient && IsClientInGame(iOwner) && !Cel_IsOnBuildTeam(iOwner, iClient)
 		&& !(GetFeatureStatus(FeatureType_Native, "Cel_IsZoneExempt") == FeatureStatus_Available && Cel_ZoneExempt(iClient)));
+}
+
+//Admin mode +move on players.
+void GrabPlayer(int iClient, int iTarget)
+{
+	if (g_iMovePlayer[iClient] != 0 || g_iMoveEntity[iClient] != -1)
+	{
+		Cel_ReplyToCommand(iClient, "%t", "AlreadyGrabbingProp");
+		return;
+	}
+	
+	if (!CanUserTarget(iClient, iTarget))
+	{
+		Cel_ReplyToCommand(iClient, "You can't pick up {green}%N{default}: they're an admin above you.", iTarget);
+		return;
+	}
+	
+	//Only one admin holds a player at a time.
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_iMovePlayer[i] == GetClientUserId(iTarget))
+		{
+			Cel_ReplyToCommand(iClient, "{green}%N{default} is already being held.", iTarget);
+			return;
+		}
+	}
+	
+	float fOrigin[3];
+	
+	GetClientAbsOrigin(iTarget, fOrigin);
+	
+	g_fMovePlayerDist[iClient] = StartHold(iClient, fOrigin, g_fMovePlayerOffset[iClient]);
+	g_iMovePlayer[iClient] = GetClientUserId(iTarget);
+	
+	SetEntityRenderColor(iTarget, 120, 255, 120, 255);
+	
+	PrecacheSound("weapons/physcannon/physcannon_pickup.wav");
+	EmitSoundToAll("weapons/physcannon/physcannon_pickup.wav", iClient);
+	
+	RequestFrame(Frame_MovePlayer, GetClientUserId(iClient));
+}
+
+//Lets go: the held player keeps the speed they had, so they can be thrown. bMessage: false when the admin left.
+void ReleasePlayer(int iClient, bool bMessage)
+{
+	int iTarget = GetClientOfUserId(g_iMovePlayer[iClient]);
+	
+	g_iMovePlayer[iClient] = 0;
+	
+	if (iTarget > 0 && IsClientInGame(iTarget))
+	{
+		SetEntityRenderColor(iTarget, 255, 255, 255, 255);
+		
+		PrecacheSound("weapons/physcannon/physcannon_drop.wav");
+		EmitSoundToAll("weapons/physcannon/physcannon_drop.wav", iTarget);
+	}
+	
+	if (bMessage && iClient > 0 && IsClientInGame(iClient) && iTarget <= 0)
+	{
+		Cel_PrintToChat(iClient, "The player you were holding is gone.");
+	}
+}
+
+public void Frame_MovePlayer(any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+	
+	if (iClient < 1 || g_iMovePlayer[iClient] == 0)
+	{
+		return;
+	}
+	
+	int iTarget = GetClientOfUserId(g_iMovePlayer[iClient]);
+	
+	//Stops when either of them dies or leaves, or the admin turns admin mode off.
+	if (!IsClientInGame(iClient) || !IsPlayerAlive(iClient) || !Cel_ZoneExempt(iClient) || iTarget < 1 || !IsClientInGame(iTarget) || !IsPlayerAlive(iTarget))
+	{
+		ReleasePlayer(iClient, false);
+		return;
+	}
+	
+	float fHold[3], fWant[3], fNow[3], fVelocity[3];
+	
+	HoldPoint(iClient, g_fMovePlayerDist[iClient], fHold);
+	AddVectors(fHold, g_fMovePlayerOffset[iClient], fWant);
+	GetClientAbsOrigin(iTarget, fNow);
+	
+	//Pulled toward the held spot with a springy velocity (like the physgun), so walls still stop them and letting go
+	//throws them.
+	SubtractVectors(fWant, fNow, fVelocity);
+	ScaleVector(fVelocity, 12.0);
+	
+	float fSpeed = GetVectorLength(fVelocity);
+	
+	if (fSpeed > 2500.0)
+	{
+		ScaleVector(fVelocity, 2500.0 / fSpeed);
+	}
+	
+	//Off the ground, so the ground's friction doesn't hold them back.
+	SetEntPropEnt(iTarget, Prop_Send, "m_hGroundEntity", -1);
+	SetEntityFlags(iTarget, GetEntityFlags(iTarget) & ~FL_ONGROUND);
+	
+	TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fVelocity);
+	
+	RequestFrame(Frame_MovePlayer, iUserId);
 }
 
 public void Frame_MoveProp(any iClient)

@@ -1137,7 +1137,7 @@ public Action Command_Stuck(int iClient, int iArgs)
 }
 
 //!nofly: other players can't noclip inside your land: turning it on there is refused, and anyone flying in is put
-//back on their feet. You, your build team and admins with !zonebypass can still fly. Remembered.
+//back on their feet. You, your build team and admins with !adminmode can still fly. Remembered.
 public Action Command_LandNoFly(int iClient, int iArgs)
 {
 	if (iClient < 1)
@@ -2955,7 +2955,7 @@ public void Frame_SpawnHealth(any iUserId)
 }
 
 //Double jump: pressing jump again in the air gives one more jump, until the player lands. Not inside event areas
-//(mazes and parkour), unless the player is an admin with !zonebypass on.
+//(mazes and parkour), unless the player is an admin with !adminmode on.
 public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fVel[3], float fAngles[3], int &iWeapon)
 {
 	int iLast = g_iLastButtons[iClient];

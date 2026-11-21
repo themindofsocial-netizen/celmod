@@ -613,7 +613,7 @@ native bool Cel_GetRewardLabel(int iEntity, char[] sLabel, int iMaxLength);
 native int Cel_GetZoneType(const float fPos[3]);
 
 /**
- * Whether a player has the event and restricted area rules turned off (an admin's !zonebypass).
+ * Whether a player has the event and restricted area rules turned off (an admin's !adminmode).
  * From the zones plugin, which may not be loaded: mark it optional.
  */
 native bool Cel_IsZoneExempt(int iClient);
