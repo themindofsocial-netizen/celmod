@@ -589,3 +589,5 @@
 		 - Admins: !punfreeze <player> freezes a player in place like DarkRP's freeze: they turn icy blue and can't move,
 		   shoot, use, jump, fly or kill themselves. Use it again to unfreeze them. It lasts through dying, and ends
 		   when they leave. Announced and logged like the other punishments.
+		 - Using an emblem ability that's still recharging tells you in chat how long is left ("Fire's right click is
+		   recharging: ready in 2.4s"). Fast-firing powers like the flamethrower don't nag.

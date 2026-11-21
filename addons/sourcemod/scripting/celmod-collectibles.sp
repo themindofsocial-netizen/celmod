@@ -2541,6 +2541,20 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		RequestFrame(Frame_Jump, GetClientUserId(iClient));
 	}
 
+	// Pressing an ability that is still recharging says how long is left (rapid-fire powers aren't nagged about).
+	if (!g_bInEvent[iClient])
+	{
+		if ((iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && (IsShotPower(g_Items[iItem].sPower) || StrEqual(g_Items[iItem].sPower, "time")))
+		{
+			CooldownNotice(iClient, iItem, g_fNextPower[iClient], "left click");
+		}
+
+		if ((iButtons & IN_ATTACK2) && !(iLast & IN_ATTACK2))
+		{
+			CooldownNotice(iClient, iItem, g_fNextSecondary[iClient], "right click");
+		}
+	}
+
 	// Time: left click fast-forwards you (double speed for "value" seconds).
 	if (StrEqual(g_Items[iItem].sPower, "time") && (iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && GetGameTime() >= g_fNextPower[iClient] && !g_bInEvent[iClient])
 	{
@@ -2583,6 +2597,23 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 	}
 
 	return Plugin_Changed;
+}
+
+float g_fNextCooldownNotice[MAXPLAYERS + 1];
+
+// "Fire's right click is recharging: ready in 2.4s." Only for waits of over half a second, at most once a second.
+void CooldownNotice(int iClient, int iItem, float fReadyAt, const char[] sWhich)
+{
+	float fNow = GetGameTime(), fLeft = fReadyAt - fNow;
+
+	if (fLeft < 0.6 || fNow < g_fNextCooldownNotice[iClient])
+	{
+		return;
+	}
+
+	g_fNextCooldownNotice[iClient] = fNow + 1.0;
+
+	Cel_PrintToChat(iClient, "{green}%s{default}'s %s is recharging: ready in {green}%.1f{default}s.", g_Items[iItem].sName, sWhich, fLeft);
 }
 
 public void Frame_Jump(any iUserId)
