@@ -14,6 +14,10 @@ bool g_bMuted[MAXPLAYERS + 1][MAXPLAYERS + 1];
 //!pungag: SteamID -> when the gag ends (unix time, 0 = never). Kept in data/celmod/gags.txt so it lasts across maps
 //and reconnects.
 StringMap g_smGags;
+
+//!punfreeze: players frozen in place by an admin (until unfrozen or they leave; dying doesn't free them).
+bool g_bPunFrozen[MAXPLAYERS + 1];
+#define FREEZE_SOUND "physics/glass/glass_impact_bullet4.wav"
 char g_sGagFile[PLATFORM_MAX_PATH];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
@@ -55,7 +59,14 @@ public void OnPluginStart()
 	RegAdminCmd("v_pungag", Command_PunGag, ADMFLAG_CHAT, "|CelMod| Stops a player chatting: !pungag <name> [minutes, 0 = until lifted] [reason].");
 	RegAdminCmd("v_punungag", Command_PunUngag, ADMFLAG_CHAT, "|CelMod| Lifts a gag: !punungag <name>.");
 	RegAdminCmd("v_punkick", Command_PunKick, ADMFLAG_KICK, "|CelMod| Kicks a player: !punkick <name> [reason].");
+	RegAdminCmd("v_punfreeze", Command_PunFreeze, ADMFLAG_SLAY, "|CelMod| Freezes a player in place (they can't move or shoot), or unfreezes them: !punfreeze <name>.");
 	RegAdminCmd("v_punban", Command_PunBan, ADMFLAG_BAN, "|CelMod| Bans a player: !punban <name> <minutes, 0 = forever> [reason].");
+	
+	HookEvent("player_spawn", Event_FrozenSpawn);
+	AddCommandListener(Listener_FrozenFly, "v_fly");
+	AddCommandListener(Listener_FrozenFly, "noclip");
+	AddCommandListener(Listener_FrozenFly, "kill");
+	AddCommandListener(Listener_FrozenFly, "explode");
 	
 	g_smGags = new StringMap();
 	BuildPath(Path_SM, g_sGagFile, sizeof(g_sGagFile), "data/celmod/gags.txt");
@@ -84,6 +95,7 @@ public void OnPluginStart()
 
 public void OnClientDisconnect(int iClient)
 {
+	g_bPunFrozen[iClient] = false;
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		g_bMuted[iClient][i] = false;
@@ -604,6 +616,113 @@ public Action Command_PunKick(int iClient, int iArgs)
 	KickClient(iTarget, "|CelMod| %s", sReason);
 	
 	return Plugin_Handled;
+}
+
+void ApplyPunFreeze(int iTarget, bool bFrozen)
+{
+	g_bPunFrozen[iTarget] = bFrozen;
+	
+	if (!IsClientInGame(iTarget) || !IsPlayerAlive(iTarget))
+	{
+		return;
+	}
+	
+	SetEntityMoveType(iTarget, bFrozen ? MOVETYPE_NONE : MOVETYPE_WALK);
+	SetEntityRenderMode(iTarget, bFrozen ? RENDER_TRANSCOLOR : RENDER_NORMAL);
+	SetEntityRenderColor(iTarget, bFrozen ? 0 : 255, bFrozen ? 128 : 255, 255, bFrozen ? 192 : 255);
+	
+	if (bFrozen)
+	{
+		float fStop[3];
+		
+		TeleportEntity(iTarget, NULL_VECTOR, NULL_VECTOR, fStop);
+	}
+	
+	PrecacheSound(FREEZE_SOUND);
+	EmitSoundToAll(FREEZE_SOUND, iTarget);
+}
+
+public Action Command_PunFreeze(int iClient, int iArgs)
+{
+	char sTarget[64];
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}!punfreeze <name>{default} (again to unfreeze them)");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+	
+	int iTarget = FindTarget(iClient, sTarget, false, true);
+	
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+	
+	bool bFreeze = !g_bPunFrozen[iTarget];
+	
+	ApplyPunFreeze(iTarget, bFreeze);
+	
+	if (bFreeze)
+	{
+		Cel_PrintToChatAll("{green}%N{default} was frozen by an admin.", iTarget);
+		Cel_PrintToChat(iTarget, "You're frozen: you can't move or shoot until an admin unfreezes you.");
+	} else {
+		Cel_PrintToChatAll("{green}%N{default} was unfrozen.", iTarget);
+	}
+	
+	LogAction(iClient, iTarget, "\"%L\" %s \"%L\"", iClient, bFreeze ? "froze" : "unfroze", iTarget);
+	
+	return Plugin_Handled;
+}
+
+//Frozen players can't fly or kill themselves out of it.
+public Action Listener_FrozenFly(int iClient, const char[] sCommand, int iArgs)
+{
+	if (iClient > 0 && iClient <= MaxClients && g_bPunFrozen[iClient])
+	{
+		Cel_PrintToChat(iClient, "You're frozen: you can't do that until an admin unfreezes you.");
+		return Plugin_Stop;
+	}
+	
+	return Plugin_Continue;
+}
+
+//A frozen player who dies stays frozen when they come back.
+public void Event_FrozenSpawn(Event eEvent, const char[] sName, bool bDontBroadcast)
+{
+	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
+	
+	if (iClient > 0 && g_bPunFrozen[iClient])
+	{
+		CreateTimer(0.2, Timer_RefreezeSpawn, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
+public Action Timer_RefreezeSpawn(Handle hTimer, any iUserId)
+{
+	int iClient = GetClientOfUserId(iUserId);
+	
+	if (iClient > 0 && g_bPunFrozen[iClient])
+	{
+		ApplyPunFreeze(iClient, true);
+	}
+	
+	return Plugin_Stop;
+}
+
+//Frozen: no shooting, using or jumping either.
+public Action OnPlayerRunCmd(int iClient, int &iButtons)
+{
+	if (g_bPunFrozen[iClient] && (iButtons & (IN_ATTACK | IN_ATTACK2 | IN_USE | IN_JUMP | IN_RELOAD)))
+	{
+		iButtons &= ~(IN_ATTACK | IN_ATTACK2 | IN_USE | IN_JUMP | IN_RELOAD);
+		return Plugin_Changed;
+	}
+	
+	return Plugin_Continue;
 }
 
 public Action Command_PunBan(int iClient, int iArgs)

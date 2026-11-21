@@ -586,3 +586,6 @@
 		   !sounds <word> and !soundlist <word> still search in chat.
 		 - Hoopies bounce you straight up off their flat faces (worked out from the hoopie's shape, so it's right
 		   whichever way the hoopie is turned), from its middle rather than its edge.
+		 - Admins: !punfreeze <player> freezes a player in place like DarkRP's freeze: they turn icy blue and can't move,
+		   shoot, use, jump, fly or kill themselves. Use it again to unfreeze them. It lasts through dying, and ends
+		   when they leave. Announced and logged like the other punishments.
