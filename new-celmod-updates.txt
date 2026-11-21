@@ -592,3 +592,5 @@
 		 - Using an emblem ability that's still recharging tells you in chat how long is left ("Fire's right click is
 		   recharging: ready in 2.4s"). Fast-firing powers like the flamethrower don't nag.
 		 - Saying a prop's name in chat ("melon") no longer spawns it: props are spawned with !melon or !spawn melon.
+		 - Letting go of +move or +copy when you weren't holding anything no longer says "You aren't grabbing/copying a
+		   prop already!".

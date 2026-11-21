@@ -2051,7 +2051,6 @@ public Action Command_StopCopy(int iClient, int iArgs)
 {
 	if(g_iMoveCopyEntity[iClient] == -1)
 	{
-		Cel_ReplyToCommand(iClient, "%t", "NotCopyingProp");
 		return Plugin_Handled;
 	}
 	
@@ -2076,7 +2075,6 @@ public Action Command_StopGrab(int iClient, int iArgs)
 	
 	if(g_iMoveEntity[iClient] == -1)
 	{
-		Cel_ReplyToCommand(iClient, "%t", "NotGrabbingProp");
 		return Plugin_Handled;
 	}
 	
