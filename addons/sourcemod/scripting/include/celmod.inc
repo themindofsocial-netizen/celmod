@@ -567,6 +567,12 @@ native bool Cel_GetCollectibleName(int iEntity, char[] sName, int iMaxLength);
  */
 native bool Cel_GiveCollectible(int iClient, const char[] sKind, const char[] sId);
 
+/**
+ * Takes one spare copy (not one that is out) of an emblem, hat or celwep from a player's bank.
+ * @return  false if they have no spare copy, or there is no such item.
+ */
+native bool Cel_TakeCollectible(int iClient, const char[] sKind, const char[] sId);
+
 native bool Cel_IsCollectible(int iEntity);
 
 /**

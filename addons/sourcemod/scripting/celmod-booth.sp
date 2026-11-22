@@ -11,7 +11,9 @@
  * with three props floating in it. Maps without a saved spot have no Guess Booth.
  * One of the three is the winner. A player standing in the booth gets one guess per map; a right guess pays out.
  *
- * Admins can hang an item above the booth and auction it: players bid with !bid, the highest bidder gets it.
+ * Players auction their own emblems, hats and celweps above the booth (!auction): others bid with !bid, and when
+ * it ends the item goes to the highest bidder and their bid to the seller. Nothing changes hands until the end, so
+ * nobody loses an item or money if someone leaves. Admins can also auction items the server gives away.
  */
 
 #define BOOTH_HALF 136.0
@@ -54,6 +56,17 @@ int g_iPropRef[3] = { INVALID_ENT_REFERENCE, INVALID_ENT_REFERENCE, INVALID_ENT_
 int g_iTopBid;
 int g_iTopBidder;
 
+//The player selling (userid), or 0 for an item the server gives (an admin's auction).
+int g_iAuctionSeller;
+char g_sSellerName[MAX_NAME_LENGTH];
+
+//Every bid of this auction (bidder userid and amount), so if the top bidder can't pay at the end the next one wins.
+#define MAX_BIDS 64
+int g_iBidUser[MAX_BIDS];
+int g_iBidAmount[MAX_BIDS];
+int g_iBidCount;
+ConVar g_cvAuctionMinutes;
+
 //Steam ids of everyone who has used their guess on this map.
 StringMap g_smGuessed;
 StringMap g_smAnswer; //each player's own winning prop (0-2) for this map, by Steam ID
@@ -91,7 +104,8 @@ public void OnPluginStart()
 	
 	AutoExecConfig(true, "celmod.booth");
 	
-	RegAdminCmd("v_auction", Command_Auction, ADMFLAG_SLAY, "|CelMod| Auctions an emblem, hat or weapon above the Guess Booth, or cancels the auction.");
+	RegConsoleCmd("v_auction", Command_Auction, "|CelMod| Auctions one of your emblems, hats or celweps above the Guess Booth: !auction <emblem/hat/weapon> <name> <minutes> [starting bid], or !auction cancel.");
+	g_cvAuctionMinutes = CreateConVar("cm_auction_max_minutes", "10", "Longest auction a player can start, in minutes (admins can run longer ones).", _, true, 1.0);
 	RegAdminCmd("v_guessbooth", Command_GuessBooth, ADMFLAG_SLAY, "|CelMod| Moves the Guess Booth to where you are standing for this map only, with new props.");
 	RegAdminCmd("v_setguessbooth", Command_SetGuessBooth, ADMFLAG_SLAY, "|CelMod| Saves where you are standing as this map's Guess Booth spot and puts the booth there.");
 	RegAdminCmd("v_delguessbooth", Command_DelGuessBooth, ADMFLAG_SLAY, "|CelMod| Removes this map's saved Guess Booth spot and the booth with it.");
@@ -340,12 +354,9 @@ public Action Command_DelGuessBooth(int iClient, int iArgs)
 	
 	if (g_bAuction)
 	{
-		//The auction hangs above the booth, so it is called off and the top bid returned.
-		RefundTopBidder();
-		
-		g_bAuction = false;
-		
-		RemoveRef(g_iAuctionRef);
+		//The auction hangs above the booth, so it is called off (nobody has paid anything yet).
+		Cel_PrintToChatAll("The auction for the {green}%s{default} is off: the Guess Booth was removed.", g_sAuctionName);
+		ClearAuction();
 	}
 	
 	RemoveBooth();
@@ -971,9 +982,9 @@ public Action Timer_Booth(Handle hTimer)
 		{
 			if (g_iTopBidder > 0 && GetClientOfUserId(g_iTopBidder) > 0)
 			{
-				Format(sText, sizeof(sText), "Auction: %s\nTop bid: %d CL by %N\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_iTopBid, GetClientOfUserId(g_iTopBidder), iLeft / 60, iLeft % 60);
+				Format(sText, sizeof(sText), "Auction: %s (sold by %s)\nTop bid: %d CL by %N\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_sSellerName, g_iTopBid, GetClientOfUserId(g_iTopBidder), iLeft / 60, iLeft % 60);
 			} else {
-				Format(sText, sizeof(sText), "Auction: %s\nStarting bid: %d CL\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_iTopBid, iLeft / 60, iLeft % 60);
+				Format(sText, sizeof(sText), "Auction: %s (sold by %s)\nStarting bid: %d CL\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_sSellerName, g_iTopBid, iLeft / 60, iLeft % 60);
 			}
 		} else {
 			Format(sText, sizeof(sText), "Guess Booth\nOne of the three props is your winner.\nStand in the square and type !guess 1, 2 or 3");
@@ -1118,6 +1129,36 @@ public Action Command_Guess(int iClient, int iArgs)
 }
 
 //Auctions:
+bool IsAuctionAdmin(int iClient)
+{
+	return iClient > 0 && CheckCommandAccess(iClient, "celmod_auction_admin", ADMFLAG_SLAY, true);
+}
+
+//"weapon", "celwep" and the like all mean a celwep.
+void NormaliseKind(char[] sKind, int iMaxLength)
+{
+	if (StrEqual(sKind, "celwep", false) || StrEqual(sKind, "celweps", false) || StrEqual(sKind, "weapons", false))
+	{
+		strcopy(sKind, iMaxLength, "weapon");
+	} else if (StrEqual(sKind, "emblems", false))
+	{
+		strcopy(sKind, iMaxLength, "emblem");
+	} else if (StrEqual(sKind, "hats", false))
+	{
+		strcopy(sKind, iMaxLength, "hat");
+	}
+}
+
+void ClearAuction()
+{
+	g_bAuction = false;
+	g_iTopBidder = 0;
+	g_iBidCount = 0;
+	g_iAuctionSeller = 0;
+	
+	RemoveRef(g_iAuctionRef);
+}
+
 public Action Command_Auction(int iClient, int iArgs)
 {
 	char sArg[4][64], sModel[PLATFORM_MAX_PATH];
@@ -1137,32 +1178,39 @@ public Action Command_Auction(int iClient, int iArgs)
 			return Plugin_Handled;
 		}
 		
-		RefundTopBidder();
+		//The seller can call their own auction off; admins can call off any.
+		if (!IsAuctionAdmin(iClient) && (g_iAuctionSeller == 0 || GetClientOfUserId(g_iAuctionSeller) != iClient))
+		{
+			Cel_ReplyToCommand(iClient, "Only the seller (or an admin) can cancel this auction.");
+			return Plugin_Handled;
+		}
 		
-		g_bAuction = false;
-		
-		RemoveRef(g_iAuctionRef);
-		
-		Cel_PrintToChatAll("The auction for the {green}%s{default} has been cancelled.", g_sAuctionName);
+		Cel_PrintToChatAll("The auction for the {green}%s{default} has been cancelled. Nothing changed hands.", g_sAuctionName);
+		ClearAuction();
 		
 		return Plugin_Handled;
 	}
 	
 	if (iArgs < 3)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]auction{default} <emblem/hat/weapon> <name> <minutes> [starting bid], or {green}[tag]auction cancel{default}");
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]auction{default} <emblem/hat/weapon> <name> <minutes> [starting bid], or {green}[tag]auction cancel{default}. You sell one of your own.");
+		return Plugin_Handled;
+	}
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
 		return Plugin_Handled;
 	}
 	
 	if (g_bAuction)
 	{
-		Cel_ReplyToCommand(iClient, "An auction is already running. Cancel it first with {green}[tag]auction cancel{default}.");
+		Cel_ReplyToCommand(iClient, "An auction is already running (the {green}%s{default}, sold by {green}%s{default}). Wait for it to end.", g_sAuctionName, g_sSellerName);
 		return Plugin_Handled;
 	}
 	
 	if (!g_bBooth)
 	{
-		Cel_ReplyToCommand(iClient, "There is no Guess Booth on this map. Place one with {green}[tag]guessbooth{default}.");
+		Cel_ReplyToCommand(iClient, "Auctions are held above the Guess Booth, and this map doesn't have one.");
 		return Plugin_Handled;
 	}
 	
@@ -1171,26 +1219,49 @@ public Action Command_Auction(int iClient, int iArgs)
 		GetCmdArg(i + 1, sArg[i], sizeof(sArg[]));
 	}
 	
+	NormaliseKind(sArg[0], sizeof(sArg[]));
+	
 	if (!Cel_GetCollectibleLook(sArg[0], sArg[1], sModel, sizeof(sModel), g_sAuctionName, sizeof(g_sAuctionName), iSkin, iColor))
 	{
 		Cel_ReplyToCommand(iClient, "There is no %s called {green}%s{default}.", sArg[0], sArg[1]);
 		return Plugin_Handled;
 	}
 	
+	//A player sells their own copy. An admin who doesn't own one auctions one the server gives away.
+	bool bOwn = Cel_GetCollectibleCount(iClient, sArg[0], sArg[1]) > 0;
+	
+	if (!bOwn && !IsAuctionAdmin(iClient))
+	{
+		Cel_ReplyToCommand(iClient, "You don't have a {green}%s{default} to sell. Check {green}[tag]bank{default}.", g_sAuctionName);
+		return Plugin_Handled;
+	}
+	
+	float fMinutes = StringToFloat(sArg[2]), fMax = IsAuctionAdmin(iClient) ? 60.0 : g_cvAuctionMinutes.FloatValue;
+	
+	if (fMinutes < 1.0)
+	{
+		fMinutes = 1.0;
+	} else if (fMinutes > fMax)
+	{
+		fMinutes = fMax;
+	}
+	
 	strcopy(g_sAuctionKind, sizeof(g_sAuctionKind), sArg[0]);
 	strcopy(g_sAuctionId, sizeof(g_sAuctionId), sArg[1]);
-	
-	float fMinutes = StringToFloat(sArg[2]);
-	
-	if (fMinutes < 0.5)
-	{
-		fMinutes = 0.5;
-	}
 	
 	g_bAuction = true;
 	g_fAuctionEnd = GetGameTime() + fMinutes * 60.0;
 	g_iTopBid = StringToInt(sArg[3]);
 	g_iTopBidder = 0;
+	g_iBidCount = 0;
+	g_iAuctionSeller = bOwn ? GetClientUserId(iClient) : 0;
+	
+	if (bOwn)
+	{
+		GetClientName(iClient, g_sSellerName, sizeof(g_sSellerName));
+	} else {
+		strcopy(g_sSellerName, sizeof(g_sSellerName), "the server");
+	}
 	
 	if (g_iTopBid < 1)
 	{
@@ -1210,26 +1281,17 @@ public Action Command_Auction(int iClient, int iArgs)
 		g_iAuctionRef = EntIndexToEntRef(iDisplay);
 	}
 	
-	Cel_PrintToChatAll("{green}Auction!{default} A {green}%s{default} is hanging above the Guess Booth. Bidding starts at {green}%d CL{default} and ends in {green}%d{default} minute%s. Bid with {green}!bid <amount>{default}.", g_sAuctionName, g_iTopBid, RoundToCeil(fMinutes), RoundToCeil(fMinutes) == 1 ? "" : "s");
+	Cel_PrintToChatAll("{green}Auction!{default} {green}%s{default} is selling a {green}%s{default} above the Guess Booth. Bidding starts at {green}%d CL{default} and ends in {green}%d{default} minute%s. Bid with {green}!bid <amount>{default}.", g_sSellerName, g_sAuctionName, g_iTopBid, RoundToCeil(fMinutes), RoundToCeil(fMinutes) == 1 ? "" : "s");
+	
+	if (bOwn)
+	{
+		Cel_ReplyToCommand(iClient, "Keep a spare {green}%s{default} in your bank until it ends: it goes to the winner then, and their bid to you. {green}[tag]auction cancel{default} calls it off.", g_sAuctionName);
+	}
 	
 	return Plugin_Handled;
 }
 
-//A bid is paid when it is made, and given back in full when someone bids higher.
-void RefundTopBidder()
-{
-	int iBidder = GetClientOfUserId(g_iTopBidder);
-	
-	if (g_iTopBidder > 0 && iBidder > 0 && IsClientInGame(iBidder))
-	{
-		Cel_AddToClientBalance(iBidder, g_iTopBid);
-		
-		Cel_PrintToChat(iBidder, "Your bid of {green}%d CL{default} on the {green}%s{default} has been returned.", g_iTopBid, g_sAuctionName);
-	}
-	
-	g_iTopBidder = 0;
-}
-
+//A bid is a promise: nothing is paid until the auction ends.
 public Action Command_Bid(int iClient, int iArgs)
 {
 	char sAmount[32];
@@ -1242,6 +1304,12 @@ public Action Command_Bid(int iClient, int iArgs)
 	if (!g_bAuction)
 	{
 		Cel_ReplyToCommand(iClient, "There is no auction running.");
+		return Plugin_Handled;
+	}
+	
+	if (g_iAuctionSeller != 0 && GetClientOfUserId(g_iAuctionSeller) == iClient)
+	{
+		Cel_ReplyToCommand(iClient, "You can't bid on your own auction.");
 		return Plugin_Handled;
 	}
 	
@@ -1262,20 +1330,37 @@ public Action Command_Bid(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	int iOwnBid = (GetClientOfUserId(g_iTopBidder) == iClient) ? g_iTopBid : 0;
-	
-	if (Cel_GetClientBalance(iClient) + iOwnBid < iAmount)
+	if (Cel_GetClientBalance(iClient) < iAmount)
 	{
-		Cel_ReplyToCommand(iClient, "You do not have {green}%d CL{default}.", iAmount);
+		Cel_ReplyToCommand(iClient, "You don't have {green}%d CL{default}.", iAmount);
 		return Plugin_Handled;
 	}
 	
-	RefundTopBidder();
+	int iUser = GetClientUserId(iClient), iSlot = -1;
 	
-	Cel_SubFromClientBalance(iClient, iAmount);
+	for (int b = 0; b < g_iBidCount; b++)
+	{
+		if (g_iBidUser[b] == iUser)
+		{
+			iSlot = b;
+		}
+	}
 	
+	if (iSlot == -1)
+	{
+		if (g_iBidCount >= MAX_BIDS)
+		{
+			Cel_ReplyToCommand(iClient, "This auction has too many bidders already.");
+			return Plugin_Handled;
+		}
+		
+		iSlot = g_iBidCount++;
+		g_iBidUser[iSlot] = iUser;
+	}
+	
+	g_iBidAmount[iSlot] = iAmount;
 	g_iTopBid = iAmount;
-	g_iTopBidder = GetClientUserId(iClient);
+	g_iTopBidder = iUser;
 	
 	//A late bid always leaves others 20 seconds to answer.
 	if (g_fAuctionEnd - GetGameTime() < 20.0)
@@ -1283,41 +1368,96 @@ public Action Command_Bid(int iClient, int iArgs)
 		g_fAuctionEnd = GetGameTime() + 20.0;
 	}
 	
-	Cel_PrintToChatAll("{green}%N{default} bid {green}%d CL{default} on the {green}%s{default}.", iClient, iAmount, g_sAuctionName);
+	Cel_PrintToChatAll("{green}%N{default} bid {green}%d CL{default} on the {green}%s{default}. You pay only if you win, when it ends.", iClient, iAmount, g_sAuctionName);
 	
 	return Plugin_Handled;
 }
 
+//The highest bid that can still go through wins: its bidder is here and can pay, and the seller still has the item.
 void EndAuction()
 {
-	int iWinner = GetClientOfUserId(g_iTopBidder);
+	int iSeller = (g_iAuctionSeller != 0) ? GetClientOfUserId(g_iAuctionSeller) : 0;
 	
-	g_bAuction = false;
-	
-	RemoveRef(g_iAuctionRef);
-	
-	if (g_iTopBidder == 0)
+	if (g_iBidCount == 0)
 	{
-		Cel_PrintToChatAll("The auction for the {green}%s{default} ended with no bids.", g_sAuctionName);
-	} else if (iWinner < 1 || !IsClientInGame(iWinner))
-	{
-		Cel_PrintToChatAll("The auction for the {green}%s{default} ended, but the highest bidder has left the server. Nobody receives it.", g_sAuctionName);
-	} else {
-		Cel_GiveCollectible(iWinner, g_sAuctionKind, g_sAuctionId);
-		
-		Cel_PrintToChatAll("{green}%N{default} won the {green}%s{default} for {green}%d CL{default}!", iWinner, g_sAuctionName, g_iTopBid);
+		Cel_PrintToChatAll("The auction for the {green}%s{default} ended with no bids%s.", g_sAuctionName, g_iAuctionSeller != 0 ? "; it stays with its seller" : "");
+		ClearAuction();
+		return;
 	}
 	
-	g_iTopBidder = 0;
+	if (g_iAuctionSeller != 0 && (iSeller < 1 || !IsClientInGame(iSeller)))
+	{
+		Cel_PrintToChatAll("The auction for the {green}%s{default} is off: the seller has left. Nobody paid anything.", g_sAuctionName);
+		ClearAuction();
+		return;
+	}
+	
+	//Highest bid first.
+	for (int a = 0; a < g_iBidCount; a++)
+	{
+		for (int b = a + 1; b < g_iBidCount; b++)
+		{
+			if (g_iBidAmount[b] > g_iBidAmount[a])
+			{
+				int iU = g_iBidUser[a], iA = g_iBidAmount[a];
+				
+				g_iBidUser[a] = g_iBidUser[b]; g_iBidAmount[a] = g_iBidAmount[b];
+				g_iBidUser[b] = iU; g_iBidAmount[b] = iA;
+			}
+		}
+	}
+	
+	for (int b = 0; b < g_iBidCount; b++)
+	{
+		int iWinner = GetClientOfUserId(g_iBidUser[b]), iPrice = g_iBidAmount[b];
+		
+		if (iWinner < 1 || !IsClientInGame(iWinner) || Cel_GetClientBalance(iWinner) < iPrice)
+		{
+			continue;
+		}
+		
+		//The seller's spare copy moves to the winner; if they no longer have one, the sale is off.
+		if (iSeller > 0 && !Cel_TakeCollectible(iSeller, g_sAuctionKind, g_sAuctionId))
+		{
+			Cel_PrintToChatAll("The auction for the {green}%s{default} is off: the seller no longer has a spare one. Nobody paid anything.", g_sAuctionName);
+			ClearAuction();
+			return;
+		}
+		
+		Cel_SubFromClientBalance(iWinner, iPrice);
+		Cel_GiveCollectible(iWinner, g_sAuctionKind, g_sAuctionId);
+		
+		if (iSeller > 0)
+		{
+			Cel_AddToClientBalance(iSeller, iPrice);
+			Cel_PrintToChat(iSeller, "You sold your {green}%s{default} to {green}%N{default} for {green}%d CL{default}.", g_sAuctionName, iWinner, iPrice);
+		}
+		
+		Cel_PrintToChatAll("{green}%N{default} won the {green}%s{default} for {green}%d CL{default}!", iWinner, g_sAuctionName, iPrice);
+		
+		ClearAuction();
+		return;
+	}
+	
+	Cel_PrintToChatAll("The auction for the {green}%s{default} ended, but none of its bidders are here with enough money any more. Nothing changed hands.", g_sAuctionName);
+	ClearAuction();
 }
 
-//Bids are handed back if the map changes before the auction ends.
+//The seller leaving calls their auction off (nothing has changed hands yet).
+public void OnClientDisconnect(int iClient)
+{
+	if (g_bAuction && g_iAuctionSeller != 0 && GetClientOfUserId(g_iAuctionSeller) == iClient)
+	{
+		Cel_PrintToChatAll("The auction for the {green}%s{default} is off: the seller has left.", g_sAuctionName);
+		ClearAuction();
+	}
+}
+
+//An auction still running when the map changes is called off; nobody has paid anything.
 public void OnMapEnd()
 {
 	if (g_bAuction)
 	{
-		RefundTopBidder();
-		
-		g_bAuction = false;
+		ClearAuction();
 	}
 }

@@ -76,7 +76,7 @@ char g_sEventNoSpawn[][] = { "v_emblem", "v_hat", "v_weapon", "v_cl" };
 char g_sEventAllowed[][] = 
 {
 	"v_balance", "v_buy", "v_emblems", "v_hats", "v_weapons", "v_inventory", "v_thirdperson", "v_firstperson", "v_stuck", 
-	"v_owner", "v_commandlist", "v_cmds", "v_commands", "v_updates", "v_updatelist", "v_switch", "v_guess", "v_bid", 
+	"v_owner", "v_commandlist", "v_cmds", "v_commands", "v_updates", "v_updatelist", "v_switch", "v_guess", "v_bid", "v_auction", 
 	"v_playermodel", "v_playermodels", "v_buymodel", "v_zones", "v_celmusic", "v_block", "v_unblock", "v_speed", "v_motd", "v_rules", "v_pass", "v_tacticlvl", "v_tacticxp", "v_spawnpads", "v_presents",
 	"v_npckills", "v_soundlist", "v_sounds", "v_pmute", "v_punmute", "v_reportbug", "v_hudcolor", "v_pungag", "v_punungag", "v_punkick", "v_punban"
 };

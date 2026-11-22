@@ -597,3 +597,8 @@
 		 - Fixed the server crashing when a turret falls over and "dies": floor turrets (yours and the map's) are stood
 		   back up as soon as they tip, so they never self-destruct, and picking one up with the gravity gun can't
 		   crash the server either (both are single-player Half-Life 2 code paths).
+		 - !auction is for everyone now: sell one of your own emblems, hats or celweps above the Guess Booth with
+		   !auction <emblem/hat/weapon> <name> <minutes> [starting bid]. Others !bid; when it ends the item goes to the
+		   highest bidder and their bid goes to you. Bids are only paid when the auction ends, so nobody loses money
+		   or an item if someone leaves: if the top bidder can't pay, the next highest wins. !auction cancel calls it
+		   off (sellers their own, admins any). Admins can still auction items the server gives away.

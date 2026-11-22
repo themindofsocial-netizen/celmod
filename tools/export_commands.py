@@ -35,7 +35,7 @@ for cat, names in {
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
             'fee landban landunban landkick kick landslay weps nofly landnoclip extinguish buildmessage block unblock hide show zones',
     'money': 'bank balance cl buy sell give trade catalog shopitems seasons arsenal buymodel playermodels playermodel',
-    'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid spawnpad spawnpads npckills tacticlvl tacticxp',
+    'collecting': 'emblems hats inventory weapons emblem hat weapon thirdperson firstperson speed presents wrap gift guess bid auction spawnpad spawnpads npckills tacticlvl tacticxp',
     'player': 'fly noclip nokill stuck switch hudcolor feed pmute punmute timeleft',
     'help': 'news reportbug dispute motd rules cmds commands commandlist soundlist sounds colors colorlist props proplist effects effectlist updates updatelist',
 }.items():
@@ -57,7 +57,7 @@ USAGE = {
     'emblem': '<emblem or off>', 'hat': '<hat or off>', 'weapon': '<celwep or off>', 'wrap': '<item> <player>', 'guess': '<1, 2 or 3>', 'bid': '<amount>',
     'button': '[model] (switch, combine, elevator, keypad, firetrap, switchbox, lever or a prop)', 'animate': '<1-10> | speed <seconds> | play | clear', 'spawnpad': '[enemy]', 'pungag': '<player> [minutes] [reason]', 'punfreeze': '<player> (again to unfreeze)', 'punungag': '<player>', 'punkick': '<player> [reason]', 'punban': '<player> <minutes, 0 = forever> [reason]', 'shell': '[big]', 'pmute': '<player>', 'punmute': '<player>', 'reportbug': '<what happened>',
     'setbalance': '<player> <amount>', 'givemoney': '<player> <amount>', 'takemoney': '<player> <amount>', 'giveitem': '<player> <kind> <item>',
-    'givemodel': '<player> <model>', 'takemodel': '<player> <model>', 'auction': '<kind> <item> <starting bid> <minutes>',
+    'givemodel': '<player> <model>', 'takemodel': '<player> <model>', 'auction': '<emblem/hat/weapon> <name> <minutes> [starting bid] | cancel',
     'emblemdrop': '[boxes]', 'dungeonspawner': '<enemy> [max alive] [seconds]', 'deldungeonspawner': '[number or all]',
     'forceseason': '<season> <on, off or auto>', 'blacklist': '<prop name>', 'setowner': '<player>', 'autobuild': '<x> <y> <z>',
 }

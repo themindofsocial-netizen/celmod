@@ -422,6 +422,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	CreateNative("Cel_GetCollectibleName", Native_GetCollectibleName);
 	CreateNative("Cel_GetCollectibleLook", Native_GetCollectibleLook);
 	CreateNative("Cel_GiveCollectible", Native_GiveCollectible);
+	CreateNative("Cel_TakeCollectible", Native_TakeCollectible);
 	CreateNative("Cel_IsCollectible", Native_IsCollectible);
 	CreateNative("Cel_GetDropBoxEmblem", Native_GetDropBoxEmblem);
 	CreateNative("Cel_SetEmblemDroppable", Native_SetEmblemDroppable);
@@ -3723,6 +3724,42 @@ public int Native_GiveCollectible(Handle hPlugin, int iNumParams)
 	}
 
 	GiveItem(iClient, iItem);
+
+	return true;
+}
+
+// Takes one copy of an item out of a player's bank (an auction sale). Only a spare one: never a copy they have out.
+public int Native_TakeCollectible(Handle hPlugin, int iNumParams)
+{
+	char sId[64], sKind[32];
+	int iClient = GetNativeCell(1);
+
+	GetNativeString(2, sKind, sizeof(sKind));
+	GetNativeString(3, sId, sizeof(sId));
+
+	int iItem = FindItem(KindFromName(sKind), sId);
+
+	if (iItem == -1 || !IsRealClient(iClient))
+	{
+		return false;
+	}
+
+	int iOwned = GetOwned(iClient, iItem);
+
+	if (iOwned - CountSpawned(iClient, iItem) < 1)
+	{
+		return false;
+	}
+
+	SetOwned(iClient, iItem, iOwned - 1);
+
+	if (iOwned - 1 < 1)
+	{
+		if (g_iActiveEmblem[iClient] == iItem) SetActiveEmblem(iClient, -1);
+		if (g_iActiveHat[iClient] == iItem) SetActiveHat(iClient, -1);
+		if (g_iCelWepItem[iClient] == iItem) SetActiveCelWep(iClient, -1);
+		if (g_bCelWepTaken[iClient][iItem]) SetCelWepTaken(iClient, iItem, false);
+	}
 
 	return true;
 }
