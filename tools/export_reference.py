@@ -59,7 +59,7 @@ def colors(site):
             'colors your HUD text. For any color at all, <span class="h">!palette &lt;red&gt; &lt;green&gt; &lt;blue&gt;</span>; to fade '
             'between two, <span class="h">!fadecolor &lt;color 1&gt; &lt;color 2&gt;</span>.</p>\n'
             '<div class="swatch-grid">\n%s\n</div>\n'
-            '<div class="btngrid"><a href="renderfx.php">Render Effects</a> <a href="effects.php">Effects</a> <a href="lists.php">All Lists</a></div>'
+            '<div class="btngrid"><a href="renderfx">Render Effects</a> <a href="effects">Effects</a> <a href="lists">All Lists</a></div>'
             ) % '\n'.join(cards)
     open(os.path.join(site, 'colors.php'), 'w').write(page('Colors', body))
     return len(cards)
@@ -82,7 +82,7 @@ def effects(site):
             '<b>E</b> on it (or <span class="h">!link</span> a button to it) to turn it on and off, and '
             '<span class="h">!color</span> it to change its color. Click an effect to copy its command.</p>\n'
             '<div class="table-scroll"><table class="cmtable">\n<tr><th>Type</th><th>Effect</th><th>What it does</th></tr>\n%s\n</table></div>\n'
-            '<div class="btngrid"><a href="renderfx.php">Render Effects</a> <a href="colors.php">Colors</a> <a href="lists.php">All Lists</a></div>'
+            '<div class="btngrid"><a href="renderfx">Render Effects</a> <a href="colors">Colors</a> <a href="lists">All Lists</a></div>'
             ) % '\n'.join(rows)
     open(os.path.join(site, 'effects.php'), 'w').write(page('Effects', body))
     return len(names)

@@ -28,7 +28,7 @@ def main():
             'effect off again.<br>\nRender effects can be part of <span class="h">!animate</span> frames too. '
             'Click an effect to copy its command.</p>\n'
             '<div class="table-scroll"><table class="cmtable">\n<tr><th>Effect</th><th>What it looks like</th></tr>\n%s\n</table></div>\n'
-            '<div class="btngrid"><a href="colors.php">Colors List</a> <a href="effects.php">Effects List</a> <a href="cmds.php">Commands</a></div>\n'
+            '<div class="btngrid"><a href="colors">Colors List</a> <a href="effects">Effects List</a> <a href="cmds">Commands</a></div>\n'
             '<?php cm_page_end(); ?>\n') % rows
     open(os.path.join(site, 'renderfx.php'), 'w').write(page)
     print('%d render effects written to %s' % (len(effects), os.path.join(site, 'renderfx.php')))

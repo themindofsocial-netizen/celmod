@@ -51,7 +51,7 @@ Speak in voice. Turn off Mention @everyone, Create Invite (optional), and Attach
 ### 🛠️ CELMOD
 | Channel | Topic |
 |---|---|
-| `#help` | Stuck? Ask here. The guides: https://celmod.net/guides.php |
+| `#help` | Stuck? Ask here. The guides: https://celmod.net/guides |
 | `#suggestions` | Ideas for the server. One per message; vote with 👍 / 👎. Use a forum channel if your server has them. |
 | `#bug-reports` | Found a bug? Say what happened, on which map, and what you were doing. In game: !reportbug. |
 
@@ -84,7 +84,7 @@ Speak in voice. Turn off Mention @everyone, Create Invite (optional), and Attach
 > **Get started**
 > 1. Read #rules.
 > 2. Check #server-info for how to join.
-> 3. New to building? The guides are at https://celmod.net/guides.php
+> 3. New to building? The guides are at https://celmod.net/guides
 > 4. Grab your ping roles in #roles.
 >
 > Have fun building!
@@ -109,11 +109,11 @@ Speak in voice. Turn off Mention @everyone, Create Invite (optional), and Attach
 >
 > **Useful links**
 > • Website: https://celmod.net
-> • Commands: https://celmod.net/cmds.php
+> • Commands: https://celmod.net/cmds
 > • Props list: https://celmod.net/props/
-> • Guides: https://celmod.net/guides.php
-> • Shop: https://celmod.net/shop.php
-> • Live server: https://celmod.net/live.php
+> • Guides: https://celmod.net/guides
+> • Shop: https://celmod.net/shop
+> • Live server: https://celmod.net/live
 >
 > **First commands in game**
 > `!land` claim a land • `!spawn <prop>` spawn a prop • `!save <name>` save your build • `!bank` your items • `!cmds` every command

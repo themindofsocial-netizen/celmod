@@ -602,3 +602,5 @@
 		   highest bidder and their bid goes to you. Bids are only paid when the auction ends, so nobody loses money
 		   or an item if someone leaves: if the top bidder can't pay, the next highest wins. !auction cancel calls it
 		   off (sellers their own, admins any). Admins can still auction items the server gives away.
+		 - The website has clean addresses (celmod.net/shop instead of celmod.net/shop.php); old links still work.
+		   !colors, !cmds, !sounds and the other list commands open the clean addresses.

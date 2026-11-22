@@ -40,11 +40,11 @@ public void OnPluginStart()
 {
 	LoadTranslations("celmod.phrases");
 	
-	g_cvColorListURL = CreateConVar("cm_color_list_url", "https://celmod.net/colors.php", "URL for the color list command.");
-	g_cvCommandListURL = CreateConVar("cm_command_list_url", "https://celmod.net/cmds.php", "URL for the command list command.");
-	g_cvEffectListURL = CreateConVar("cm_effect_list_url", "https://celmod.net/effects.php", "URL for the effect list command.");
-	g_cvPropListURL = CreateConVar("cm_prop_list_url", "https://celmod.net/props/index.php", "URL for the prop list command.");
-	g_cvUpdateListURL = CreateConVar("cm_update_list_url", "https://celmod.net/updates.php", "URL for the update list command.");
+	g_cvColorListURL = CreateConVar("cm_color_list_url", "https://celmod.net/colors", "URL for the color list command.");
+	g_cvCommandListURL = CreateConVar("cm_command_list_url", "https://celmod.net/cmds", "URL for the command list command.");
+	g_cvEffectListURL = CreateConVar("cm_effect_list_url", "https://celmod.net/effects", "URL for the effect list command.");
+	g_cvPropListURL = CreateConVar("cm_prop_list_url", "https://celmod.net/props/", "URL for the prop list command.");
+	g_cvUpdateListURL = CreateConVar("cm_update_list_url", "https://celmod.net/updates", "URL for the update list command.");
 	
 	g_cvColorListURL.AddChangeHook(CMHelp_OnConVarChanged);
 	g_cvCommandListURL.AddChangeHook(CMHelp_OnConVarChanged);

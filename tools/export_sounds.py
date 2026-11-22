@@ -93,7 +93,7 @@ def main():
              'Click a sound to copy its command, ready to paste into the chat.</p>\n'
              '<div class="searchbar"><input type="search" id="soundfind" placeholder="Find a sound... (press /)" '
              'aria-label="Find a sound" autocomplete="off"> <span class="count" id="soundcount" aria-live="polite"></span></div>\n'
-             '<div class="btngrid"><a href="music.php">Music List</a> <a href="cmds.php">Commands</a></div>') % len(sounds)
+             '<div class="btngrid"><a href="music">Music List</a> <a href="cmds">Commands</a></div>') % len(sounds)
     open(os.path.join(site, 'sounds.php'), 'w').write(page('Sounds', intro, '\n'.join(blocks), SEARCH_JS))
 
     music = section(text, 'Music')
@@ -114,7 +114,7 @@ def main():
              'lists them.<br>\nClick a song to copy its command.</p>\n'
              '<div class="searchbar"><input type="search" id="soundfind" placeholder="Find a song... (press /)" '
              'aria-label="Find a song" autocomplete="off"> <span class="count" id="soundcount" aria-live="polite"></span></div>\n'
-             '<div class="btngrid"><a href="sounds.php">Sound List</a> <a href="cmds.php">Commands</a></div>') % len(music)
+             '<div class="btngrid"><a href="sounds">Sound List</a> <a href="cmds">Commands</a></div>') % len(music)
     body = ('<div class="table-scroll soundlist"><table class="cmtable">\n<tr><th>Song</th><th class="num">Length</th></tr>\n%s\n</table></div>'
             % '\n'.join(rows))
     open(os.path.join(site, 'music.php'), 'w').write(page('Music', intro, body, SEARCH_JS))

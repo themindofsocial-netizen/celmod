@@ -59,9 +59,9 @@ def letter_grid(present, current=None, prefix=''):
         if b not in present:
             out.append('<b title="No props yet">%s</b>' % label)
         elif b == current:
-            out.append('<a href="%s%s.php" class="active" style="color:#71E100">%s</a>' % (prefix, b, label))
+            out.append('<a href="%s%s" class="active" style="color:#71E100">%s</a>' % (prefix, b, label))
         else:
-            out.append('<a href="%s%s.php">%s</a>' % (prefix, b, label))
+            out.append('<a href="%s%s">%s</a>' % (prefix, b, label))
     out.append('</div>')
     return '\n'.join(out)
 
@@ -122,7 +122,7 @@ def main():
              '<div class="searchbar"><input type="search" id="propfind" placeholder="Search all %d props... (press /)" aria-label="Search props" autocomplete="off">'
              ' <span class="count" id="propcount" aria-live="polite"></span></div>\n'
              '<div class="search-results" id="propresults" hidden></div>\n%s\n'
-             '<div class="btngrid"><a href="shop.php">Shop Props</a> <a href="dis.php">Discontinued Props</a></div>\n'
+             '<div class="btngrid"><a href="shop">Shop Props</a> <a href="dis">Discontinued Props</a></div>\n'
              '<p>\n</p>\n<?php cm_page_end(\'<script src="search.js?v=\' . (int)@filemtime(__DIR__ . \'/search.js\') . \'" defer></script>\'); ?>\n') % (len(props), len(props), letter_grid(by_bucket))
     open(os.path.join(out_dir, 'index.php'), 'w').write(index)
 
@@ -148,7 +148,7 @@ def main():
                  '<h2><span class="celColor">|CelMod| Shop Props</span><br>\n</h2>\n'
                  '<p>These props are CelItems: each one you buy is one copy, kept in your <b>!bank</b>. You can only have as many out\n'
                  'as you own, and !give, !trade or selling one makes it the other player\'s for good. Buy them in the\n'
-                 '<a href="../shop.php">shop</a> or in game with <span class="highlight">!buy prop_&lt;name&gt;</span>.\n'
+                 '<a href="../shop">shop</a> or in game with <span class="highlight">!buy prop_&lt;name&gt;</span>.\n'
                  'Seasonal props are only sold in their season.</p>\n'
                  '<div class="table-scroll"><table class="cmtable">\n<tr><th>Prop</th><th>Spawn with</th><th>Category</th><th>Price</th><th>Sold</th></tr>\n%s\n</table></div>\n'
                  '<div class="btngrid"><a href="./">Back to Props List</a></div>\n<?php cm_page_end(); ?>\n') % '\n'.join(rows)

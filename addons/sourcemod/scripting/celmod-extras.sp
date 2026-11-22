@@ -154,7 +154,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_celmusic", Command_CelMusic, "|CelMod| Lists the songs the music cel can play.");
 	RegConsoleCmd("v_soundlist", Command_SoundList, "|CelMod| Lists the sounds a sound cel can play: !soundlist [part of a name].");
 	RegConsoleCmd("v_sounds", Command_Sounds, "|CelMod| Opens the sound list (the website's Sounds List); !sounds <word> searches in chat like !soundlist.");
-	g_cvSoundListURL = CreateConVar("cm_sound_list_url", "https://celmod.net/sounds.php", "URL !sounds opens: the website's Sounds List.");
+	g_cvSoundListURL = CreateConVar("cm_sound_list_url", "https://celmod.net/sounds", "URL !sounds opens: the website's Sounds List.");
 	RegConsoleCmd("v_sound", Command_Sound, "|CelMod| Spawns a sound cel that plays a sound when used.");
 	RegConsoleCmd("v_undo", Command_Undo, "|CelMod| Removes the last entity you spawned.");
 	RegConsoleCmd("v_weld", Command_Weld, "|CelMod| Welds one of your entities to another so they move together.");
