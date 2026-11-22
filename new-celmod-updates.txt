@@ -594,3 +594,6 @@
 		 - Saying a prop's name in chat ("melon") no longer spawns it: props are spawned with !melon or !spawn melon.
 		 - Letting go of +move or +copy when you weren't holding anything no longer says "You aren't grabbing/copying a
 		   prop already!".
+		 - Fixed the server crashing when a turret falls over and "dies": floor turrets (yours and the map's) are stood
+		   back up as soon as they tip, so they never self-destruct, and picking one up with the gravity gun can't
+		   crash the server either (both are single-player Half-Life 2 code paths).

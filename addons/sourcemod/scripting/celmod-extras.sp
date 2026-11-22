@@ -258,6 +258,37 @@ public Action Command_Turret(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+//Floor turrets were written for single-player Half-Life 2, and two of their paths crash a multiplayer server:
+//  - knocked onto its side, a turret thrashes for a moment and then kills itself, with no attacker;
+//  - picked up with the gravity gun while not upright, it asks for "the single player" to pick its carry angles,
+//    and there isn't one.
+//So every frame each floor turret (the map's and !turret ones) is stood back up the moment it tips past about 45
+//degrees, and never uses its carry angles.
+void KeepTurretsSafe()
+{
+	float fAngles[3], fUp[3], fStill[3];
+	int iTurret = -1;
+	
+	while ((iTurret = FindEntityByClassname(iTurret, "npc_turret_floor")) != -1)
+	{
+		if (HasEntProp(iTurret, Prop_Data, "m_bUseCarryAngles") && GetEntProp(iTurret, Prop_Data, "m_bUseCarryAngles"))
+		{
+			SetEntProp(iTurret, Prop_Data, "m_bUseCarryAngles", 0);
+		}
+		
+		GetEntPropVector(iTurret, Prop_Data, "m_angAbsRotation", fAngles);
+		GetAngleVectors(fAngles, NULL_VECTOR, NULL_VECTOR, fUp);
+		
+		if (fUp[2] < 0.7)
+		{
+			fAngles[0] = 0.0;
+			fAngles[2] = 0.0;
+			
+			TeleportEntity(iTurret, NULL_VECTOR, fAngles, fStill);
+		}
+	}
+}
+
 //Health and suit chargers never run out: the map's own and charger bits are topped up twice a second, before
 //anyone can empty them.
 public Action Timer_RefillChargers(Handle hTimer)
@@ -2698,6 +2729,8 @@ public Action Command_Teleport(int iClient, int iArgs)
 public void OnGameFrame()
 {
 	char sModel[PLATFORM_MAX_PATH];
+	
+	KeepTurretsSafe();
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
