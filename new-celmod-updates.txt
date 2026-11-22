@@ -607,3 +607,5 @@
 		 - New quest on gm_bloodyconstruct_cm12, "Missing: Jimmy": find Jimmy's pipe wrench by the antlion hole in
 		   the laser room and take it to Sgt. Malone at the police scene to unlock the Police Officer player model for
 		   good (!playermodel police).
+		 - Player models can be earned instead of sold: the Police Officer model can't be bought, !playermodels lists
+		   it as "earned", and !buymodel police says how to get it.

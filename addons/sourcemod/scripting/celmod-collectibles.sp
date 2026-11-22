@@ -161,6 +161,7 @@ enum struct PlayerModel
 	int iPrice;
 	int iAdminFlags;
 	char sSeason[32];
+	char sUnlock[128]; // how to earn it, for models that are given and never sold
 }
 
 char g_sRarityName[][] = { "Common", "Uncommon", "Rare", "Epic", "Legendary" };
@@ -4023,6 +4024,7 @@ void LoadItems()
 
 			g_PlayerModels[iModel].iPrice = kvItems.GetNum("price", 0);
 			kvItems.GetString("season", g_PlayerModels[iModel].sSeason, sizeof(PlayerModel::sSeason), "");
+			kvItems.GetString("unlock", g_PlayerModels[iModel].sUnlock, sizeof(PlayerModel::sUnlock), "");
 
 			char sFlags[32], sMaterials[PLATFORM_MAX_PATH];
 
@@ -8034,6 +8036,12 @@ bool OwnsPlayerModel(int iClient, int iModel)
 		return CheckCommandAccess(iClient, "celmod_playermodel_admin", g_PlayerModels[iModel].iAdminFlags, true);
 	}
 
+	// Earned models (a quest's reward) are only owned once they're given.
+	if (g_PlayerModels[iModel].sUnlock[0] != '\0')
+	{
+		return false;
+	}
+
 	return (g_PlayerModels[iModel].iPrice < 1);
 }
 
@@ -8107,6 +8115,8 @@ public Action Command_PlayerModels(int iClient, int iArgs)
 		if (OwnsPlayerModel(iClient, i))
 		{
 			Format(sEntry, sizeof(sEntry), "%s {green}(owned)%s{default}", g_PlayerModels[i].sId, g_iPlayerModel[iClient] == i ? " [on]" : "");
+		} else if (g_PlayerModels[i].sUnlock[0] != '\0') {
+			Format(sEntry, sizeof(sEntry), "%s (earned)", g_PlayerModels[i].sId);
 		} else {
 			Format(sEntry, sizeof(sEntry), "%s (%d CL)", g_PlayerModels[i].sId, g_PlayerModels[i].iPrice);
 		}
@@ -8165,6 +8175,12 @@ public Action Command_BuyModel(int iClient, int iArgs)
 	if (OwnsPlayerModel(iClient, iModel))
 	{
 		Cel_ReplyToCommand(iClient, "You already own the {green}%s{default} player model.", g_PlayerModels[iModel].sName);
+		return Plugin_Handled;
+	}
+
+	if (g_PlayerModels[iModel].sUnlock[0] != '\0')
+	{
+		Cel_ReplyToCommand(iClient, "The {green}%s{default} player model can't be bought. %s", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].sUnlock);
 		return Plugin_Handled;
 	}
 
@@ -8235,7 +8251,12 @@ public Action Command_PlayerModel(int iClient, int iArgs)
 
 	if (!OwnsPlayerModel(iClient, iModel))
 	{
-		Cel_ReplyToCommand(iClient, "You do not own the {green}%s{default} player model. It costs {green}%d CL{default}.", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].iPrice);
+		if (g_PlayerModels[iModel].sUnlock[0] != '\0')
+		{
+			Cel_ReplyToCommand(iClient, "You do not have the {green}%s{default} player model yet. %s", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].sUnlock);
+		} else {
+			Cel_ReplyToCommand(iClient, "You do not own the {green}%s{default} player model. It costs {green}%d CL{default}.", g_PlayerModels[iModel].sName, g_PlayerModels[iModel].iPrice);
+		}
 		return Plugin_Handled;
 	}
 

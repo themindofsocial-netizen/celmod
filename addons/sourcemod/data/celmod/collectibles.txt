@@ -119,6 +119,8 @@
 //
 // PlayerModels: name, model and price. A price of 0 is free for everyone.
 //   admin       Admin flags (e.g. "b"). Admins with them own the model; with price 0 nobody else can buy it.
+//   unlock      For a model that's earned, never sold (a quest's reward): how to earn it, shown by !buymodel,
+//               !playermodel and !playermodels. Only players it was given to own it (the quest, or !givemodel).
 //   materials   A folder whose files are all sent to players, for custom models, e.g. "materials/models/player/mymodel".
 //   A model's own files (.mdl, .vvd, .phy, .vtx) are sent automatically when the server has them.
 //   season      A key from "Seasons" in shop.txt: the model is only sold while that season is on.
@@ -1470,6 +1472,8 @@
 		// Halloween shop exclusive. Its textures must be on the server: add "materials" "<folder>" if they are not sent.
 		"skeleton"	{ "name" "Skeleton"		"model" "models/humans/skeleton/skeleton.mdl"	"price" "1000000"	"season" "halloween" }
 		"admin"		{ "name" "Combine Elite"	"model" "models/combine_super_soldier.mdl"	"price" "0"	"admin" "b" }
+		// Earned in the Missing: Jimmy quest on gm_bloodyconstruct_cm12 (celmod-missingperson).
+		"police"	{ "name" "Police Officer"	"model" "models/celmod/cop4.mdl"	"price" "0"	"unlock" "Find Jimmy's wrench on gm_bloodyconstruct_cm12 and take it to Sgt. Malone at the police scene." }
 	}
 
 	"Hats"
