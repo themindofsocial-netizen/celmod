@@ -604,3 +604,6 @@
 		   off (sellers their own, admins any). Admins can still auction items the server gives away.
 		 - The website has clean addresses (celmod.net/shop instead of celmod.net/shop.php); old links still work.
 		   !colors, !cmds, !sounds and the other list commands open the clean addresses.
+		 - New quest on gm_bloodyconstruct_cm12, "Missing: Jimmy": find Jimmy's pipe wrench by the antlion hole in
+		   the laser room and take it to Sgt. Malone at the police scene to unlock the Police Officer player model for
+		   good (!playermodel police).
