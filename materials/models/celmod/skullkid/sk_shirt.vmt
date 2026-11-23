@@ -1,0 +1,6 @@
+"VertexLitGeneric"
+{
+	"$basetexture" "models/celmod/skullkid/sk_shirt"
+	"$model" 1
+	"$halflambert" 1
+}
