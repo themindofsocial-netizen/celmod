@@ -630,3 +630,6 @@
 		   cel to it and pressing E on the internet cel shows the camera instead of its page; !link a TV (or a lab
 		   monitor) to it and the TV's screen shows what the camera sees, live. The game draws one camera at a time,
 		   so all TVs show the camera most recently linked or looked through. Saves keep the links.
+		 - A TV linked to a camera shows it on its own screen (only the screen changes), and goes back to its normal
+		   screen when it's unlinked. The server makes the TV's screen model once with tools/make_camera_screens.py
+		   (see fastdl/README.md); until then the camera shows on a picture over the TV's front.

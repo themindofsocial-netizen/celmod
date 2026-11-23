@@ -16,6 +16,10 @@
  *
  * Looking through a camera: you stand still where you are, and E, jump or attack takes you back.
  *
+ * A TV's own screen shows the camera when data/celmod/camerascreens.txt has a copy of its model for it (made on the
+ * server with tools/make_camera_screens.py: the same model with only the screen's material swapped). Linked, the TV
+ * wears that copy; unlinked, its own model again. A TV without one gets the picture laid over its front instead.
+ *
  * TV screens use the game's camera render target (_rt_Camera, what Half-Life 2's security monitors use). The game
  * draws only one camera into it at a time, so every TV shows the same live camera: the one most recently linked to a
  * TV or looked through. That's a limit of the engine, not of CelMod.
@@ -36,6 +40,8 @@ int g_iScreenFor[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per TV: t
 int g_iLiveCamera = INVALID_ENT_REFERENCE;
 int g_iLastButtons[MAXPLAYERS + 1];
 bool g_bIsCamera[MAXENTITIES + 1];
+StringMap g_smToCamera; // TV model -> its copy whose screen shows the camera
+StringMap g_smToNormal; // and back
 
 public Plugin myinfo =
 {
@@ -60,6 +66,9 @@ public void OnPluginStart()
 {
 	RegConsoleCmd("v_camera", Command_Camera, "|CelMod| Spawns a camera cel: look through it with E, a button or an internet cel, or show it on a TV.");
 
+	g_smToCamera = new StringMap();
+	g_smToNormal = new StringMap();
+
 	CreateTimer(0.5, Timer_Screens, _, TIMER_REPEAT);
 }
 
@@ -74,6 +83,8 @@ public void OnMapStart()
 	AddFileToDownloadsTable(SCREEN_MATERIAL);
 
 	g_iLiveCamera = INVALID_ENT_REFERENCE;
+
+	LoadScreenModels();
 }
 
 public void OnClientDisconnect(int iClient)
@@ -367,7 +378,128 @@ bool IsTV(int iEntity)
 	return StrEqual(sName, "tv", false) || StrEqual(sName, "monitor1", false) || StrEqual(sName, "monitor2", false) || StrEqual(sName, "monitor3", false);
 }
 
-// Keeps every TV's screen matching its link: made when it's linked to a camera, gone when the link or camera is.
+// data/celmod/camerascreens.txt: TV models that have a copy whose own screen shows the camera (made by
+// tools/make_camera_screens.py). A linked TV wears the copy, so only its screen changes; unlinked, it gets its own
+// model back. TVs without one get a picture laid over the front instead.
+void LoadScreenModels()
+{
+	g_smToCamera.Clear();
+	g_smToNormal.Clear();
+
+	char sPath[PLATFORM_MAX_PATH], sNormal[PLATFORM_MAX_PATH], sCopy[PLATFORM_MAX_PATH], sMaterial[PLATFORM_MAX_PATH];
+
+	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/camerascreens.txt");
+
+	KeyValues kvScreens = new KeyValues("CameraScreens");
+
+	if (!kvScreens.ImportFromFile(sPath) || !kvScreens.JumpToKey("Screens") || !kvScreens.GotoFirstSubKey())
+	{
+		delete kvScreens;
+		return;
+	}
+
+	do
+	{
+		kvScreens.GetSectionName(sNormal, sizeof(sNormal));
+		kvScreens.GetString("model", sCopy, sizeof(sCopy), "");
+		kvScreens.GetString("material", sMaterial, sizeof(sMaterial), "");
+
+		// Only once the copy is really on the server (made with the tool).
+		if (sCopy[0] == '\0' || !FileExists(sCopy, true))
+		{
+			continue;
+		}
+
+		StringToLower(sNormal);
+		StringToLower(sCopy);
+
+		g_smToCamera.SetString(sNormal, sCopy);
+		g_smToNormal.SetString(sCopy, sNormal);
+
+		PrecacheModel(sCopy, true);
+
+		AddModelFiles(sCopy);
+
+		if (sMaterial[0] != '\0' && FileExists(sMaterial, false))
+		{
+			AddFileToDownloadsTable(sMaterial);
+		}
+	}
+	while (kvScreens.GotoNextKey());
+
+	delete kvScreens;
+}
+
+void AddModelFiles(const char[] sModel)
+{
+	static const char sExtensions[][] = { ".mdl", ".vvd", ".phy", ".dx80.vtx", ".dx90.vtx", ".sw.vtx" };
+	char sBase[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+
+	strcopy(sBase, sizeof(sBase), sModel);
+	sBase[strlen(sBase) - 4] = '\0';
+
+	for (int i = 0; i < sizeof(sExtensions); i++)
+	{
+		FormatEx(sFile, sizeof(sFile), "%s%s", sBase, sExtensions[i]);
+
+		if (FileExists(sFile, false))
+		{
+			AddFileToDownloadsTable(sFile);
+		}
+	}
+}
+
+void StringToLower(char[] sText)
+{
+	for (int i = 0; sText[i] != '\0'; i++)
+	{
+		sText[i] = CharToLower(sText[i]);
+	}
+}
+
+// The TV's model now, and the one it should wear for its link (its camera copy when linked, its own otherwise).
+bool ScreenModelFor(int iTV, bool bLinked, char[] sWant, int iMaxLength)
+{
+	char sModel[PLATFORM_MAX_PATH];
+
+	GetEntPropString(iTV, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+	StringToLower(sModel);
+
+	if (bLinked)
+	{
+		if (g_smToCamera.GetString(sModel, sWant, iMaxLength))
+		{
+			return true;
+		}
+
+		// Already wearing the copy.
+		char sNormal[PLATFORM_MAX_PATH];
+
+		if (g_smToNormal.GetString(sModel, sNormal, sizeof(sNormal)))
+		{
+			strcopy(sWant, iMaxLength, sModel);
+			return true;
+		}
+
+		return false;
+	}
+
+	return g_smToNormal.GetString(sModel, sWant, iMaxLength);
+}
+
+void WearModel(int iTV, const char[] sModel)
+{
+	char sNow[PLATFORM_MAX_PATH];
+
+	GetEntPropString(iTV, Prop_Data, "m_ModelName", sNow, sizeof(sNow));
+
+	if (!StrEqual(sNow, sModel, false))
+	{
+		SetEntityModel(iTV, sModel);
+	}
+}
+
+// Keeps every TV's screen matching its link: the camera on it while it's linked, its own screen once it isn't.
 public Action Timer_Screens(Handle hTimer)
 {
 	if (GetFeatureStatus(FeatureType_Native, "Cel_GetTriggerLink") != FeatureStatus_Available)
@@ -377,18 +509,18 @@ public Action Timer_Screens(Handle hTimer)
 
 	bool bLiveShown;
 	int iLive = EntRefToEntIndex(g_iLiveCamera);
+	char sModel[PLATFORM_MAX_PATH];
 
 	for (int iTV = MaxClients + 1; iTV <= MAXENTITIES; iTV++)
 	{
-		int iScreen = EntRefToEntIndex(g_iScreen[iTV]);
-
 		if (!IsValidEntity(iTV) || !Cel_IsEntity(iTV))
 		{
-			if (iScreen != INVALID_ENT_REFERENCE)
+			if (g_iScreen[iTV] != INVALID_ENT_REFERENCE)
 			{
 				KillRef(g_iScreen[iTV]);
 			}
 
+			g_iScreenFor[iTV] = INVALID_ENT_REFERENCE;
 			continue;
 		}
 
@@ -398,15 +530,18 @@ public Action Timer_Screens(Handle hTimer)
 		}
 
 		int iCamera = Cel_GetTriggerLink(iTV, 0);
+		bool bLinked = (iCamera != -1 && g_bIsCamera[iCamera]);
 
-		if (iCamera == -1 || !g_bIsCamera[iCamera])
+		if (!bLinked)
 		{
-			if (iScreen != INVALID_ENT_REFERENCE)
+			// Back to its own screen.
+			if (ScreenModelFor(iTV, false, sModel, sizeof(sModel)))
 			{
-				KillRef(g_iScreen[iTV]);
-				g_iScreenFor[iTV] = INVALID_ENT_REFERENCE;
+				WearModel(iTV, sModel);
 			}
 
+			KillRef(g_iScreen[iTV]);
+			g_iScreenFor[iTV] = INVALID_ENT_REFERENCE;
 			continue;
 		}
 
@@ -415,16 +550,24 @@ public Action Timer_Screens(Handle hTimer)
 			bLiveShown = true;
 		}
 
-		if (iScreen != INVALID_ENT_REFERENCE && EntRefToEntIndex(g_iScreenFor[iTV]) == iCamera)
+		bool bNew = (EntRefToEntIndex(g_iScreenFor[iTV]) != iCamera);
+
+		// Its own screen shows the camera (the copy of its model), or a picture over its front.
+		if (ScreenModelFor(iTV, true, sModel, sizeof(sModel)))
+		{
+			WearModel(iTV, sModel);
+			KillRef(g_iScreen[iTV]);
+		} else if (bNew || EntRefToEntIndex(g_iScreen[iTV]) == INVALID_ENT_REFERENCE) {
+			KillRef(g_iScreen[iTV]);
+			MakeScreen(iTV);
+		}
+
+		if (!bNew)
 		{
 			continue;
 		}
 
-		// Newly linked (or to another camera): a screen for it, and that camera goes live.
-		KillRef(g_iScreen[iTV]);
-
-		MakeScreen(iTV);
-
+		// Newly linked (or to another camera): that camera goes live.
 		g_iScreenFor[iTV] = EntIndexToEntRef(iCamera);
 
 		MakeLive(iCamera);
@@ -453,7 +596,7 @@ bool CameraHasScreen(int iCamera)
 {
 	for (int iTV = MaxClients + 1; iTV <= MAXENTITIES; iTV++)
 	{
-		if (g_iScreen[iTV] != INVALID_ENT_REFERENCE && EntRefToEntIndex(g_iScreenFor[iTV]) == iCamera && EntRefToEntIndex(g_iScreen[iTV]) != INVALID_ENT_REFERENCE)
+		if (g_iScreenFor[iTV] != INVALID_ENT_REFERENCE && EntRefToEntIndex(g_iScreenFor[iTV]) == iCamera)
 		{
 			return true;
 		}
