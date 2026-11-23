@@ -615,3 +615,9 @@
 		 - !spin <yaw/pitch/roll> [speed] spins the prop you're looking at forever, around its own axis, at up to 1080
 		   degrees a second (default 90). left/right, forward/back and cw/ccw work as directions too, a negative speed
 		   spins the other way, and !spin off stops it. Spinning props stay put, and saves keep the spin.
+		 - The boss under gm_bloodyconstruct_cm12 (first version): past the final door you drop into the arena with
+		   only the gravity gun, and the door slams shut and locks behind you a few seconds later (so friends can
+		   follow). Wide Eyes fires lasers at you: a thin line warns where each one goes, then it fires down that line,
+		   so step out of it. Manhacks fly in: catch one with the gravity gun and launch it into the boss. Once it's
+		   hurt, lasers fire from the ceiling too. Beat it and everyone still standing gets 10000 CL and their weapons
+		   back; if everyone dies, it resets. The vent on the way down takes your weapons away.
