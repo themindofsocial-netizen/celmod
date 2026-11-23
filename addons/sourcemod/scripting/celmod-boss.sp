@@ -21,7 +21,8 @@
  * The fight: in the arena only the gravity gun works. The boss fires telegraphed lasers at players (a thin beam
  * warns where the shot goes, then a burst fires down that line: step out of it). Manhacks fly in; catch one with
  * the gravity gun and launch it into the boss. Enough hits and it's beaten: everyone still standing gets CL and their
- * weapons back, and the door opens. If everyone in the arena dies or leaves, the fight resets.
+ * weapons back, the blood emblem and CL, and the door opens. It stays dead until the next map. If everyone in the
+ * arena dies or leaves, the fight resets.
  */
 
 #define BOSS_MODEL "models/celmod/wide_eyes.mdl"
@@ -39,11 +40,12 @@
 #define MAX_SHOTS 8
 #define MAX_POINTS 16
 
-ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvLaserDamage, g_cvManhacks, g_cvCooldown, g_cvLockDelay;
+ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvEmblem, g_cvLaserDamage, g_cvManhacks, g_cvLockDelay;
 
 bool g_bMapReady;
 bool g_bFight;
 bool g_bDoorLocked;
+bool g_bBeaten; // once beaten, it stays dead until the next map
 bool g_bInFight[MAXPLAYERS + 1];
 
 int g_iBossRef = INVALID_ENT_REFERENCE;
@@ -60,7 +62,6 @@ float g_fCeiling[MAX_POINTS][3];
 float g_fFightStart;
 float g_fNextAttack;
 float g_fNextManhack;
-float g_fCooldownUntil;
 float g_fNextHud;
 float g_fNextNotice[MAXPLAYERS + 1];
 float g_fNextStrip[MAXPLAYERS + 1];
@@ -95,6 +96,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	g_bLate = bLate;
 
 	MarkNativeAsOptional("Cel_AddToClientBalance");
+	MarkNativeAsOptional("Cel_GiveCollectible");
 	MarkNativeAsOptional("Cel_PrintToChat");
 	MarkNativeAsOptional("Cel_PrintToChatAll");
 
@@ -109,7 +111,7 @@ public void OnPluginStart()
 	g_cvReward = CreateConVar("cm_boss_reward", "10000", "CL each player still standing gets for beating the boss.", _, true, 0.0);
 	g_cvLaserDamage = CreateConVar("cm_boss_laser_damage", "30", "Damage of one of the boss's lasers.", _, true, 0.0);
 	g_cvManhacks = CreateConVar("cm_boss_manhacks", "3", "Manhacks in the arena at once (one more for each extra player).", _, true, 1.0, true, 12.0);
-	g_cvCooldown = CreateConVar("cm_boss_cooldown", "300", "Seconds after the boss is beaten before it can be fought again.", _, true, 0.0);
+	g_cvEmblem = CreateConVar("cm_boss_emblem", "blood", "Emblem everyone still in the arena gets for beating the boss (empty = none).");
 	g_cvLockDelay = CreateConVar("cm_boss_lock_delay", "4", "Seconds after the first player drops in before the door locks behind them (so friends can follow).", _, true, 0.0);
 
 	HookEntityOutput("trigger_multiple", "OnStartTouch", Output_StartTouch);
@@ -153,7 +155,7 @@ public void OnMapStart()
 	g_bFight = false;
 	g_bDoorLocked = false;
 	g_iBossRef = INVALID_ENT_REFERENCE;
-	g_fCooldownUntil = 0.0;
+	g_bBeaten = false;
 	g_alManhacks.Clear();
 
 	for (int i = 1; i <= MaxClients; i++)
@@ -329,13 +331,13 @@ void EnterArena(int iClient)
 
 	float fNow = GetGameTime();
 
-	if (fNow < g_fCooldownUntil)
+	if (g_bBeaten)
 	{
 		if (fNow >= g_fNextNotice[iClient])
 		{
 			g_fNextNotice[iClient] = fNow + 5.0;
 
-			Chat(iClient, "{green}%s{default} is recovering. It wakes up again in {green}%d{default} seconds.", BOSS_NAME, RoundToCeil(g_fCooldownUntil - fNow));
+			Chat(iClient, "{green}%s{default} has already been beaten on this map.", BOSS_NAME);
 		}
 
 		return;
@@ -842,8 +844,11 @@ void BossDefeated(int iBoss)
 
 	AcceptEntityInput(iBoss, "DisableDraw");
 
-	char sNames[192];
+	char sNames[192], sEmblem[32], sReward[96];
 	int iReward = g_cvReward.IntValue;
+
+	g_cvEmblem.GetString(sEmblem, sizeof(sEmblem));
+	TrimString(sEmblem);
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -858,12 +863,20 @@ void BossDefeated(int iBoss)
 		{
 			GiveLoadout(i);
 
+			sReward[0] = '\0';
+
+			if (sEmblem[0] != '\0' && GetFeatureStatus(FeatureType_Native, "Cel_GiveCollectible") == FeatureStatus_Available && Cel_GiveCollectible(i, "emblem", sEmblem))
+			{
+				Format(sReward, sizeof(sReward), "the {green}%s{default} emblem, ", sEmblem);
+			}
+
 			if (iReward > 0 && GetFeatureStatus(FeatureType_Native, "Cel_AddToClientBalance") == FeatureStatus_Available)
 			{
 				Cel_AddToClientBalance(i, iReward);
+				Format(sReward, sizeof(sReward), "%s{green}%d CL{default}, ", sReward, iReward);
 			}
 
-			Chat(i, "You beat {green}%s{default}! You get {green}%d CL{default} and your weapons back.", BOSS_NAME, iReward);
+			Chat(i, "You beat {green}%s{default}! You get %syour weapons back.", BOSS_NAME, sReward);
 		}
 
 		Format(sNames, sizeof(sNames), "%s%s%N", sNames, sNames[0] == '\0' ? "" : ", ", i);
@@ -872,21 +885,10 @@ void BossDefeated(int iBoss)
 	ChatAll("{green}%s{default} beat {green}%s{default} in the depths of the construction site!", sNames, BOSS_NAME);
 	LogAction(-1, -1, "%s beat the boss (%d hits).", sNames, g_iMaxHits);
 
+	// Dead for the rest of the map.
+	g_bBeaten = true;
+
 	EndFight();
-
-	g_fCooldownUntil = GetGameTime() + g_cvCooldown.FloatValue;
-
-	CreateTimer(g_cvCooldown.FloatValue, Timer_BossBack, _, TIMER_FLAG_NO_MAPCHANGE);
-}
-
-public Action Timer_BossBack(Handle hTimer)
-{
-	if (!g_bFight)
-	{
-		SpawnBoss();
-	}
-
-	return Plugin_Stop;
 }
 
 // Ends the fight once nobody is left in it. True if it ended.
