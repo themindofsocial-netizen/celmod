@@ -622,3 +622,4 @@
 		   hurt, lasers fire from the ceiling too. Beat it and everyone still in the arena gets the Blood emblem, 200
 		   tactics XP, 10000 CL and their weapons back, and it stays dead until the next map; if everyone dies, it
 		   resets. The vent on the way down takes your weapons away.
+		 - Double jump works in event areas (mazes, parkour) now too. cm_double_jump_events 0 turns it back off there.

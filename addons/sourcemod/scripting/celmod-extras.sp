@@ -69,6 +69,7 @@ ConVar g_cvMaxTurrets;
 ConVar g_cvNoBlock;
 ConVar g_cvDoubleJump;
 ConVar g_cvDoubleJumpHeight;
+ConVar g_cvDoubleJumpEvents;
 ConVar g_cvUnlimitedAux;
 bool g_bDoubleJumped[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
@@ -113,7 +114,8 @@ public void OnPluginStart()
 	g_cvNoBlock.AddChangeHook(CMExtras_OnNoBlockChanged);
 	g_cvSpawnHealth = CreateConVar("cm_spawn_health", "225", "Health (and full health) players spawn with.", _, true, 1.0);
 	g_cvUnlimitedAux = CreateConVar("cm_unlimited_aux", "1", "1: the suit's aux power (sprint, flashlight, breath underwater) never runs out.", _, true, 0.0, true, 1.0);
-	g_cvDoubleJump = CreateConVar("cm_double_jump", "1", "Double jumping (jump again in the air): 0 turns it off. Never in event areas.", _, true, 0.0);
+	g_cvDoubleJump = CreateConVar("cm_double_jump", "1", "Double jumping (jump again in the air): 0 turns it off.", _, true, 0.0);
+	g_cvDoubleJumpEvents = CreateConVar("cm_double_jump_events", "1", "Whether double jumping works in event areas (mazes, parkour) too.", _, true, 0.0, true, 1.0);
 	g_cvDoubleJumpHeight = CreateConVar("cm_double_jump_height", "24.0", "How high a double jump goes, in units (a normal jump is about 21).", _, true, 1.0, true, 512.0);
 	
 	g_cvLandFeeMax = CreateConVar("cm_land_fee_max", "100000", "Highest entry fee a player can set on their land with !fee.", _, true, 0.0);
@@ -3259,8 +3261,8 @@ public void Frame_SpawnHealth(any iUserId)
 	SetEntityHealth(iClient, iHealth);
 }
 
-//Double jump: pressing jump again in the air gives one more jump, until the player lands. Not inside event areas
-//(mazes and parkour), unless the player is an admin with !adminmode on.
+//Double jump: pressing jump again in the air gives one more jump, until the player lands. In event areas too, unless
+//cm_double_jump_events is 0 (then only admins with !adminmode on get it there).
 public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fVel[3], float fAngles[3], int &iWeapon)
 {
 	int iLast = g_iLastButtons[iClient];
@@ -3302,7 +3304,7 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fV
 		return Plugin_Continue;
 	}
 	
-	if (GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && !Cel_ZoneExempt(iClient))
+	if (!g_cvDoubleJumpEvents.BoolValue && GetFeatureStatus(FeatureType_Native, "Cel_GetZoneType") == FeatureStatus_Available && !Cel_ZoneExempt(iClient))
 	{
 		float fFeet[3];
 		
