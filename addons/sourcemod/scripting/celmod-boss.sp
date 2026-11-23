@@ -117,6 +117,7 @@ float g_fThrownUntil[MAXENTITIES + 1];
 
 Handle g_hThink;
 bool g_bLate;
+bool g_bDrawTick; // warnings are redrawn every other think (0.2 s), to keep players' network traffic down
 int g_iExplosionSprite;
 
 public Plugin myinfo =
@@ -560,6 +561,8 @@ public Action Timer_Think(Handle hTimer)
 
 	float fNow = GetGameTime(), fEye[3];
 
+	g_bDrawTick = !g_bDrawTick;
+
 	// Fighters who got out of the arena some other way (a teleport, noclip) are out of the fight.
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -803,8 +806,11 @@ void RunShots(int iBoss, float fNow)
 		if (fNow < g_fShotTime[i])
 		{
 			// The warning: a thin flickering line along where it'll fire.
-			TE_SetupBeamPoints(g_fShotStart[i], g_fShotEnd[i], g_iLaserSprite, 0, 0, 0, 0.12, 1.5, 1.5, 0, 1.0, { 255, 60, 0, 160 }, 0);
-			TE_SendToAll();
+			if (g_bDrawTick)
+			{
+				TE_SetupBeamPoints(g_fShotStart[i], g_fShotEnd[i], g_iLaserSprite, 0, 0, 0, 0.22, 1.5, 1.5, 0, 1.0, { 255, 60, 0, 160 }, 0);
+				TE_SendToAll();
+			}
 
 			continue;
 		}
@@ -1202,8 +1208,11 @@ void RunSweep(int iBoss, const float fEye[3], float fNow)
 		fEnd[0] += Cosine(DegToRad(g_fSweepYaw)) * SWEEP_LENGTH;
 		fEnd[1] += Sine(DegToRad(g_fSweepYaw)) * SWEEP_LENGTH;
 
-		TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.12, 2.0, 2.0, 0, 1.0, { 255, 60, 200, 180 }, 0);
-		TE_SendToAll();
+		if (g_bDrawTick)
+		{
+			TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.22, 2.0, 2.0, 0, 1.0, { 255, 60, 200, 180 }, 0);
+			TE_SendToAll();
+		}
 		return;
 	}
 
@@ -1390,8 +1399,11 @@ void RunRocks(int iBoss, float fNow)
 			float fLeft = g_fRockTime[r] - fNow;
 
 			// (Ring sizes are across, not from the middle: 180 marks the 90 it hits.)
-			TE_SetupBeamRingPoint(g_fRockPos[r], 180.0 + fLeft * 120.0, 180.0, g_iLaserSprite, 0, 0, 0, 0.12, 4.0, 0.0, { 255, 40, 30, 220 }, 0, 0);
-			TE_SendToAll();
+			if (g_bDrawTick)
+			{
+				TE_SetupBeamRingPoint(g_fRockPos[r], 180.0 + fLeft * 120.0, 180.0, g_iLaserSprite, 0, 0, 0, 0.22, 4.0, 0.0, { 255, 40, 30, 220 }, 0, 0);
+				TE_SendToAll();
+			}
 			continue;
 		}
 
@@ -1652,7 +1664,7 @@ void ShowBossHud()
 
 			if (GetFeatureStatus(FeatureType_Native, "Cel_SendHudMessage") == FeatureStatus_Available)
 			{
-				Cel_SendHudMessage(i, 5, -1.0, 0.06, 255, 60, 40, 255, 0, 0.0, 0.0, 0.7, 0.0, sText);
+				Cel_SendHudMessage(i, 5, -1.0, 0.06, 255, 60, 40, 255, 0, 0.0, 0.0, 1.2, 0.0, sText);
 			} else {
 				ShowHudText(i, 0, "%s", sText);
 			}

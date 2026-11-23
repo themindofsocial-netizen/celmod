@@ -655,5 +655,6 @@
 		   a floor laser that sweeps right round the arena (jump it). Wide Eyes drifts around the arena, faster each
 		   stage, and getting within its field burns you and throws you back, so throw from a distance.
 		 - No more teleport into the boss arena: you walk in, and whoever isn't in when the door shuts is locked out.
-		 - The boss's name and health bar show again.
+		 - The boss's name and health bar stay on screen: HUD text is sent reliably (it was dropped when the fight's
+		   effects filled a player's connection), and the fight's warning effects send half as much.
 		 - The camera cel is a city scanner now (freeze it where it should watch).

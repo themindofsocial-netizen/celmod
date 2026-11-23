@@ -363,7 +363,9 @@ public int Native_SendHudMessage(Handle hPlugin, int iNumParams)
 	
 	GetNativeString(14, sMessage, sizeof(sMessage));
 	
-	Handle hHudMessage = (iClient != -1) ? StartMessageOne("HudMsg", iClient) : StartMessageAll("HudMsg");
+	//Reliable: an unreliable message is dropped when a player's packet is already full (busy effects, like the boss
+	//fight's), and the text then blinks out.
+	Handle hHudMessage = (iClient != -1) ? StartMessageOne("HudMsg", iClient, USERMSG_RELIABLE) : StartMessageAll("HudMsg", USERMSG_RELIABLE);
 	
 	if (hHudMessage != INVALID_HANDLE)
 	{
