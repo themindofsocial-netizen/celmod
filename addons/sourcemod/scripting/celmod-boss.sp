@@ -40,7 +40,7 @@
 #define SND_ROCK "ambient/explosions/explode_7.wav"
 #define SND_SHIELD "ambient/energy/zap1.wav"
 
-#define MAX_SHOTS 8
+#define MAX_SHOTS 24
 #define MAX_POINTS 16
 
 ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvXP, g_cvEmblem, g_cvLaserDamage, g_cvManhacks, g_cvLockDelay, g_cvSlamDamage, g_cvRockDamage;
@@ -79,7 +79,19 @@ int g_iMaxHits;
 int g_iLaserSprite;
 int g_iCeilingCount;
 
-float g_fBossPos[3];
+float g_fBossPos[3]; // where it waits (the map's stand-in)
+float g_fBossCur[3]; // where it is now, in the fight
+float g_fBossGoal[3]; // where it's drifting to
+float g_fArenaMins[2] = { -999999.0, -999999.0 };
+float g_fArenaMaxs[2] = { 999999.0, 999999.0 };
+bool g_bArenaKnown;
+float g_fNextAura;
+
+// The floor laser (stage 3): a beam sweeping round the boss along the floor. Jump over it.
+bool g_bSweep;
+float g_fSweepStart;
+float g_fSweepYaw;
+float g_fNextSweepHit[MAXPLAYERS + 1];
 float g_fBossAngles[3];
 float g_fSpawnPos[3];
 float g_fManhackPos[3];
@@ -125,6 +137,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	MarkNativeAsOptional("Cel_AddTacticsXP");
 	MarkNativeAsOptional("Cel_PrintToChat");
 	MarkNativeAsOptional("Cel_PrintToChatAll");
+	MarkNativeAsOptional("Cel_SendHudMessage");
 
 	return APLRes_Success;
 }
@@ -132,12 +145,12 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 public void OnPluginStart()
 {
 	g_cvEnable = CreateConVar("cm_boss_enable", "1", "Whether the boss fight on maps that have one (gm_bloodyconstruct_cm12) is on.");
-	g_cvHits = CreateConVar("cm_boss_hits", "24", "Manhack hits it takes to beat the boss with one player (split over its three stages).", _, true, 3.0);
-	g_cvHitsPerPlayer = CreateConVar("cm_boss_hits_per_player", "6", "Extra hits it takes for each more player in the fight.", _, true, 0.0);
-	g_cvSlamDamage = CreateConVar("cm_boss_slam_damage", "25", "Damage of the floor shockwave (stage 2 on), unless you jump over it.", _, true, 0.0);
-	g_cvRockDamage = CreateConVar("cm_boss_rock_damage", "40", "Damage of a falling rock (stage 3).", _, true, 0.0);
+	g_cvHits = CreateConVar("cm_boss_hits", "30", "Manhack hits it takes to beat the boss with one player (split over its three stages).", _, true, 3.0);
+	g_cvHitsPerPlayer = CreateConVar("cm_boss_hits_per_player", "10", "Extra hits it takes for each more player in the fight.", _, true, 0.0);
+	g_cvSlamDamage = CreateConVar("cm_boss_slam_damage", "60", "Damage of the floor shockwave (stage 2 on), unless you jump over it.", _, true, 0.0);
+	g_cvRockDamage = CreateConVar("cm_boss_rock_damage", "80", "Damage of a falling rock (stage 3).", _, true, 0.0);
 	g_cvReward = CreateConVar("cm_boss_reward", "10000", "CL each player still standing gets for beating the boss.", _, true, 0.0);
-	g_cvLaserDamage = CreateConVar("cm_boss_laser_damage", "30", "Damage of one of the boss's lasers.", _, true, 0.0);
+	g_cvLaserDamage = CreateConVar("cm_boss_laser_damage", "55", "Damage of one of the boss's lasers.", _, true, 0.0);
 	g_cvManhacks = CreateConVar("cm_boss_manhacks", "3", "Manhacks in the arena at once (one more for each extra player).", _, true, 1.0, true, 12.0);
 	g_cvXP = CreateConVar("cm_tactics_xp_boss", "200", "Tactics experience everyone still in the arena gets for beating the boss.", _, true, 0.0);
 	g_cvEmblem = CreateConVar("cm_boss_emblem", "blood", "Emblem everyone still in the arena gets for beating the boss (empty = none).");
@@ -248,6 +261,38 @@ public Action Timer_SetupArena(Handle hTimer)
 	}
 
 	g_bHasManhackPoint = FindPoint("info_target", "manhackpoint", g_fManhackPos);
+
+	// The arena's corners (its rockpoints): the boss drifts around inside them.
+	{
+		int iPoint = -1, iFound = 0;
+		char sPoint[32];
+		float fPoint[3];
+
+		g_fArenaMins = { 999999.0, 999999.0 };
+		g_fArenaMaxs = { -999999.0, -999999.0 };
+
+		while ((iPoint = FindEntityByClassname(iPoint, "info_target")) != -1)
+		{
+			GetEntPropString(iPoint, Prop_Data, "m_iName", sPoint, sizeof(sPoint));
+
+			if (!StrEqual(sPoint, "rockpoints") && !StrEqual(sPoint, "ceilingpoints"))
+			{
+				continue;
+			}
+
+			GetEntPropVector(iPoint, Prop_Data, "m_vecAbsOrigin", fPoint);
+
+			for (int a = 0; a < 2; a++)
+			{
+				if (fPoint[a] < g_fArenaMins[a]) g_fArenaMins[a] = fPoint[a];
+				if (fPoint[a] > g_fArenaMaxs[a]) g_fArenaMaxs[a] = fPoint[a];
+			}
+
+			iFound++;
+		}
+
+		g_bArenaKnown = (iFound >= 2);
+	}
 
 	// The ceiling points (fired from once the boss is hurt).
 	g_iCeilingCount = 0;
@@ -406,18 +451,8 @@ void EnterArena(int iClient)
 		return;
 	}
 
-	// Into the arena, looking at the boss.
-	float fAngles[3], fDir[3];
-
-	SubtractVectors(g_fBossPos, g_fSpawnPos, fDir);
-	GetVectorAngles(fDir, fAngles);
-	fAngles[0] = 0.0;
-	fAngles[2] = 0.0;
-
-	float fZero[3];
-
-	TeleportEntity(iClient, g_fSpawnPos, fAngles, fZero);
-
+	// Walked in past the trigger: in the fight from here (no teleport; whoever isn't in before the door shuts is
+	// locked out).
 	// Gravity gun only.
 	StripWeapons(iClient);
 	GivePlayerItem(iClient, "weapon_physcannon");
@@ -432,7 +467,7 @@ void EnterArena(int iClient)
 
 	g_iMaxHits = g_cvHits.IntValue + g_cvHitsPerPlayer.IntValue * (CountFighters() - 1);
 
-	Chat(iClient, "Only the {green}gravity gun{default} works down here. Dodge {green}%s{default}'s lasers, catch the manhacks and throw them into it!", BOSS_NAME);
+	Chat(iClient, "Only the {green}gravity gun{default} works in here. Dodge {green}%s{default}'s lasers, jump its shockwaves, keep your distance, and throw the manhacks into it!", BOSS_NAME);
 }
 
 void StartFight()
@@ -442,6 +477,9 @@ void StartFight()
 	g_iHits = 0;
 	g_iStage = 1;
 	g_fShieldUntil = 0.0;
+	g_bSweep = false;
+	g_fBossCur = g_fBossPos;
+	g_fBossGoal = g_fBossPos;
 	g_iAttack = 0;
 	g_iBurstLeft = 0;
 	g_bWave = false;
@@ -550,6 +588,8 @@ public Action Timer_Think(Handle hTimer)
 	RunWave(iBoss, fNow);
 	RunRocks(iBoss, fNow);
 	RunBurst(fEye, fNow);
+	RunSweep(iBoss, fEye, fNow);
+	RunAura(iBoss, fEye, fNow);
 
 	// Its attacks, by stage; none while it's staggered between stages.
 	if (fNow >= g_fNextAttack && fNow >= g_fShieldUntil)
@@ -592,11 +632,120 @@ void FaceTarget(int iBoss, const float fEye[3], float fNow)
 	fAngles[0] = 0.0;
 	fAngles[2] = 0.0;
 
+	// It drifts from spot to spot around the arena, faster each stage (not while staggered).
+	if (fNow >= g_fShieldUntil)
+	{
+		float fToGoal[3];
+
+		SubtractVectors(g_fBossGoal, g_fBossCur, fToGoal);
+		fToGoal[2] = 0.0;
+
+		float fLeft = GetVectorLength(fToGoal), fStep = (g_iStage == 1 ? 90.0 : (g_iStage == 2 ? 150.0 : 230.0)) * 0.1;
+
+		if (fLeft <= fStep)
+		{
+			PickGoal();
+		} else {
+			ScaleVector(fToGoal, fStep / fLeft);
+			AddVectors(g_fBossCur, fToGoal, g_fBossCur);
+		}
+	}
+
 	// A slow hover.
-	fPos = g_fBossPos;
+	fPos = g_fBossCur;
 	fPos[2] += Sine((fNow - g_fFightStart) * 1.5) * 12.0;
 
 	TeleportEntity(iBoss, fPos, fAngles, NULL_VECTOR);
+}
+
+// A new spot to drift to: somewhere in the arena (kept off its walls), a fair way from where it is.
+void PickGoal()
+{
+	float fMins[2], fMaxs[2];
+
+	if (g_bArenaKnown)
+	{
+		for (int a = 0; a < 2; a++)
+		{
+			float fInset = (g_fArenaMaxs[a] - g_fArenaMins[a]) * 0.2;
+
+			fMins[a] = g_fArenaMins[a] + fInset;
+			fMaxs[a] = g_fArenaMaxs[a] - fInset;
+		}
+	} else {
+		for (int a = 0; a < 2; a++)
+		{
+			fMins[a] = g_fBossPos[a] - 400.0;
+			fMaxs[a] = g_fBossPos[a] + 400.0;
+		}
+	}
+
+	for (int iTry = 0; iTry < 8; iTry++)
+	{
+		g_fBossGoal[0] = GetRandomFloat(fMins[0], fMaxs[0]);
+		g_fBossGoal[1] = GetRandomFloat(fMins[1], fMaxs[1]);
+		g_fBossGoal[2] = g_fBossPos[2];
+
+		if (SquareRoot(Pow(g_fBossGoal[0] - g_fBossCur[0], 2.0) + Pow(g_fBossGoal[1] - g_fBossCur[1], 2.0)) > 300.0)
+		{
+			break;
+		}
+	}
+}
+
+// Getting close hurts: anyone inside its field is burned and thrown back out.
+#define AURA_RADIUS 300.0
+
+void RunAura(int iBoss, const float fEye[3], float fNow)
+{
+	if (fNow < g_fNextAura)
+	{
+		return;
+	}
+
+	g_fNextAura = fNow + 0.3;
+
+	float fFloor[3];
+
+	fFloor = g_fBossCur;
+	fFloor[2] = g_fSpawnPos[2] + 4.0;
+
+	// Its edge, faintly on the floor (ring sizes are across).
+	TE_SetupBeamRingPoint(fFloor, AURA_RADIUS * 2.0, AURA_RADIUS * 2.0 + 1.0, g_iLaserSprite, 0, 0, 0, 0.32, 3.0, 1.5, { 160, 40, 255, 120 }, 0, 0);
+	TE_SendToAll();
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!g_bInFight[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			continue;
+		}
+
+		float fPos[3], fPush[3];
+
+		GetClientAbsOrigin(i, fPos);
+
+		float fDistance = SquareRoot(Pow(fPos[0] - fEye[0], 2.0) + Pow(fPos[1] - fEye[1], 2.0));
+
+		if (fDistance > AURA_RADIUS)
+		{
+			continue;
+		}
+
+		SDKHooks_TakeDamage(i, iBoss, iBoss, 12.0, DMG_SHOCK);
+
+		fPush[0] = fPos[0] - fEye[0];
+		fPush[1] = fPos[1] - fEye[1];
+		fPush[2] = 0.0;
+		NormalizeVector(fPush, fPush);
+		ScaleVector(fPush, 650.0);
+		fPush[2] = 220.0;
+
+		TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fPush);
+
+		TE_SetupBeamPoints(fEye, fPos, g_iLaserSprite, 0, 0, 0, 0.2, 4.0, 1.0, 0, 6.0, { 170, 60, 255, 255 }, 0);
+		TE_SendToAll();
+	}
 }
 
 void AimShot(const float fFrom[3], int iTarget, float fWarning)
@@ -920,58 +1069,33 @@ void NextStage(int iBoss, int iStage)
 	}
 }
 
-// Takes turns between its attacks; later stages have more of them, and use them faster.
+// Takes turns between its attacks; later stages have more of them, and use them faster. Built to be very hard for a
+// room full of players with 225 health: most attacks go for everyone at once.
 void Attack(int iBoss, const float fEye[3], float fNow)
 {
-	int iTarget = RandomFighter();
-
-	if (iTarget == -1)
+	if (RandomFighter() == -1)
 	{
 		return;
 	}
 
-	int iKinds = (g_iStage == 1) ? 1 : (g_iStage == 2 ? 4 : 5);
+	int iKinds = (g_iStage == 1) ? 3 : (g_iStage == 2 ? 5 : 6);
 	int iKind = g_iAttack++ % iKinds;
+	float fWarn = (g_iStage == 1) ? 0.8 : (g_iStage == 2 ? 0.65 : 0.5);
 
 	switch (iKind)
 	{
-		// A single laser (both eyes in the last stage).
+		// A laser at every player (two each in the last stage).
 		case 0:
 		{
-			AimShot(fEye, iTarget, g_iStage == 1 ? 1.1 : 0.8);
-
-			if (g_iStage == 3)
+			for (int i = 1; i <= MaxClients; i++)
 			{
-				int iOther = RandomFighter();
-
-				AimShot(fEye, iOther != -1 ? iOther : iTarget, 1.0);
-			}
-
-			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
-		}
-
-		// A burst: three quick shots, each aimed where they've moved to.
-		case 1:
-		{
-			g_iBurstLeft = 3;
-			g_iBurstTarget = GetClientUserId(iTarget);
-			g_fNextBurst = fNow;
-
-			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
-		}
-
-		// The ceiling opens fire: one laser at each fighter.
-		case 2:
-		{
-			if (g_iCeilingCount == 0)
-			{
-				AimShot(fEye, iTarget, 0.8);
-			} else {
-				for (int i = 1; i <= MaxClients; i++)
+				if (g_bInFight[i] && IsClientInGame(i) && IsPlayerAlive(i))
 				{
-					if (g_bInFight[i] && IsClientInGame(i) && IsPlayerAlive(i))
+					AimShot(fEye, i, fWarn);
+
+					if (g_iStage == 3)
 					{
-						AimShot(g_fCeiling[GetRandomInt(0, g_iCeilingCount - 1)], i, 1.0);
+						AimShot(fEye, i, fWarn + 0.35);
 					}
 				}
 			}
@@ -979,31 +1103,155 @@ void Attack(int iBoss, const float fEye[3], float fNow)
 			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
 		}
 
+		// A burst: quick shots at one player, each aimed where they've moved to.
+		case 1:
+		{
+			g_iBurstLeft = (g_iStage == 3) ? 6 : 4;
+			g_iBurstTarget = GetClientUserId(RandomFighter());
+			g_fNextBurst = fNow;
+
+			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
+		}
+
 		// It slams the floor: a ring runs out across the arena. Jump over it.
-		case 3:
+		case 2:
 		{
 			StartWave(iBoss, fNow);
 		}
 
-		// Rocks fall where everyone stands.
+		// The ceiling opens fire: lasers at every player from above.
+		case 3:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (!g_bInFight[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+				{
+					continue;
+				}
+
+				for (int n = 0; n < (g_iStage == 3 ? 2 : 1); n++)
+				{
+					AimShot(g_iCeilingCount > 0 ? g_fCeiling[GetRandomInt(0, g_iCeilingCount - 1)] : fEye, i, fWarn + 0.2 + n * 0.4);
+				}
+			}
+
+			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
+		}
+
+		// Rocks fall where everyone stands (and where they're running to).
 		case 4:
 		{
 			for (int i = 1; i <= MaxClients; i++)
 			{
 				if (g_bInFight[i] && IsClientInGame(i) && IsPlayerAlive(i))
 				{
-					float fPos[3];
+					float fPos[3], fVel[3];
 
 					GetClientAbsOrigin(i, fPos);
-					DropRock(fPos, fNow + 1.3);
+					DropRock(fPos, fNow + 1.1);
+
+					GetEntPropVector(i, Prop_Data, "m_vecAbsVelocity", fVel);
+					fPos[0] += fVel[0] * 0.9;
+					fPos[1] += fVel[1] * 0.9;
+					DropRock(fPos, fNow + 1.4);
 				}
 			}
 		}
+
+		// The floor laser: a beam sweeps all the way round it along the floor. Jump over it.
+		case 5:
+		{
+			g_bSweep = true;
+			g_fSweepStart = fNow + 1.0;
+			g_fSweepYaw = GetRandomFloat(0.0, 360.0);
+
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				g_fNextSweepHit[i] = 0.0;
+			}
+
+			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
+		}
 	}
 
-	float fGap = (g_iStage == 1) ? 2.6 : (g_iStage == 2 ? 2.2 : 1.6);
+	float fGap = (g_iStage == 1) ? 1.8 : (g_iStage == 2 ? 1.4 : 1.0);
 
-	g_fNextAttack = fNow + fGap + (iKind == 3 ? 1.5 : 0.0);
+	g_fNextAttack = fNow + fGap + ((iKind == 2 || iKind == 5) ? 1.2 : 0.0);
+}
+
+#define SWEEP_TIME 3.0
+#define SWEEP_LENGTH 1400.0
+
+void RunSweep(int iBoss, const float fEye[3], float fNow)
+{
+	if (!g_bSweep)
+	{
+		return;
+	}
+
+	float fFloorZ = g_fSpawnPos[2] + 14.0;
+	float fStart[3], fEnd[3];
+
+	fStart = g_fBossCur;
+	fStart[2] = fFloorZ;
+
+	// Its warning: a thin line where it starts.
+	if (fNow < g_fSweepStart)
+	{
+		fEnd = fStart;
+		fEnd[0] += Cosine(DegToRad(g_fSweepYaw)) * SWEEP_LENGTH;
+		fEnd[1] += Sine(DegToRad(g_fSweepYaw)) * SWEEP_LENGTH;
+
+		TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.12, 2.0, 2.0, 0, 1.0, { 255, 60, 200, 180 }, 0);
+		TE_SendToAll();
+		return;
+	}
+
+	float fDone = (fNow - g_fSweepStart) / SWEEP_TIME;
+
+	if (fDone > 1.0)
+	{
+		g_bSweep = false;
+		return;
+	}
+
+	float fYaw = g_fSweepYaw + fDone * 360.0;
+
+	fEnd = fStart;
+	fEnd[0] += Cosine(DegToRad(fYaw)) * SWEEP_LENGTH;
+	fEnd[1] += Sine(DegToRad(fYaw)) * SWEEP_LENGTH;
+
+	TE_SetupBeamPoints(fEye, fStart, g_iLaserSprite, 0, 0, 0, 0.12, 6.0, 6.0, 0, 1.0, { 255, 40, 180, 255 }, 0);
+	TE_SendToAll();
+	TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.12, 10.0, 10.0, 0, 1.5, { 255, 40, 180, 255 }, 0);
+	TE_SendToAll();
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!g_bInFight[i] || !IsClientInGame(i) || !IsPlayerAlive(i) || fNow < g_fNextSweepHit[i])
+		{
+			continue;
+		}
+
+		float fFeet[3];
+
+		GetClientAbsOrigin(i, fFeet);
+
+		// Only along the floor: a jump clears it.
+		if (fFeet[2] > fFloorZ + 10.0)
+		{
+			continue;
+		}
+
+		fFeet[2] = fFloorZ;
+
+		if (DistanceToSegment(fFeet, fStart, fEnd) < 28.0)
+		{
+			SDKHooks_TakeDamage(i, iBoss, iBoss, g_cvLaserDamage.FloatValue, DMG_ENERGYBEAM);
+
+			g_fNextSweepHit[i] = fNow + 0.5;
+		}
+	}
 }
 
 void RunBurst(const float fEye[3], float fNow)
@@ -1032,7 +1280,7 @@ void StartWave(int iBoss, float fNow)
 	g_bWave = true;
 	g_fWaveStart = fNow + 1.0;
 
-	g_fWaveCenter = g_fBossPos;
+	g_fWaveCenter = g_fBossCur;
 	g_fWaveCenter[2] = g_fSpawnPos[2] + 6.0;
 
 	for (int i = 1; i <= MaxClients; i++)
@@ -1328,6 +1576,7 @@ void EndFight()
 	g_alManhacks.Clear();
 
 	g_bWave = false;
+	g_bSweep = false;
 	g_iBurstLeft = 0;
 
 	for (int i = 0; i < MAX_ROCKS; i++)
@@ -1391,12 +1640,22 @@ void ShowBossHud()
 
 	SetHudTextParams(-1.0, 0.06, 0.7, 255, 60, 40, 255, 0, 0.0, 0.0, 0.0);
 
+	char sText[192];
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (g_bInFight[i] && IsClientInGame(i))
 		{
-			// Channel 5: channel 3 is celmod-hud's command feed, which kept replacing the bar.
-			ShowHudText(i, 5, "%s  -  %s%s\n[%s] %d/%d", BOSS_NAME, g_sStageName[g_iStage > 0 && g_iStage < 4 ? g_iStage : 1], GetGameTime() < g_fShieldUntil ? " (shielded)" : "", sBar, iLeft, g_iMaxHits);
+			// Sent straight to channel 5 (CelMod's own HUD message): SourceMod's ShowHudText folds channel numbers into
+			// its own count, which landed the bar on a channel the CelMod HUD redraws constantly.
+			FormatEx(sText, sizeof(sText), "%s  -  %s%s\n[%s] %d/%d", BOSS_NAME, g_sStageName[g_iStage > 0 && g_iStage < 4 ? g_iStage : 1], GetGameTime() < g_fShieldUntil ? " (shielded)" : "", sBar, iLeft, g_iMaxHits);
+
+			if (GetFeatureStatus(FeatureType_Native, "Cel_SendHudMessage") == FeatureStatus_Available)
+			{
+				Cel_SendHudMessage(i, 5, -1.0, 0.06, 255, 60, 40, 255, 0, 0.0, 0.0, 0.7, 0.0, sText);
+			} else {
+				ShowHudText(i, 0, "%s", sText);
+			}
 		}
 	}
 }
@@ -1528,6 +1787,11 @@ float DistanceToArena(int iClient)
 	for (int i = 0; i < 3; i++)
 	{
 		fMiddle[i] = (g_fBossPos[i] + g_fSpawnPos[i]) * 0.5;
+
+		if (g_bArenaKnown && i < 2)
+		{
+			fMiddle[i] = (g_fArenaMins[i] + g_fArenaMaxs[i]) * 0.5;
+		}
 	}
 
 	return GetVectorDistance(fPos, fMiddle);

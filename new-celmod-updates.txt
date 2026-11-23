@@ -650,3 +650,9 @@
 		 - gm_bloodyconstruct_cm12: the final door opens when you walk up to it. The door behind it stays open until
 		   someone drops into the arena, then shuts for good 5 seconds later.
 		 - The boss's name and health bar no longer keep vanishing (the command feed was drawn on the same HUD channel).
+		 - The boss is built for a room full of players with 225 health now: lasers 55, shockwaves 60, rocks 80, 30 hits
+		   plus 10 per extra player. Most attacks go for everyone at once, warnings are shorter, and the last stage adds
+		   a floor laser that sweeps right round the arena (jump it). Wide Eyes drifts around the arena, faster each
+		   stage, and getting within its field burns you and throws you back, so throw from a distance.
+		 - No more teleport into the boss arena: you walk in, and whoever isn't in when the door shuts is locked out.
+		 - The boss's name and health bar show again.
