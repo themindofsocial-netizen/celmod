@@ -29,7 +29,7 @@ CATEGORIES = [
 CATEGORY = {}
 for cat, names in {
     'building': 'spawn p s save load saves builds clear copy paste +copy +move freeze freezeit freezeall unfreeze unfreezeit unfreezeall del delete remove delall deleteall removeall undo '
-                'r rotate flip roll turn stand straight straighten smove pmove drop moveto weld release stack stackinfo axis mark marker '
+                'r rotate spin flip roll turn stand straight straighten smove pmove drop moveto weld release stack stackinfo axis mark marker '
                 'replace model skin color paint palette fadecolor alpha amt renderfx renderfxlist solid god lock unlock perm unperm owner',
     'cels': 'text door light ladder internet seturl turret fire effect emitter message music celmusic sound teleport spawnpoint button link unlink animate anim setpass pass wep ammo ammocrate charger',
     'land': 'land coop landcoop dm deathmatch landdeathmatch gravity landgravity shop landshop landskin landcolor addteam delteam team '
@@ -44,7 +44,7 @@ for cat, names in {
 
 USAGE = {
     'spawn': '<prop name>', 'land': '(again to finish, #clear to remove)', 'save': '<build name>', 'load': '<build name>', 'clear': '<build name>',
-    'r': '<degrees>', 'flip': '<degrees>', 'roll': '<degrees>', 'turn': '<degrees>', 'rotate': '<flip> <r> <roll>',
+    'r': '<degrees>', 'flip': '<degrees>', 'roll': '<degrees>', 'turn': '<degrees>', 'rotate': '<flip> <r> <roll>', 'spin': '<yaw/pitch/roll/off> [speed]',
     'stack': '<x> <y> <z> [copies]', 'smove': '<x> <y> <z>', 'replace': '<prop name>', 'skin': '<number>',
     'color': '<color> (#all for everything you own)', 'fadecolor': '<color 1> <color 2>', 'palette': '<red> <green> <blue>',
     'alpha': '<0-255>', 'renderfx': '<effect> (no effect: the list)', 'door': '<door skin>', 'light': '[distance]', 'ladder': '<1 or 2>',

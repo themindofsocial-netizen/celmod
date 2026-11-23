@@ -16,6 +16,10 @@ bool g_bLocked[MAXENTITIES + 1];
 bool g_bHasCopyEntity[MAXPLAYERS + 1];
 bool g_bIsFading[MAXENTITIES + 1];
 bool g_bRainbow[MAXENTITIES + 1];
+
+// !spin: degrees a second around the prop's own pitch, yaw and roll axes, and the props that are spinning.
+float g_fSpin[MAXENTITIES + 1][3];
+ArrayList g_alSpinning;
 bool g_bSolid[MAXENTITIES + 1];
 bool g_bPerm[MAXENTITIES + 1];
 
@@ -183,6 +187,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_roll", Command_HookRoll, "|CelMod| Rolls the prop you are looking at.");
 	RegConsoleCmd("v_rotate", Command_Rotate, "|CelMod| Flips, rotates and rolls the prop you are looking at.");
 	RegConsoleCmd("v_skin", Command_Skin, "|CelMod| Changes the skin on the prop you are looking at.");
+	RegConsoleCmd("v_spin", Command_Spin, "|CelMod| Spins the prop you are looking at forever: !spin <yaw/pitch/roll/off> [speed].");
 	RegConsoleCmd("v_smove", Command_SMove, "|CelMod| Moves the prop you are looking at along its own axes.");
 	RegConsoleCmd("v_solid", Command_Solid, "|CelMod| Makes the prop you are looking at solid or not solid.");
 	RegConsoleCmd("v_stack", Command_Stack, "|CelMod| Copies the prop you are looking at, moved by x, y and z: !stack <x> <y> <z> [copies].");
@@ -259,6 +264,11 @@ public void OnMapStart()
 public void OnMapEnd()
 {
 	g_iEntityDissolve = -1;
+
+	if (g_alSpinning != null)
+	{
+		g_alSpinning.Clear();
+	}
 }
 
 public void OnEntityDestroyed(int iEntity)
@@ -266,6 +276,8 @@ public void OnEntityDestroyed(int iEntity)
 	if (iEntity > 0 && iEntity <= MAXENTITIES)
 	{
 		g_bPerm[iEntity] = false;
+
+		StopSpin(iEntity);
 	}
 	
 	if(Cel_IsEntity(iEntity))
@@ -1421,6 +1433,215 @@ void RotateAround(float v[3], const float k[3], float fDegrees)
 }
 
 //The angles after turning by fAdd (pitch, yaw, roll) around the prop's own axes.
+public Action Command_Spin(int iClient, int iArgs)
+{
+	char sAxis[16], sSpeed[16];
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]spin <yaw/pitch/roll> [speed]{default} spins the prop you're looking at forever, {green}speed{default} in degrees a second (default 90, up to 1080; negative spins the other way). {green}[tag]spin off{default} stops it.");
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(1, sAxis, sizeof(sAxis));
+
+	float fSpeed = 90.0;
+
+	if (iArgs >= 2)
+	{
+		GetCmdArg(2, sSpeed, sizeof(sSpeed));
+		fSpeed = StringToFloat(sSpeed);
+	}
+
+	// Plain words for the axes as well: left/right turn it like a turntable, forward/back tip it over, cw/ccw roll it.
+	int iAxis = -1;
+	float fSign = 1.0;
+
+	if (StrEqual(sAxis, "yaw", false) || StrEqual(sAxis, "left", false) || StrEqual(sAxis, "y", false))
+	{
+		iAxis = 1;
+	} else if (StrEqual(sAxis, "right", false)) {
+		iAxis = 1;
+		fSign = -1.0;
+	} else if (StrEqual(sAxis, "pitch", false) || StrEqual(sAxis, "forward", false) || StrEqual(sAxis, "p", false)) {
+		iAxis = 0;
+	} else if (StrEqual(sAxis, "back", false) || StrEqual(sAxis, "backward", false)) {
+		iAxis = 0;
+		fSign = -1.0;
+	} else if (StrEqual(sAxis, "roll", false) || StrEqual(sAxis, "cw", false) || StrEqual(sAxis, "clockwise", false) || StrEqual(sAxis, "r", false)) {
+		iAxis = 2;
+	} else if (StrEqual(sAxis, "ccw", false) || StrEqual(sAxis, "counterclockwise", false) || StrEqual(sAxis, "anticlockwise", false)) {
+		iAxis = 2;
+		fSign = -1.0;
+	} else if (StrEqual(sAxis, "off", false) || StrEqual(sAxis, "stop", false)) {
+		iAxis = 3;
+	} else if (StringToFloat(sAxis) != 0.0 || StrEqual(sAxis, "0")) {
+		// !spin 45: a turntable at that speed.
+		iAxis = 1;
+		fSpeed = StringToFloat(sAxis);
+	}
+
+	if (iAxis == -1)
+	{
+		Cel_ReplyToCommand(iClient, "Spin it {green}yaw{default} (left/right), {green}pitch{default} (forward/back) or {green}roll{default} (cw/ccw), or {green}[tag]spin off{default}.");
+		return Plugin_Handled;
+	}
+
+	int iProp = Cel_GetClientAimTarget(iClient);
+
+	if (iProp == -1)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+
+	if (!Cel_CanEdit(iClient, iProp))
+	{
+		Cel_NotYours(iClient, iProp);
+		return Plugin_Handled;
+	}
+
+	if (Cel_CheckEntityType(iProp, "door"))
+	{
+		Cel_ReplyToCommand(iClient, "Doors can't spin.");
+		return Plugin_Handled;
+	}
+
+	if (iAxis == 3 || fSpeed == 0.0)
+	{
+		if (!IsSpinning(iProp))
+		{
+			Cel_ReplyToCommand(iClient, "That prop isn't spinning.");
+			return Plugin_Handled;
+		}
+
+		StopSpin(iProp);
+		Cel_ReplyToCommand(iClient, "Stopped spinning.");
+		return Plugin_Handled;
+	}
+
+	if (fSpeed > 1080.0)
+	{
+		fSpeed = 1080.0;
+	} else if (fSpeed < -1080.0) {
+		fSpeed = -1080.0;
+	}
+
+	float fSpin[3];
+
+	fSpin[iAxis] = fSpeed * fSign;
+
+	StartSpin(iProp, fSpin);
+
+	static const char sAxisName[][] = { "pitch", "yaw", "roll" };
+
+	Cel_ReplyToCommand(iClient, "Spinning ({green}%s{default}, %.0f degrees a second). {green}[tag]spin off{default} stops it.", sAxisName[iAxis], fSpeed * fSign);
+
+	return Plugin_Handled;
+}
+
+bool IsSpinning(int iEntity)
+{
+	return iEntity > 0 && iEntity <= MAXENTITIES && (g_fSpin[iEntity][0] != 0.0 || g_fSpin[iEntity][1] != 0.0 || g_fSpin[iEntity][2] != 0.0);
+}
+
+void StartSpin(int iEntity, const float fSpin[3])
+{
+	if (g_alSpinning == null)
+	{
+		g_alSpinning = new ArrayList();
+	}
+
+	int iRef = EntIndexToEntRef(iEntity);
+
+	if (g_alSpinning.FindValue(iRef) == -1)
+	{
+		g_alSpinning.Push(iRef);
+	}
+
+	g_fSpin[iEntity] = fSpin;
+
+	// A spinning prop stays where it is: physics would fight the turning.
+	if (Cel_GetMotion(iEntity))
+	{
+		Cel_SetMotion(iEntity, false);
+	}
+}
+
+void StopSpin(int iEntity)
+{
+	if (!IsSpinning(iEntity))
+	{
+		return;
+	}
+
+	g_fSpin[iEntity][0] = 0.0;
+	g_fSpin[iEntity][1] = 0.0;
+	g_fSpin[iEntity][2] = 0.0;
+
+	if (g_alSpinning != null)
+	{
+		int iIndex = g_alSpinning.FindValue(EntIndexToEntRef(iEntity));
+
+		if (iIndex != -1)
+		{
+			g_alSpinning.Erase(iIndex);
+		}
+	}
+}
+
+public void OnGameFrame()
+{
+	if (g_alSpinning == null || g_alSpinning.Length == 0)
+	{
+		return;
+	}
+
+	float fTick = GetTickInterval(), fAngles[3], fAdd[3], fNew[3];
+
+	for (int i = g_alSpinning.Length - 1; i >= 0; i--)
+	{
+		int iEntity = EntRefToEntIndex(g_alSpinning.Get(i));
+
+		if (iEntity == INVALID_ENT_REFERENCE || !IsSpinning(iEntity))
+		{
+			g_alSpinning.Erase(i);
+			continue;
+		}
+
+		Cel_GetEntityAngles(iEntity, fAngles);
+
+		fAdd[0] = g_fSpin[iEntity][0] * fTick;
+		fAdd[1] = g_fSpin[iEntity][1] * fTick;
+		fAdd[2] = g_fSpin[iEntity][2] * fTick;
+
+		RotateLocal(fAngles, fAdd, fNew);
+
+		TeleportEntity(iEntity, NULL_VECTOR, fNew, NULL_VECTOR);
+	}
+}
+
+// A spin is kept in saves.
+public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
+{
+	if (IsSpinning(iEntity))
+	{
+		kvSave.SetVector("x_spin", g_fSpin[iEntity]);
+	}
+}
+
+public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
+{
+	float fSpin[3];
+
+	kvSave.GetVector("x_spin", fSpin);
+
+	if (iEntity > 0 && iEntity <= MAXENTITIES && (fSpin[0] != 0.0 || fSpin[1] != 0.0 || fSpin[2] != 0.0))
+	{
+		StartSpin(iEntity, fSpin);
+	}
+}
+
 void RotateLocal(const float fStart[3], const float fAdd[3], float fResult[3])
 {
 	float fForward[3], fRight[3], fUp[3];
