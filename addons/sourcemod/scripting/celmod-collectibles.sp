@@ -9956,10 +9956,16 @@ public void Hook_MoneyBoxUse(int iEntity, int iActivator, int iCaller, UseType u
 }
 
 //Downloads for custom player models:
-void AddModelToDownloads(const char[] sModel)
+void AddModelToDownloads(const char[] sModel, int iDepth = 0)
 {
 	static const char sExtensions[][] = { ".mdl", ".vvd", ".phy", ".dx80.vtx", ".dx90.vtx", ".sw.vtx", ".vtx" };
 	char sBase[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
+
+	// The models it borrows its animations from ($includemodel, e.g. models/m_anm.mdl) are sent too.
+	if (iDepth < 4)
+	{
+		AddIncludedModelsToDownloads(sModel, iDepth);
+	}
 
 	strcopy(sBase, sizeof(sBase), sModel);
 
@@ -9981,6 +9987,58 @@ void AddModelToDownloads(const char[] sModel)
 		{
 			AddFileToDownloadsTable(sFile);
 		}
+	}
+}
+
+/**
+ * Sends the models a model includes ($includemodel). A player model usually gets all of its animations this way,
+ * so without them it stands in its reference pose (arms out) and never animates. Reads the include list from the
+ * .mdl header (studiohdr_t: numincludemodels at byte 336, then mstudiomodelgroup_t { label, name } entries).
+ */
+void AddIncludedModelsToDownloads(const char[] sModel, int iDepth)
+{
+	File fModel = OpenFile(sModel, "rb", true);
+
+	if (fModel == null)
+	{
+		return;
+	}
+
+	int iId, iCount, iIndex, iNameOffset;
+	char sInclude[8][PLATFORM_MAX_PATH];
+	int iFound;
+
+	fModel.ReadInt32(iId);
+
+	if (iId == 0x54534449 && fModel.Seek(336, SEEK_SET) && fModel.ReadInt32(iCount) && fModel.ReadInt32(iIndex) && iCount > 0 && iCount <= 8 && iIndex > 0)
+	{
+		for (int i = 0; i < iCount; i++)
+		{
+			if (!fModel.Seek(iIndex + i * 8 + 4, SEEK_SET) || !fModel.ReadInt32(iNameOffset) || iNameOffset <= 0)
+			{
+				continue;
+			}
+
+			if (fModel.Seek(iIndex + i * 8 + iNameOffset, SEEK_SET) && fModel.ReadString(sInclude[iFound], PLATFORM_MAX_PATH) > 0)
+			{
+				ReplaceString(sInclude[iFound], PLATFORM_MAX_PATH, "\\", "/");
+				iFound++;
+			}
+		}
+	}
+
+	delete fModel;
+
+	for (int i = 0; i < iFound; i++)
+	{
+		if (!FileExists(sInclude[i], true))
+		{
+			LogError("|CelMod| The model '%s' gets its animations from '%s', which the server doesn't have: it won't animate until that file is added.", sModel, sInclude[i]);
+
+			continue;
+		}
+
+		AddModelToDownloads(sInclude[i], iDepth + 1);
 	}
 }
 

@@ -610,3 +610,5 @@
 		 - Player models can be earned instead of sold: the Police Officer model can't be bought, !playermodels lists
 		   it as "earned", and !buymodel police says how to get it.
 		 - New player model in the shop: Jimmy, 100000 CL (!buymodel jimmy, then !playermodel jimmy).
+		 - Custom player models now send players the files they get their animations from (such as models/m_anm.mdl),
+		   so they animate instead of standing in a T-pose. If the server is missing one, its error log says which.
