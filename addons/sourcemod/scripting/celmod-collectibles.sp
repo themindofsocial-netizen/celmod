@@ -329,6 +329,7 @@ ConVar g_cvDropDelay;
 ConVar g_cvThirdPersonAimFix;
 ConVar g_cvBoothAlpha;
 ConVar g_cvBoothFadeStart;
+ConVar g_cvBreakerCost;
 ConVar g_cvBoothFadeEnd;
 ConVar g_cvBoothChance;
 ConVar g_cvTierChances;
@@ -486,6 +487,7 @@ public void OnPluginStart()
 	g_cvTierChances = CreateConVar("cm_drop_tier_chances", "60 25 10 4 1", "Chances (out of their total) that an emblem box is common, uncommon, rare, epic or legendary.");
 	g_cvTierCaps = CreateConVar("cm_drop_tier_daily_caps", "0 0 0 3 1", "Most emblem boxes of each tier (common uncommon rare epic legendary) that can drop server-wide per day. 0 = no limit.");
 	g_cvBoothChance = CreateConVar("cm_powerbooth_chance", "0.333", "Chance the Power Booth appears on a map (1 = every map). Admins can still place it with !powerbooth.", _, true, 0.0, true, 1.0);
+	g_cvBreakerCost = CreateConVar("cm_breaker_cost", "50000", "CL it costs to take an emblem apart at the Breaker Booth.", _, true, 0.0);
 	g_cvBoothFadeStart = CreateConVar("cm_powerbooth_fade_start", "150", "Within this distance the Power Booth is fully shown; further away it fades out.", _, true, 0.0);
 	g_cvBoothFadeEnd = CreateConVar("cm_powerbooth_fade_end", "350", "Beyond this distance the Power Booth is invisible (0 = always shown).", _, true, 0.0);
 	g_cvBoothAlpha = CreateConVar("cm_powerbooth_alpha", "90", "How see-through the Power Booth is (0 invisible, 255 solid). Lower is harder to spot.", _, true, 0.0, true, 255.0);
@@ -9128,13 +9130,24 @@ void BreakerUse(int iClient, int iBooth)
 			continue;
 		}
 
+		// It costs CL: checked before anything is taken.
+		int iPrice = g_cvBreakerCost.IntValue;
+
+		if (iPrice > 0 && !Cel_CheckClientBalance(iClient, iPrice))
+		{
+			EmitSoundToClient(iClient, SOUND_DENY);
+
+			Cel_PrintToChat(iClient, "{green}Breaker Booth:{default} taking your {green}%s{default} apart costs {green}%d CL{default}. You don't have enough.", g_Items[i].sName, iPrice);
+			return;
+		}
+
 		BreakAtBooth(iClient, iBooth, i);
 		return;
 	}
 
 	EmitSoundToClient(iClient, SOUND_DENY);
 
-	Cel_PrintToChat(iClient, "{green}Breaker Booth:{default} bring a big or upgraded emblem here and press {green}E{default} to take it apart into the emblems it was made from.");
+	Cel_PrintToChat(iClient, "{green}Breaker Booth:{default} bring a big or upgraded emblem here and press {green}E{default} to take it apart into the emblems it was made from ({green}%d CL{default}).", g_cvBreakerCost.IntValue);
 }
 
 void BreakAtBooth(int iClient, int iBooth, int iItem)
@@ -9184,6 +9197,12 @@ void BreakAtBooth(int iClient, int iBooth, int iItem)
 	if (!bTaken)
 	{
 		return;
+	}
+
+	// Paid once it's taken apart.
+	if (g_cvBreakerCost.IntValue > 0)
+	{
+		Cel_SubFromClientBalance(iClient, g_cvBreakerCost.IntValue);
 	}
 
 	Cel_AddXP(iClient, g_cvXPUpgrade.IntValue);
