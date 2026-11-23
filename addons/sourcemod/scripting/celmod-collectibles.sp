@@ -176,6 +176,7 @@ int g_iBoothRef = INVALID_ENT_REFERENCE;
 float g_fBoothSpot[3];
 bool g_bBoothPlaced = false;
 bool g_bBoothSpent = false;
+bool g_bBreaker = false; // this map's booth is the Breaker Booth (red: takes emblems apart), not the Power Booth
 char g_sLastBoothMap[PLATFORM_MAX_PATH];
 float g_fLastBoothSpot[3];
 
@@ -543,7 +544,7 @@ public void OnPluginStart()
 	RegAdminCmd("v_reward", Command_Reward, ADMFLAG_SLAY, "|CelMod| Creates a reward pickup that gives an emblem or hat once per player.");
 	RegConsoleCmd("v_firstperson", Command_FirstPerson, "|CelMod| Switches back to the first person view.");
 	RegConsoleCmd("v_thirdperson", Command_ThirdPerson, "|CelMod| Switches to a third person view so you can see your emblem and hat.");
-	RegAdminCmd("v_powerbooth", Command_PowerBooth, ADMFLAG_SLAY, "|CelMod| Moves the Power Booth to where you are looking.");
+	RegAdminCmd("v_powerbooth", Command_PowerBooth, ADMFLAG_SLAY, "|CelMod| Moves this map's booth to where you are looking: !powerbooth [power/breaker] picks the Power or Breaker Booth.");
 	RegAdminCmd("v_givemodel", Command_GiveModel, ADMFLAG_SLAY, "|CelMod| Gives a player model to a player.");
 	RegAdminCmd("v_takemodel", Command_TakeModel, ADMFLAG_SLAY, "|CelMod| Takes a player model away from a player.");
 	RegConsoleCmd("v_buymodel", Command_BuyModel, "|CelMod| Buys a player model.");
@@ -742,6 +743,7 @@ public void OnMapStart()
 	// After the Guess Booth (placed at 3 seconds), so it can be kept far away from it.
 	g_bBoothPlaced = false;
 	g_bBoothSpent = false;
+	g_bBreaker = false;
 
 	CreateTimer(8.0, Timer_SpawnBooth, _, TIMER_FLAG_NO_MAPCHANGE);
 	CreateTimer(5.0, Timer_BoothGuard, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
@@ -8289,6 +8291,11 @@ public Action Timer_SpawnBooth(Handle hTimer)
 		return Plugin_Stop;
 	}
 
+	// A coin flip: the Power Booth, or its opposite, the Breaker Booth.
+	g_bBreaker = (GetRandomInt(0, 1) == 1);
+
+	LogMessage("|CelMod| The %s appears on this map.", g_bBreaker ? "Breaker Booth" : "Power Booth");
+
 	// Hidden away: of many open spots in the air, the one furthest from both the Guess Booth and the spawn points.
 	if (FindHiddenBoothSpot(fSpot))
 	{
@@ -8697,9 +8704,9 @@ void SpawnPowerBooth(float fOrigin[3])
 	g_bBoothPlaced = true;
 	g_bBoothSpent = false;
 
-	// Green, see-through and flickering, as it was on the original server.
+	// Green, see-through and flickering, as it was on the original server. The Breaker Booth is red.
 	SetEntityRenderMode(iBooth, RENDER_TRANSCOLOR);
-	SetEntityRenderColor(iBooth, 0, 255, 0, g_cvBoothAlpha.IntValue);
+	SetEntityRenderColor(iBooth, g_bBreaker ? 255 : 0, g_bBreaker ? 0 : 255, 0, g_cvBoothAlpha.IntValue);
 	SetEntityRenderFx(iBooth, RENDERFX_DISTORT);
 
 	g_iBoothRef = EntIndexToEntRef(iBooth);
@@ -8714,13 +8721,28 @@ public Action Command_PowerBooth(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 
+	// !powerbooth breaker / !powerbooth power picks which one; on its own it moves this map's booth.
+	if (iArgs > 0)
+	{
+		char sKind[16];
+
+		GetCmdArg(1, sKind, sizeof(sKind));
+
+		if (StrEqual(sKind, "breaker", false) || StrEqual(sKind, "red", false))
+		{
+			g_bBreaker = true;
+		} else if (StrEqual(sKind, "power", false) || StrEqual(sKind, "green", false)) {
+			g_bBreaker = false;
+		}
+	}
+
 	Cel_GetCrosshairHitOrigin(iClient, fOrigin);
 
 	fOrigin[2] += 1.0;
 
 	SpawnPowerBooth(fOrigin);
 
-	Cel_ReplyToCommand(iClient, "The Power Booth has been moved here for this map.");
+	Cel_ReplyToCommand(iClient, "The {green}%s{default} has been moved here for this map. ({green}!powerbooth power{default} or {green}breaker{default} picks which.)", BoothName());
 
 	return Plugin_Handled;
 }
@@ -8801,6 +8823,12 @@ public void Hook_BoothUse(int iEntity, int iActivator, int iCaller, UseType utTy
 
 	if (!IsRealClient(iActivator) || g_bBoothSpent)
 	{
+		return;
+	}
+
+	if (g_bBreaker)
+	{
+		BreakerUse(iActivator, iEntity);
 		return;
 	}
 
@@ -9024,6 +9052,13 @@ public Action Timer_BoothExplode(Handle hTimer, any iRef)
 		AcceptEntityInput(iExplosion, "kill");
 	}
 
+	// The Breaker Booth goes up in red.
+	if (g_bBreaker)
+	{
+		iGreen = { 255, 50, 40, 255 };
+		iWhite = { 255, 220, 210, 255 };
+	}
+
 	Fx_Starburst(fBooth, 8, 140.0, g_iBmLightning, 6.0, 0.6, iGreen);
 	Fx_Ring(fBooth, 10.0, 300.0, g_iBmPhys, 14.0, 0.6, 0.0, iGreen);
 	Fx_Ring(fBooth, 10.0, 200.0, g_iBmLaser, 8.0, 0.4, 0.0, iWhite);
@@ -9036,9 +9071,181 @@ public Action Timer_BoothExplode(Handle hTimer, any iRef)
 
 	g_iBoothRef = INVALID_ENT_REFERENCE;
 
-	Cel_PrintToChatAll("{green}The Power Booth{default} blew up. It will be back somewhere else next map.");
+	Cel_PrintToChatAll("{green}The %s{default} blew up. A booth will be back somewhere else next map.", BoothName());
 
 	return Plugin_Stop;
+}
+
+//Breaker Booth: the Power Booth's opposite. Bring one big or upgraded emblem and press E: it's taken apart into the
+//emblems it's made from (a big emblem into the cm_upgrade_cost copies it took, an upgraded one into its own number).
+char[] BoothName()
+{
+	char sName[16];
+
+	strcopy(sName, sizeof(sName), g_bBreaker ? "Breaker Booth" : "Power Booth");
+
+	return sName;
+}
+
+// What an emblem breaks into: the emblem it was made from and how many, or -1 if it isn't made from anything.
+int BreakSource(int iItem, int &iCount)
+{
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		if (i == iItem || g_Items[i].iKind != KIND_EMBLEM)
+		{
+			continue;
+		}
+
+		if (g_Items[i].iBig == iItem)
+		{
+			iCount = g_cvUpgradeCost.IntValue;
+			return i;
+		}
+
+		if (g_Items[i].iUpgradeTo == iItem)
+		{
+			iCount = g_Items[i].iUpgradeCost;
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+void BreakerUse(int iClient, int iBooth)
+{
+	float fBooth[3];
+
+	GetEntPropVector(iBooth, Prop_Data, "m_vecAbsOrigin", fBooth);
+
+	for (int i = 0; i < g_iItemCount; i++)
+	{
+		int iCount;
+
+		if (g_Items[i].iKind != KIND_EMBLEM || CountAtBooth(iClient, i, fBooth) < 1 || BreakSource(i, iCount) == -1 || iCount < 1)
+		{
+			continue;
+		}
+
+		BreakAtBooth(iClient, iBooth, i);
+		return;
+	}
+
+	EmitSoundToClient(iClient, SOUND_DENY);
+
+	Cel_PrintToChat(iClient, "{green}Breaker Booth:{default} bring a big or upgraded emblem here and press {green}E{default} to take it apart into the emblems it was made from.");
+}
+
+void BreakAtBooth(int iClient, int iBooth, int iItem)
+{
+	float fBooth[3], fOrigin[3], fSpot[3];
+	int iCount, iParts = BreakSource(iItem, iCount);
+
+	if (iParts == -1 || GetOwned(iClient, iItem) < 1)
+	{
+		return;
+	}
+
+	GetEntPropVector(iBooth, Prop_Data, "m_vecAbsOrigin", fBooth);
+
+	// The one emblem at the booth is drawn in.
+	bool bTaken = false;
+
+	for (int i = MaxClients + 1; i <= MAXENTITIES && !bTaken; i++)
+	{
+		if (g_iEntItem[i] != iItem || !IsItemEntity(i) || !Cel_CheckOwner(iClient, i))
+		{
+			continue;
+		}
+
+		Cel_GetEntityOrigin(i, fOrigin);
+
+		if (GetVectorDistance(fOrigin, fBooth) > BOOTH_REACH)
+		{
+			continue;
+		}
+
+		TE_SetupBeamPoints(fOrigin, fBooth, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.5, 4.0, 4.0, 1, 2.0, g_iRed, 10);
+		TE_SendToAll();
+
+		float fUp[3] = { 0.0, 0.0, 1.0 };
+
+		TE_SetupEnergySplash(fOrigin, fUp, false);
+		TE_SendToAll();
+
+		AcceptEntityInput(i, "kill");
+
+		g_iEntItem[i] = -1;
+
+		bTaken = true;
+	}
+
+	if (!bTaken)
+	{
+		return;
+	}
+
+	Cel_AddXP(iClient, g_cvXPUpgrade.IntValue);
+
+	int iLeft = GetOwned(iClient, iItem) - 1;
+
+	SetOwned(iClient, iItem, iLeft);
+
+	if (iLeft < 1 && g_iActiveEmblem[iClient] == iItem)
+	{
+		SetActiveEmblem(iClient, -1);
+	}
+
+	SetOwned(iClient, iParts, GetOwned(iClient, iParts) + iCount);
+
+	// The parts land in a ring on the ground under the booth (any that don't fit the player's limits are still theirs,
+	// in their bank).
+	float fDown[3];
+
+	fSpot = fBooth;
+	fDown = fBooth;
+	fDown[2] -= 4096.0;
+
+	Handle hGround = TR_TraceRayFilterEx(fBooth, fDown, MASK_PLAYERSOLID, RayType_EndPoint, Filter_WorldOnly, 0);
+
+	if (TR_DidHit(hGround))
+	{
+		TR_GetEndPosition(fSpot, hGround);
+	}
+
+	CloseHandle(hGround);
+
+	fSpot[2] += 8.0;
+
+	for (int n = 0; n < iCount; n++)
+	{
+		float fPart[3], fAngle = 6.2832 * float(n) / float(iCount);
+
+		fPart = fSpot;
+		fPart[0] += Cosine(fAngle) * 32.0;
+		fPart[1] += Sine(fAngle) * 32.0;
+
+		int iNew = SpawnItemEntity(iClient, iParts, fPart, g_fZero);
+
+		if (iNew != -1)
+		{
+			Cel_FixSpawnPosition(iNew, fPart);
+		}
+	}
+
+	TE_SetupBeamRingPoint(fBooth, 220.0, 10.0, Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.8, 10.0, 0.0, g_iRed, 10, 0);
+	TE_SendToAll();
+
+	EmitSoundToAll(SOUND_REWARD, iBooth);
+
+	Cel_PrintToChatAll("{green}%N{default} used the Breaker Booth to take a {green}%s{default} apart into {green}%d %s{default}! The booth is overloading...", iClient, g_Items[iItem].sName, iCount, g_Items[iParts].sName);
+
+	// One use per map, like the Power Booth.
+	g_bBoothSpent = true;
+	g_bBoothPlaced = false;
+
+	CreateTimer(1.5, Timer_BoothExplode, EntIndexToEntRef(iBooth), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 // What an item looks like, for plugins that put one on display (the auction above the Guess Booth).

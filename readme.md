@@ -94,7 +94,7 @@ v_palette|Colors the prop you are looking at with your own red, green and blue v
 v_paste|Pastes the prop in your copy buffer where you are looking at.|None|Client|
 v_playermodel|Wears a player model you own, or goes back to your own (off).|None|Client|
 v_playermodels|Lists the player models and their prices.|None|Client|
-v_powerbooth|Moves the Power Booth to where you are looking.|None|Admin|
+v_powerbooth|Moves this map's booth (Power or Breaker) to where you are looking; "power" or "breaker" picks which.|[power/breaker]|Admin|
 v_proplist|Displays the prop list.|v_props|Client|[Prop List](https://celmod.net/props/index.php)
 v_release|Releases the entity you are looking at from a weld.|None|Client|
 v_renderfx|Changes the RenderFX on what prop you are looking at.|None|Client|

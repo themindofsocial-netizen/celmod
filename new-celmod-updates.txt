@@ -638,3 +638,7 @@
 		   size.
 		 - The Power Booth is invisible from afar and fades in as you get close (fully shown within 150 units, gone
 		   past 350: cm_powerbooth_fade_start and cm_powerbooth_fade_end).
+		 - Breaker Booth: the Power Booth's red opposite. When a map gets a booth, a coin flip decides which. Bring a big
+		   or upgraded emblem and press E: it's taken apart into the emblems it was made from (a big emblem back into its
+		   copies, an upgraded one back into the ones it took). It spawns the same way, fades in up close and works once a
+		   map. Admins: !powerbooth power or !powerbooth breaker picks which one.
