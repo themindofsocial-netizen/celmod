@@ -325,3 +325,4 @@ addons/sourcemod/scripting/include/ink_build.inc
 addons/sourcemod/scripting/ink_build.sp
 # The FastDL holds every content folder (maps, models, sound...): none of the patterns above apply inside it.
 !fastdl/**
+__pycache__/
