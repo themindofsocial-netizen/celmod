@@ -149,14 +149,19 @@ public Action Command_Link(int iClient, int iArgs)
 	{
 		case 0:
 		{
-			//An internet cel or a TV: linked to a camera next.
-			if (IsCameraScreen(iEntity))
+			//An internet cel or a TV: linked to a camera next. Started on the camera, it's the other way round.
+			if (IsCameraScreen(iEntity) || IsCameraCel(iEntity))
 			{
 				g_bCreatingLink[iClient] = true;
 				g_iLinkingEntity[iClient] = iEntity;
 				g_iLinkStage[iClient] = 1;
 
-				Cel_ReplyToCommand(iClient, "Now look at a {green}camera{default} and type {green}[tag]link{default} to show it here.");
+				if (IsCameraCel(iEntity))
+				{
+					Cel_ReplyToCommand(iClient, "Now look at an {green}internet cel{default} or a {green}TV{default} and type {green}[tag]link{default} to show this camera there.");
+				} else {
+					Cel_ReplyToCommand(iClient, "Now look at a {green}camera{default} and type {green}[tag]link{default} to show it here.");
+				}
 				return Plugin_Handled;
 			}
 
@@ -178,10 +183,13 @@ public Action Command_Link(int iClient, int iArgs)
 		}
 		case 1:
 		{
-			//A screen's link: one camera, replacing the one it had.
-			if (IsCameraScreen(g_iLinkingEntity[iClient]) && Cel_GetEntityType(g_iLinkingEntity[iClient]) != ENTTYPE_TRIGGER)
+			//A screen's link: one camera, replacing the one it had. (Started on the camera: the screen is this one.)
+			bool bFromCamera = IsCameraCel(g_iLinkingEntity[iClient]);
+
+			if (bFromCamera || (IsCameraScreen(g_iLinkingEntity[iClient]) && Cel_GetEntityType(g_iLinkingEntity[iClient]) != ENTTYPE_TRIGGER))
 			{
-				int iScreen = g_iLinkingEntity[iClient];
+				int iScreen = bFromCamera ? iEntity : g_iLinkingEntity[iClient];
+				int iCameraCel = bFromCamera ? g_iLinkingEntity[iClient] : iEntity;
 
 				g_bCreatingLink[iClient] = false;
 				g_iLinkStage[iClient] = 0;
@@ -192,7 +200,13 @@ public Action Command_Link(int iClient, int iArgs)
 					return Plugin_Handled;
 				}
 
-				if (!IsCameraCel(iEntity))
+				if (bFromCamera && !IsCameraScreen(iScreen))
+				{
+					Cel_ReplyToCommand(iClient, "A camera links to an {green}internet cel{default} or a {green}TV{default} this way (or start the link on a button to link a button to it).");
+					return Plugin_Handled;
+				}
+
+				if (!IsCameraCel(iCameraCel) || !IsValidEntity(iCameraCel))
 				{
 					Cel_ReplyToCommand(iClient, "An internet cel or a TV can only be linked to a {green}camera{default} (spawn one with {green}[tag]camera{default}).");
 					return Plugin_Handled;
@@ -203,11 +217,11 @@ public Action Command_Link(int iClient, int iArgs)
 					g_iLinkedEntity[iScreen][l] = -1;
 				}
 
-				g_iLinkedEntity[iScreen][0] = iEntity;
+				g_iLinkedEntity[iScreen][0] = iCameraCel;
 				g_bHasLink[iScreen] = true;
 
 				Cel_GetEntityOrigin(iScreen, fLinkOrigin[0]);
-				Cel_GetEntityOrigin(iEntity, fLinkOrigin[1]);
+				Cel_GetEntityOrigin(iCameraCel, fLinkOrigin[1]);
 
 				TE_SetupBeamPoints(fLinkOrigin[0], fLinkOrigin[1], Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.60, 1.0, 1.0, 1, 0.0, g_iOrange, 10); TE_SendToAll();
 

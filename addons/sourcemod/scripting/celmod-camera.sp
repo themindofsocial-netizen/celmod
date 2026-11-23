@@ -27,6 +27,7 @@
 int g_iViewing[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the camera a player is looking through
 int g_iViewHelper[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per camera: the invisible point players see from
 int g_iLastButtons[MAXPLAYERS + 1];
+float g_fViewChanged[MAXPLAYERS + 1]; // when their view last switched (a held E "uses" a prop again and again)
 int g_iDrewViewmodel[MAXPLAYERS + 1] = { 1, ... }; // whether their weapon was shown before they looked through a camera
 bool g_bIsCamera[MAXENTITIES + 1];
 bool g_bTVHooked[MAXENTITIES + 1];
@@ -200,12 +201,23 @@ bool ViewCamera(int iClient, int iCamera)
 		return false;
 	}
 
+	// Holding E "uses" a prop over and over, and the press that stops watching also uses whatever you stand at:
+	// the view only switches once per press.
+	float fNow = GetGameTime();
+
+	if (fNow - g_fViewChanged[iClient] < 0.6)
+	{
+		return true;
+	}
+
 	// Already looking through this one: pressing again takes you back.
 	if (EntRefToEntIndex(g_iViewing[iClient]) == iCamera)
 	{
 		StopViewing(iClient, true);
 		return true;
 	}
+
+	g_fViewChanged[iClient] = fNow;
 
 	int iHelper = GetViewHelper(iCamera);
 
@@ -239,6 +251,7 @@ bool ViewCamera(int iClient, int iCamera)
 void StopViewing(int iClient, bool bSound)
 {
 	g_iViewing[iClient] = INVALID_ENT_REFERENCE;
+	g_fViewChanged[iClient] = GetGameTime();
 
 	if (IsClientInGame(iClient))
 	{
