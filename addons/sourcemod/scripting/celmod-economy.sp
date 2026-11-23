@@ -39,6 +39,8 @@ float g_fTradeExpire[MAXPLAYERS + 1];
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("Cel_AddPlayerStat");
+
 	CreateNative("Cel_AddToClientBalance", Native_AddToClientBalance);
 	CreateNative("Cel_BuyCommand", Native_BuyCommand);
 	CreateNative("Cel_BuyEntity", Native_BuyEntity);
@@ -710,6 +712,9 @@ public Action Command_Give(int iClient, int iArgs)
 	}
 	
 	Cel_GiveEntity(iClient, iTarget, iProp);
+	
+	//Counts toward Most Generous on the website (a trade doesn't: something came back).
+	Cel_AddStat(iClient, "props_given");
 	
 	return Plugin_Handled;
 }

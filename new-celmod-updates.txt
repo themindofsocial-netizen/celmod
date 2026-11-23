@@ -678,3 +678,5 @@
 		   !animate loop off plays them once per press again. Saves keep it.
 		 - Pressing E to stop looking through a camera no longer turns it straight back on: the view switches once per
 		   press of E.
+		 - Most Generous on the website counts props and cels handed over with !give too, not just wrapped presents
+		   (trades don't count).

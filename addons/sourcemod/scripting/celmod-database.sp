@@ -24,7 +24,7 @@
  */
 
 #define SCHEMA_QUERIES 20
-#define MIGRATION_QUERIES 13
+#define MIGRATION_QUERIES 14
 
 Database g_dbCelMod;
 
@@ -140,14 +140,15 @@ char g_sMigrations[MIGRATION_QUERIES][] = {
 	"ALTER TABLE cm_players ADD COLUMN deaths INT UNSIGNED NOT NULL DEFAULT 0",
 	"ALTER TABLE cm_players ADD COLUMN enemy_kills INT UNSIGNED NOT NULL DEFAULT 0",
 	"ALTER TABLE cm_players ADD COLUMN presents_given INT UNSIGNED NOT NULL DEFAULT 0",
-	"ALTER TABLE cm_players ADD COLUMN emblems_owned INT UNSIGNED NOT NULL DEFAULT 0"
+	"ALTER TABLE cm_players ADD COLUMN emblems_owned INT UNSIGNED NOT NULL DEFAULT 0",
+	"ALTER TABLE cm_players ADD COLUMN props_given INT UNSIGNED NOT NULL DEFAULT 0"
 };
 
 //Leaderboard stats other plugins report with Cel_AddPlayerStat / Cel_SetPlayerStat (columns in cm_players).
-//The first five are counted up; emblems_owned is a total that is replaced.
-#define PLAYER_STATS 6
-char g_sStatColumn[PLAYER_STATS][] = { "land_bans", "kills", "deaths", "enemy_kills", "presents_given", "emblems_owned" };
-bool g_bStatAbsolute[PLAYER_STATS] = { false, false, false, false, false, true };
+//Counted up, except emblems_owned, a total that is replaced. props_given: props and cels handed over with !give.
+#define PLAYER_STATS 7
+char g_sStatColumn[PLAYER_STATS][] = { "land_bans", "kills", "deaths", "enemy_kills", "presents_given", "emblems_owned", "props_given" };
+bool g_bStatAbsolute[PLAYER_STATS] = { false, false, false, false, false, true, false };
 int g_iPendingStat[MAXPLAYERS + 1][PLAYER_STATS];
 bool g_bStatChanged[MAXPLAYERS + 1][PLAYER_STATS];
 
