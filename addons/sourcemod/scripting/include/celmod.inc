@@ -1125,6 +1125,12 @@ native int Cel_GetTriggerLink(int iEntity, int iSlot = 0);
 
 native void Cel_SetTriggerLink(int iEntity, int iTarget);
 
+/** Whether an entity is a camera cel (celmod-camera). */
+native bool Cel_IsCamera(int iEntity);
+
+/** Shows a player the view through a camera cel (again stops it). False if it isn't a camera. */
+native bool Cel_ViewCamera(int iClient, int iCamera);
+
 native int Cel_GetTriggerType(iEntity);
 
 native WeaponBitType Cel_GetWeaponType(int iEntity);

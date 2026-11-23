@@ -18,6 +18,9 @@ Handle g_hOnCelSpawn;
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("Cel_ViewCamera");
+	MarkNativeAsOptional("Cel_GetTriggerLink");
+
 	CreateNative("Cel_GetInternetURL", Native_GetInternetURL);
 	CreateNative("Cel_SetInternetURL", Native_SetInternetURL);
 	CreateNative("Cel_SpawnDoor", Native_SpawnDoor);
@@ -561,6 +564,17 @@ public void Hook_CelsInternetUse(int iEntity, int iActivator, int iCaller, UseTy
 	if (iActivator < 1 || iActivator > MaxClients || !IsClientInGame(iActivator) || Cel_IsLocked(iEntity))
 	{
 		return;
+	}
+	
+	//Linked to a camera cel (!link): it shows the camera's view instead of its page.
+	if (GetFeatureStatus(FeatureType_Native, "Cel_GetTriggerLink") == FeatureStatus_Available && GetFeatureStatus(FeatureType_Native, "Cel_ViewCamera") == FeatureStatus_Available)
+	{
+		int iCamera = Cel_GetTriggerLink(iEntity, 0);
+
+		if (iCamera != -1 && Cel_ViewCamera(iActivator, iCamera))
+		{
+			return;
+		}
 	}
 	
 	char sURL[PLATFORM_MAX_PATH];

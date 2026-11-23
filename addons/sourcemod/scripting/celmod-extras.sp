@@ -2924,8 +2924,8 @@ public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
 		kvSave.SetNum("x_weld", iParent);
 	}
 	
-	//A button's links (up to 3): x_link, x_link2, x_link3.
-	if (Cel_GetEntityType(iEntity) == ENTTYPE_TRIGGER)
+	//A button's links (up to 3): x_link, x_link2, x_link3. Internet cels and TVs keep their camera the same way.
+	if (Cel_GetEntityType(iEntity) == ENTTYPE_TRIGGER || Cel_GetTriggerLink(iEntity, 0) > 0)
 	{
 		static const char sLinkKeys[][] = { "x_link", "x_link2", "x_link3" };
 		int iSaved = 0;

@@ -625,3 +625,8 @@
 		 - Double jump works in event areas (mazes, parkour) now too. cm_double_jump_events 0 turns it back off there.
 		 - Admins: !goto <player> teleports you to a player, !bring <player> brings one to you and !bringall brings
 		   everyone. They land on free spots beside you (never in a wall or a prop), facing you.
+		 - Camera cel: !camera spawns a security camera. Press E on it to look through it (E, jump or attack takes you
+		   back). !link a button to it and the button shows whoever presses it the camera's view; !link an internet
+		   cel to it and pressing E on the internet cel shows the camera instead of its page; !link a TV (or a lab
+		   monitor) to it and the TV's screen shows what the camera sees, live. The game draws one camera at a time,
+		   so all TVs show the camera most recently linked or looked through. Saves keep the links.

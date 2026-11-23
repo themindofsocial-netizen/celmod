@@ -149,6 +149,17 @@ public Action Command_Link(int iClient, int iArgs)
 	{
 		case 0:
 		{
+			//An internet cel or a TV: linked to a camera next.
+			if (IsCameraScreen(iEntity))
+			{
+				g_bCreatingLink[iClient] = true;
+				g_iLinkingEntity[iClient] = iEntity;
+				g_iLinkStage[iClient] = 1;
+
+				Cel_ReplyToCommand(iClient, "Now look at a {green}camera{default} and type {green}[tag]link{default} to show it here.");
+				return Plugin_Handled;
+			}
+
 			if(!(Cel_GetEntityType(iEntity) == ENTTYPE_TRIGGER))
 			{
 				//You cannot make a link on a non-trigger bit.
@@ -167,6 +178,52 @@ public Action Command_Link(int iClient, int iArgs)
 		}
 		case 1:
 		{
+			//A screen's link: one camera, replacing the one it had.
+			if (IsCameraScreen(g_iLinkingEntity[iClient]) && Cel_GetEntityType(g_iLinkingEntity[iClient]) != ENTTYPE_TRIGGER)
+			{
+				int iScreen = g_iLinkingEntity[iClient];
+
+				g_bCreatingLink[iClient] = false;
+				g_iLinkStage[iClient] = 0;
+
+				if (!IsValidEntity(iScreen) || !Cel_IsEntity(iScreen))
+				{
+					Cel_ReplyToCommand(iClient, "The thing you started the link on is gone.");
+					return Plugin_Handled;
+				}
+
+				if (!IsCameraCel(iEntity))
+				{
+					Cel_ReplyToCommand(iClient, "An internet cel or a TV can only be linked to a {green}camera{default} (spawn one with {green}[tag]camera{default}).");
+					return Plugin_Handled;
+				}
+
+				for (int l = 0; l < MAX_LINKS; l++)
+				{
+					g_iLinkedEntity[iScreen][l] = -1;
+				}
+
+				g_iLinkedEntity[iScreen][0] = iEntity;
+				g_bHasLink[iScreen] = true;
+
+				Cel_GetEntityOrigin(iScreen, fLinkOrigin[0]);
+				Cel_GetEntityOrigin(iEntity, fLinkOrigin[1]);
+
+				TE_SetupBeamPoints(fLinkOrigin[0], fLinkOrigin[1], Cel_GetBeamMaterial(), Cel_GetHaloMaterial(), 0, 15, 0.60, 1.0, 1.0, 1, 0.0, g_iOrange, 10); TE_SendToAll();
+
+				PrecacheSound("buttons/button19.wav");
+				EmitSoundToAll("buttons/button19.wav", iScreen, 2, 100, 0, 1.0, 100, -1, NULL_VECTOR, NULL_VECTOR, true, 0.0);
+
+				if (Cel_CheckEntityType(iScreen, "internet"))
+				{
+					Cel_ReplyToCommand(iClient, "Linked: pressing {green}E{default} on the internet cel now shows the camera's view.");
+				} else {
+					Cel_ReplyToCommand(iClient, "Linked: the TV now shows what the camera sees.");
+				}
+
+				return Plugin_Handled;
+			}
+
 			if(Cel_CheckEntityType(iEntity, "door") || Cel_CheckEntityType(iEntity, "effect") || Cel_CheckEntityType(iEntity, "light") || (iEntity <= MAXENTITIES && g_iAnimMask[iEntity] != 0) || IsUsableCel(iEntity))
 			{
 				int iButton = g_iLinkingEntity[iClient], iSlot = -1;
@@ -1788,7 +1845,42 @@ bool IsUsableCel(int iEntity)
 	
 	Cel_GetPropName(iEntity, sName, sizeof(sName));
 	
-	return StrEqual(sName, "sound", false) || StrEqual(sName, "music", false) || StrEqual(sName, "message", false);
+	return StrEqual(sName, "sound", false) || StrEqual(sName, "music", false) || StrEqual(sName, "message", false) || StrEqual(sName, "camera", false);
+}
+
+//Internet cels and TVs link to a camera cel (celmod-camera): the internet cel shows the camera's view when pressed,
+//the TV shows it on its screen.
+bool IsCameraScreen(int iEntity)
+{
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity) || !Cel_IsEntity(iEntity))
+	{
+		return false;
+	}
+
+	if (Cel_CheckEntityType(iEntity, "internet"))
+	{
+		return true;
+	}
+
+	char sName[32];
+
+	Cel_GetPropName(iEntity, sName, sizeof(sName));
+
+	return StrEqual(sName, "tv", false) || StrEqual(sName, "monitor1", false) || StrEqual(sName, "monitor2", false) || StrEqual(sName, "monitor3", false);
+}
+
+bool IsCameraCel(int iEntity)
+{
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity) || !Cel_IsEntity(iEntity))
+	{
+		return false;
+	}
+
+	char sName[16];
+
+	Cel_GetPropName(iEntity, sName, sizeof(sName));
+
+	return StrEqual(sName, "camera", false);
 }
 
 //Plays the frames in order (or back, every other time). False when there's nothing to play.
