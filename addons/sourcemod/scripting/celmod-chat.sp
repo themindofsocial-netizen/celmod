@@ -60,6 +60,9 @@ public void OnPluginStart()
 	RegAdminCmd("v_punungag", Command_PunUngag, ADMFLAG_CHAT, "|CelMod| Lifts a gag: !punungag <name>.");
 	RegAdminCmd("v_punkick", Command_PunKick, ADMFLAG_KICK, "|CelMod| Kicks a player: !punkick <name> [reason].");
 	RegAdminCmd("v_punfreeze", Command_PunFreeze, ADMFLAG_SLAY, "|CelMod| Freezes a player in place (they can't move or shoot), or unfreezes them: !punfreeze <name>.");
+	RegAdminCmd("v_goto", Command_Goto, ADMFLAG_SLAY, "|CelMod| Teleports you to a player: !goto <name>.");
+	RegAdminCmd("v_bring", Command_Bring, ADMFLAG_SLAY, "|CelMod| Teleports a player to you: !bring <name>.");
+	RegAdminCmd("v_bringall", Command_BringAll, ADMFLAG_SLAY, "|CelMod| Teleports every player to you.");
 	RegAdminCmd("v_punban", Command_PunBan, ADMFLAG_BAN, "|CelMod| Bans a player: !punban <name> <minutes, 0 = forever> [reason].");
 	
 	HookEvent("player_spawn", Event_FrozenSpawn);
@@ -676,6 +679,210 @@ public Action Command_PunFreeze(int iClient, int iArgs)
 	LogAction(iClient, iTarget, "\"%L\" %s \"%L\"", iClient, bFreeze ? "froze" : "unfroze", iTarget);
 	
 	return Plugin_Handled;
+}
+
+//!goto, !bring and !bringall: players land beside each other on a free spot (never inside a wall, a prop or another
+//player), facing the one they were sent to.
+public Action Command_Goto(int iClient, int iArgs)
+{
+	if (!IsTeleportAdmin(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}!goto <name>{default}");
+		return Plugin_Handled;
+	}
+
+	char sTarget[64];
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+
+	int iTarget = FindTarget(iClient, sTarget, false, false);
+
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+
+	if (iTarget == iClient || !IsPlayerAlive(iTarget))
+	{
+		Cel_ReplyToCommand(iClient, "You can't go to {green}%N{default} right now.", iTarget);
+		return Plugin_Handled;
+	}
+
+	if (!SendPlayerTo(iClient, iTarget, 0))
+	{
+		Cel_ReplyToCommand(iClient, "There's no room next to {green}%N{default}.", iTarget);
+		return Plugin_Handled;
+	}
+
+	Cel_ReplyToCommand(iClient, "You went to {green}%N{default}.", iTarget);
+	LogAction(iClient, iTarget, "\"%L\" teleported to \"%L\"", iClient, iTarget);
+
+	return Plugin_Handled;
+}
+
+public Action Command_Bring(int iClient, int iArgs)
+{
+	if (!IsTeleportAdmin(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}!bring <name>{default}");
+		return Plugin_Handled;
+	}
+
+	char sTarget[64];
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+
+	int iTarget = FindTarget(iClient, sTarget, false, true);
+
+	if (iTarget == -1)
+	{
+		return Plugin_Handled;
+	}
+
+	if (iTarget == iClient || !IsPlayerAlive(iTarget))
+	{
+		Cel_ReplyToCommand(iClient, "You can't bring {green}%N{default} right now.", iTarget);
+		return Plugin_Handled;
+	}
+
+	if (!SendPlayerTo(iTarget, iClient, 0))
+	{
+		Cel_ReplyToCommand(iClient, "There's no room next to you for {green}%N{default}.", iTarget);
+		return Plugin_Handled;
+	}
+
+	Cel_ReplyToCommand(iClient, "You brought {green}%N{default} to you.", iTarget);
+	Cel_PrintToChat(iTarget, "An admin, {green}%N{default}, brought you to them.", iClient);
+	LogAction(iClient, iTarget, "\"%L\" brought \"%L\"", iClient, iTarget);
+
+	return Plugin_Handled;
+}
+
+public Action Command_BringAll(int iClient, int iArgs)
+{
+	if (!IsTeleportAdmin(iClient))
+	{
+		return Plugin_Handled;
+	}
+
+	int iBrought, iNoRoom, iSlot = 0;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i == iClient || !IsClientInGame(i) || !IsPlayerAlive(i) || !CanUserTarget(iClient, i))
+		{
+			continue;
+		}
+
+		// Each one a step further round the circle, so they don't all try the same spot.
+		if (SendPlayerTo(i, iClient, iSlot))
+		{
+			iBrought++;
+
+			Cel_PrintToChat(i, "An admin, {green}%N{default}, brought everyone to them.", iClient);
+		} else {
+			iNoRoom++;
+		}
+
+		iSlot++;
+	}
+
+	if (iNoRoom > 0)
+	{
+		Cel_ReplyToCommand(iClient, "You brought {green}%d{default} player%s to you ({green}%d{default} didn't fit: try somewhere roomier).", iBrought, iBrought == 1 ? "" : "s", iNoRoom);
+	} else {
+		Cel_ReplyToCommand(iClient, "You brought {green}%d{default} player%s to you.", iBrought, iBrought == 1 ? "" : "s");
+	}
+
+	LogAction(iClient, -1, "\"%L\" brought everyone (%d players)", iClient, iBrought);
+
+	return Plugin_Handled;
+}
+
+bool IsTeleportAdmin(int iClient)
+{
+	if (iClient < 1 || !IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		Cel_ReplyToCommand(iClient, "You need to be alive in the game to do that.");
+		return false;
+	}
+
+	return true;
+}
+
+//Moves iPlayer to a free spot beside iTo, facing them. iSlot picks the spot: round iTo in rings, the first ring right
+//in front of where iTo looks. False if there's nowhere to stand.
+bool SendPlayerTo(int iPlayer, int iTo, int iSlot)
+{
+	float fCenter[3], fLook[3], fMins[3] = { -16.0, -16.0, 0.0 }, fMaxs[3] = { 16.0, 16.0, 72.0 };
+
+	GetClientAbsOrigin(iTo, fCenter);
+	GetClientEyeAngles(iTo, fLook);
+
+	// Ducking players are shorter, but they stand up once they're moved: room for a standing player.
+	for (int iTry = iSlot; iTry < iSlot + 48; iTry++)
+	{
+		int iRing = iTry / 8;
+		float fYaw = fLook[1] + float(iTry % 8) * 45.0 + float(iRing) * 22.5;
+		float fDistance = 56.0 + float(iRing) * 44.0;
+		float fSpot[3], fAbove[3];
+
+		fSpot[0] = fCenter[0] + Cosine(DegToRad(fYaw)) * fDistance;
+		fSpot[1] = fCenter[1] + Sine(DegToRad(fYaw)) * fDistance;
+		fSpot[2] = fCenter[2] + 8.0;
+
+		// Not through a wall: the way from iTo to the spot is clear.
+		fAbove = fCenter;
+		fAbove[2] += 8.0;
+
+		TR_TraceHullFilter(fAbove, fSpot, fMins, fMaxs, MASK_PLAYERSOLID, Filter_NotPlayers, iPlayer);
+
+		if (TR_DidHit())
+		{
+			continue;
+		}
+
+		// And it's free to stand in.
+		TR_TraceHullFilter(fSpot, fSpot, fMins, fMaxs, MASK_PLAYERSOLID, Filter_NotSelf, iPlayer);
+
+		if (TR_DidHit())
+		{
+			continue;
+		}
+
+		float fFace[3], fDir[3], fZero[3];
+
+		SubtractVectors(fCenter, fSpot, fDir);
+		GetVectorAngles(fDir, fFace);
+		fFace[0] = 0.0;
+		fFace[2] = 0.0;
+
+		TeleportEntity(iPlayer, fSpot, fFace, fZero);
+
+		return true;
+	}
+
+	return false;
+}
+
+public bool Filter_NotPlayers(int iEntity, int iContentsMask, any aData)
+{
+	return iEntity > MaxClients;
+}
+
+public bool Filter_NotSelf(int iEntity, int iContentsMask, any aData)
+{
+	return iEntity != aData;
 }
 
 //Frozen players can't fly or kill themselves out of it.

@@ -623,3 +623,5 @@
 		   tactics XP, 10000 CL and their weapons back, and it stays dead until the next map; if everyone dies, it
 		   resets. The vent on the way down takes your weapons away.
 		 - Double jump works in event areas (mazes, parkour) now too. cm_double_jump_events 0 turns it back off there.
+		 - Admins: !goto <player> teleports you to a player, !bring <player> brings one to you and !bringall brings
+		   everyone. They land on free spots beside you (never in a wall or a prop), facing you.
