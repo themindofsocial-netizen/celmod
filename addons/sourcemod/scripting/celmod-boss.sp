@@ -30,9 +30,10 @@
 #define LASER_SPRITE "sprites/laserbeam.vmt"
 
 #define SND_CHARGE "npc/strider/charging.wav"
-#define SND_FIRE "npc/stalker/laser_burn.wav"
+// One-shot sounds only: the stalker's laser sounds loop forever once started.
+#define SND_FIRE "npc/strider/fire.wav"
 #define SND_HIT "physics/flesh/flesh_bloody_impact_hard1.wav"
-#define SND_BURN "npc/stalker/laser_flesh.wav"
+#define SND_BURN "player/pl_burnpain1.wav"
 #define SND_SPLAT "physics/flesh/flesh_squishy_impact_hard1.wav"
 #define SND_GORE "physics/flesh/flesh_bloody_break.wav"
 #define SND_LEECH "npc/barnacle/barnacle_tongue_pull1.wav"
@@ -195,6 +196,8 @@ public void OnPluginStart()
 	{
 		OnMapStart();
 	}
+
+	StopOldLoops();
 }
 
 public void OnMapStart()
@@ -1719,6 +1722,42 @@ void RunLeech(int iBoss, const float fEye[3], float fNow)
 	}
 }
 
+// An earlier version played the stalker's looping laser sounds, which never stop on their own: stopped wherever
+// they could still be playing.
+void StopOldLoops()
+{
+	static const char sLoops[][] = { "npc/stalker/laser_burn.wav", "npc/stalker/laser_flesh.wav" };
+
+	for (int e = 1; e <= MaxClients; e++)
+	{
+		if (!IsClientInGame(e))
+		{
+			continue;
+		}
+
+		for (int l = 0; l < sizeof(sLoops); l++)
+		{
+			for (int c = 0; c <= 7; c++)
+			{
+				StopSound(e, c, sLoops[l]);
+			}
+		}
+	}
+
+	int iBoss = EntRefToEntIndex(g_iBossRef);
+
+	if (iBoss != INVALID_ENT_REFERENCE)
+	{
+		for (int l = 0; l < sizeof(sLoops); l++)
+		{
+			for (int c = 0; c <= 7; c++)
+			{
+				StopSound(iBoss, c, sLoops[l]);
+			}
+		}
+	}
+}
+
 // Shakes one player's screen.
 void Shake(int iClient, float fAmplitude, float fDuration)
 {
@@ -1887,6 +1926,8 @@ void EndFight()
 	g_bWave = false;
 	g_bSweep = false;
 	g_bLeech = false;
+
+	StopOldLoops();
 	g_iBurstLeft = 0;
 
 	for (int i = 0; i < MAX_ROCKS; i++)
