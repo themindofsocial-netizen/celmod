@@ -117,16 +117,3 @@ This uses the repo's `materials/`, `models/` and `sound/`, plus the maps you poi
 Custom textures and models go into `hl2mp/custom/<any name>/materials/...` (or straight into
 `hl2mp/materials/...`), with the same folder paths the map uses. Keep the names lower case. After
 adding files, rebuild the FastDL so players get them too.
-
-## Camera cel TV screens
-
-A TV linked to a camera cel shows the camera on its own screen using a copy of its model, made from the game's own
-files on the server (it can't be kept in this repo). Make it once, for the server and for FastDL:
-
-```
-python tools/make_camera_screens.py --game "C:\path\to\server\hl2mp" --out "C:\path\to\server\hl2mp"
-python tools/make_camera_screens.py --game "C:\path\to\server\hl2mp" --out "C:\path\to\website\fastdl" --bz2
-```
-
-It reads Half-Life 2's VPKs next to `hl2mp` (the `hl2` folder), so it needs nothing else installed. Change the map
-afterwards. Until it's done, linked TVs show the camera on a picture laid over their front instead.
