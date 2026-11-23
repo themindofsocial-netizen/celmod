@@ -1469,6 +1469,7 @@
 		"breen"		{ "name" "Dr. Breen"	"model" "models/breen.mdl"			"price" "150000" }
 		"gman"		{ "name" "G-Man"		"model" "models/gman_high.mdl"		"price" "500000" }
 		"freeman"	{ "name" "Gordon Freeman"	"model" "models/humans/freeman/freeman.mdl"	"price" "750000" }
+		"jimmy"		{ "name" "Jimmy"			"model" "models/celmod/jimmy.mdl"	"price" "100000"	"materials" "materials/models/celmod/jimmy" }
 		// Halloween shop exclusive. Its textures must be on the server: add "materials" "<folder>" if they are not sent.
 		"skeleton"	{ "name" "Skeleton"		"model" "models/humans/skeleton/skeleton.mdl"	"price" "1000000"	"season" "halloween" }
 		"admin"		{ "name" "Combine Elite"	"model" "models/combine_super_soldier.mdl"	"price" "0"	"admin" "b" }

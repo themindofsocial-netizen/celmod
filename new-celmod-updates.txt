@@ -609,3 +609,4 @@
 		   good (!playermodel police).
 		 - Player models can be earned instead of sold: the Police Officer model can't be bought, !playermodels lists
 		   it as "earned", and !buymodel police says how to get it.
+		 - New player model in the shop: Jimmy, 100000 CL (!buymodel jimmy, then !playermodel jimmy).
