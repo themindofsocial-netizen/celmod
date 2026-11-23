@@ -642,6 +642,8 @@ void PlaceHost(float fCenter[3])
 	
 	if (FindIdleSequence(HOST_MODEL, sIdle, sizeof(sIdle)))
 	{
+		PrintToServer("|CelMod| Guess Booth: Dr. Breen stands with the '%s' animation.", sIdle);
+		
 		SetVariantString(sIdle);
 		AcceptEntityInput(iHost, "SetDefaultAnimation");
 		
@@ -796,20 +798,43 @@ void ScanSequences(const char[] sModel, const char[][] sPreferred, int iPreferre
 	int iIncludeCount = ReadIntAt(fModel, 336), iIncludeIndex = ReadIntAt(fModel, 340);
 	char sLabel[64];
 	
-	//Each sequence description is 212 bytes; its name is at an offset (stored 4 bytes in) from its own start.
+	//Each sequence description is 212 bytes: its name and its activity's name at offsets (stored 4 and 8 bytes in)
+	//from its own start, then its flags (12 bytes in).
+	char sActivity[64];
+	
 	for (int i = 0; i < iSeqCount && i < 2048; i++)
 	{
 		int iDesc = iSeqIndex + i * 212;
 		int iLabel = ReadIntAt(fModel, iDesc + 4);
+		int iActivity = ReadIntAt(fModel, iDesc + 8);
+		int iFlags = ReadIntAt(fModel, iDesc + 12);
 		
 		if (!ReadStringAt(fModel, iDesc + iLabel, sLabel, sizeof(sLabel)))
 		{
 			continue;
 		}
 		
+		//Gestures and postures (delta animations) are only layered on top of another animation: played on their
+		//own they leave the model in its arms-out reference pose.
+		if (iFlags & 0x0004)
+		{
+			continue;
+		}
+		
+		if (iActivity <= 0 || !ReadStringAt(fModel, iDesc + iActivity, sActivity, sizeof(sActivity)))
+		{
+			sActivity[0] = '\0';
+		}
+		
 		int iRank = 999;
 		
-		for (int k = 0; k < iPreferred; k++)
+		//What the game itself plays for standing around: ACT_IDLE, looping best.
+		if (StrEqual(sActivity, "ACT_IDLE", false))
+		{
+			iRank = (iFlags & 0x0001) ? -2 : -1;
+		}
+		
+		for (int k = 0; k < iPreferred && iRank == 999; k++)
 		{
 			if (StrEqual(sLabel, sPreferred[k], false))
 			{
