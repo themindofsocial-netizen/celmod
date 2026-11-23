@@ -327,6 +327,8 @@ ConVar g_cvDropCount;
 ConVar g_cvDropDelay;
 ConVar g_cvThirdPersonAimFix;
 ConVar g_cvBoothAlpha;
+ConVar g_cvBoothFadeStart;
+ConVar g_cvBoothFadeEnd;
 ConVar g_cvBoothChance;
 ConVar g_cvTierChances;
 ConVar g_cvTierCaps;
@@ -483,6 +485,8 @@ public void OnPluginStart()
 	g_cvTierChances = CreateConVar("cm_drop_tier_chances", "60 25 10 4 1", "Chances (out of their total) that an emblem box is common, uncommon, rare, epic or legendary.");
 	g_cvTierCaps = CreateConVar("cm_drop_tier_daily_caps", "0 0 0 3 1", "Most emblem boxes of each tier (common uncommon rare epic legendary) that can drop server-wide per day. 0 = no limit.");
 	g_cvBoothChance = CreateConVar("cm_powerbooth_chance", "0.333", "Chance the Power Booth appears on a map (1 = every map). Admins can still place it with !powerbooth.", _, true, 0.0, true, 1.0);
+	g_cvBoothFadeStart = CreateConVar("cm_powerbooth_fade_start", "150", "Within this distance the Power Booth is fully shown; further away it fades out.", _, true, 0.0);
+	g_cvBoothFadeEnd = CreateConVar("cm_powerbooth_fade_end", "350", "Beyond this distance the Power Booth is invisible (0 = always shown).", _, true, 0.0);
 	g_cvBoothAlpha = CreateConVar("cm_powerbooth_alpha", "90", "How see-through the Power Booth is (0 invisible, 255 solid). Lower is harder to spot.", _, true, 0.0, true, 255.0);
 	g_cvAura = CreateConVar("cm_emblem_aura", "1", "1 = an emblem held out shows its own aura around the player.", _, true, 0.0, true, 1.0);
 	g_cvDropDelay = CreateConVar("cm_drop_delay", "3.0", "Seconds between one emblem box and the next in a drop.", _, true, 0.0, true, 60.0);
@@ -8649,6 +8653,21 @@ void SpawnPowerBooth(float fOrigin[3])
 
 	DispatchKeyValue(iBooth, "model", g_sBoothModel);
 	DispatchKeyValue(iBooth, "solid", "2");
+
+	// Invisible from afar: it fades in as a player comes close (drawn by each player's game, smoothly).
+	if (g_cvBoothFadeEnd.FloatValue > 0.0)
+	{
+		float fStart = g_cvBoothFadeStart.FloatValue, fEnd = g_cvBoothFadeEnd.FloatValue;
+
+		if (fStart >= fEnd)
+		{
+			fStart = fEnd * 0.5;
+		}
+
+		DispatchKeyValueFloat(iBooth, "fademindist", fStart);
+		DispatchKeyValueFloat(iBooth, "fademaxdist", fEnd);
+		DispatchKeyValue(iBooth, "fadescale", "0");
+	}
 
 	DispatchSpawn(iBooth);
 	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted

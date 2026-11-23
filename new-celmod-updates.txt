@@ -636,3 +636,5 @@
 		   it), with a Combine wall behind him, posts at the corners and railings down the sides. Its square and text are
 		   Combine blue, and the three holograms float higher and further apart over Combine emitters, all at the same
 		   size.
+		 - The Power Booth is invisible from afar and fades in as you get close (fully shown within 150 units, gone
+		   past 350: cm_powerbooth_fade_start and cm_powerbooth_fade_end).
