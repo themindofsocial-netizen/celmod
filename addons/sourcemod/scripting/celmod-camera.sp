@@ -28,6 +28,7 @@ int g_iViewing[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the camera a
 int g_iViewHelper[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per camera: the invisible point players see from
 int g_iLastButtons[MAXPLAYERS + 1];
 float g_fViewChanged[MAXPLAYERS + 1]; // when their view last switched (a held E "uses" a prop again and again)
+bool g_bWaitRelease[MAXPLAYERS + 1]; // their view switched with E held: nothing switches it again until E is let go
 int g_iDrewViewmodel[MAXPLAYERS + 1] = { 1, ... }; // whether their weapon was shown before they looked through a camera
 bool g_bIsCamera[MAXENTITIES + 1];
 bool g_bTVHooked[MAXENTITIES + 1];
@@ -202,13 +203,15 @@ bool ViewCamera(int iClient, int iCamera)
 	}
 
 	// Holding E "uses" a prop over and over, and the press that stops watching also uses whatever you stand at:
-	// the view only switches once per press.
+	// the view only switches once per press of E (and never twice in a moment).
 	float fNow = GetGameTime();
 
-	if (fNow - g_fViewChanged[iClient] < 0.6)
+	if (fNow - g_fViewChanged[iClient] < 0.3 || (g_bWaitRelease[iClient] && (GetClientButtons(iClient) & IN_USE)))
 	{
 		return true;
 	}
+
+	g_bWaitRelease[iClient] = true;
 
 	// Already looking through this one: pressing again takes you back.
 	if (EntRefToEntIndex(g_iViewing[iClient]) == iCamera)
@@ -252,6 +255,7 @@ void StopViewing(int iClient, bool bSound)
 {
 	g_iViewing[iClient] = INVALID_ENT_REFERENCE;
 	g_fViewChanged[iClient] = GetGameTime();
+	g_bWaitRelease[iClient] = true;
 
 	if (IsClientInGame(iClient))
 	{
@@ -326,6 +330,12 @@ void LensPosition(int iCamera, float fPos[3], float fAngles[3])
 // While looking through a camera you stay put; E, jump or attack takes you back.
 public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fVel[3], float fAngles[3], int &iWeapon)
 {
+	// E let go: the next press may switch the view again.
+	if (!(iButtons & IN_USE))
+	{
+		g_bWaitRelease[iClient] = false;
+	}
+
 	if (g_iViewing[iClient] == INVALID_ENT_REFERENCE)
 	{
 		// E on a camera: the game only lets E "use" physics props, and the camera is a fixed one.

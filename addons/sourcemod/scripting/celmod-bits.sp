@@ -48,6 +48,7 @@ int g_iAnimMask[MAXENTITIES + 1];        // which frames are set (bit 0 = frame 
 float g_fAnimStep[MAXENTITIES + 1];      // seconds per frame
 bool g_bAnimBackward[MAXENTITIES + 1];   // the next press plays the frames in reverse
 float g_fAnimStart[MAXENTITIES + 1];     // when the playing animation began (0 = not playing)
+int g_iAnimLoop[MAXENTITIES + 1];        // !animate loop: 0 plays once, 1 loops round (1..last, 1..), 2 bounces (1..last..1)
 bool g_bAnimPlayingBack[MAXENTITIES + 1];
 
 char g_sPasscode[MAXENTITIES + 1][32];
@@ -113,7 +114,7 @@ public void OnPluginStart()
 	RegConsoleCmd("v_charger", Command_SpawnChargerBit, "|CelMod| Creates a health/suit charger bit that will give health/suit to the player.");
 	RegConsoleCmd("v_link", Command_Link, "|CelMod| Links a button to a door, light, effect, sound, music, message or animated prop (up to 3 per button): !link on the button, then on the thing.");
 	RegConsoleCmd("v_unlink", Command_Unlink, "|CelMod| Clears the links of the button you are looking at.");
-	RegConsoleCmd("v_animate", Command_Animate, "|CelMod| Animates a prop: !animate <1-10> saves where it is now as that frame; !link a button to it to play the frames. !animate speed <seconds>, play, clear.");
+	RegConsoleCmd("v_animate", Command_Animate, "|CelMod| Animates a prop: !animate <1-10> saves where it is now as that frame; !link a button to it to play the frames. !animate speed <seconds>, play, loop [bounce/off], clear.");
 	RegConsoleCmd("v_anim", Command_Animate, "|CelMod| Animates a prop (same as !animate).");
 	RegConsoleCmd("v_setpass", Command_SetPass, "|CelMod| Gives the button you are looking at a passcode (off to remove it).");
 	RegConsoleCmd("v_pass", Command_Pass, "|CelMod| Uses a passcode button with its passcode: !pass <passcode>.");
@@ -1703,6 +1704,7 @@ public void OnEntityDestroyed(int iEntity)
 		g_iAnimMask[iEntity] = 0;
 		g_fAnimStart[iEntity] = 0.0;
 		g_bAnimBackward[iEntity] = false;
+		g_iAnimLoop[iEntity] = 0;
 	}
 }
 
@@ -1739,13 +1741,30 @@ public Action Command_Animate(int iClient, int iArgs)
 	if (iArgs < 1)
 	{
 		ReplyAnimFrames(iClient, iProp);
-		Cel_ReplyToCommand(iClient, "Move, turn, color, fade ({green}!alpha{default}) or reskin the prop, then {green}!animate <1-10>{default} to save it as that frame. {green}!link{default} a button to it to play them. Also: {green}!animate speed <seconds>{default}, {green}play{default}, {green}clear{default}.");
+		Cel_ReplyToCommand(iClient, "Move, turn, color, fade ({green}!alpha{default}) or reskin the prop, then {green}!animate <1-10>{default} to save it as that frame. {green}!link{default} a button to it to play them. Also: {green}!animate speed <seconds>{default}, {green}play{default}, {green}loop{default} [bounce/off], {green}clear{default}.");
+		return Plugin_Handled;
+	}
+	
+	//!animate loop: a button starts it looping and the next press stops it. loop bounce goes back and forth instead.
+	if (StrEqual(sArg, "loop", false))
+	{
+		if (StrEqual(sValue, "off", false) || (sValue[0] == '\0' && g_iAnimLoop[iProp] != 0))
+		{
+			g_iAnimLoop[iProp] = 0;
+			g_fAnimStart[iProp] = 0.0;
+			Cel_ReplyToCommand(iClient, "The animation plays once per press again.");
+			return Plugin_Handled;
+		}
+
+		g_iAnimLoop[iProp] = StrEqual(sValue, "bounce", false) ? 2 : 1;
+		Cel_ReplyToCommand(iClient, "The animation now %s. A linked button starts it, and the next press stops it ({green}!animate loop off{default} to undo).", g_iAnimLoop[iProp] == 2 ? "loops back and forth" : "loops round");
 		return Plugin_Handled;
 	}
 	
 	if (StrEqual(sArg, "clear", false))
 	{
 		g_iAnimMask[iProp] = 0;
+		g_iAnimLoop[iProp] = 0;
 		g_fAnimStart[iProp] = 0.0;
 		Cel_ReplyToCommand(iClient, "The prop's animation frames are cleared.");
 		return Plugin_Handled;
@@ -1899,7 +1918,19 @@ bool IsCameraCel(int iEntity)
 //Plays the frames in order (or back, every other time). False when there's nothing to play.
 bool PlayAnimation(int iProp)
 {
-	if (iProp <= MaxClients || iProp > MAXENTITIES || !IsValidEntity(iProp) || AnimFrameCount(iProp) < 2 || g_fAnimStart[iProp] > 0.0)
+	if (iProp <= MaxClients || iProp > MAXENTITIES || !IsValidEntity(iProp) || AnimFrameCount(iProp) < 2)
+	{
+		return false;
+	}
+
+	// A looping animation: one press starts it, the next stops it where it is.
+	if (g_iAnimLoop[iProp] != 0)
+	{
+		g_fAnimStart[iProp] = (g_fAnimStart[iProp] > 0.0) ? 0.0 : GetGameTime();
+		return true;
+	}
+
+	if (g_fAnimStart[iProp] > 0.0)
 	{
 		return false;
 	}
@@ -1963,8 +1994,41 @@ public void OnGameFrame()
 		
 		int iSegments = AnimFrameCount(i) - 1;
 		float fT = (fNow - g_fAnimStart[i]) / g_fAnimStep[i];
+		int a, b;
+		float fF;
 		
-		if (fT >= float(iSegments))
+		if (g_iAnimLoop[i] != 0)
+		{
+			// Looping: round (last frame back to the first) or bouncing (back the way it came), forever.
+			int iCount = iSegments + 1;
+			float fTotal = (g_iAnimLoop[i] == 1) ? float(iCount) : float(iSegments * 2);
+			float fLoop = fT - fTotal * float(RoundToFloor(fT / fTotal));
+			int iSeg = RoundToFloor(fLoop);
+			
+			fF = fLoop - float(iSeg);
+			
+			if (g_iAnimLoop[i] == 1)
+			{
+				a = NthFrame(i, iSeg % iCount, false);
+				b = NthFrame(i, (iSeg + 1) % iCount, false);
+			} else if (iSeg < iSegments) {
+				a = NthFrame(i, iSeg, false);
+				b = NthFrame(i, iSeg + 1, false);
+			} else {
+				int iBack = iSeg - iSegments;
+				
+				a = NthFrame(i, iSegments - iBack, false);
+				b = NthFrame(i, iSegments - iBack - 1, false);
+			}
+			
+			if (a == -1 || b == -1)
+			{
+				g_fAnimStart[i] = 0.0;
+				continue;
+			}
+			
+			fF = fF * fF * (3.0 - 2.0 * fF);
+		} else if (fT >= float(iSegments))
 		{
 			int iLast = NthFrame(i, iSegments, g_bAnimPlayingBack[i]);
 			
@@ -1983,13 +2047,18 @@ public void OnGameFrame()
 			continue;
 		}
 		
-		int iSeg = RoundToFloor(fT);
-		float fF = fT - float(iSeg);
-		
-		// Eased, so each frame starts and stops smoothly.
-		fF = fF * fF * (3.0 - 2.0 * fF);
-		
-		int a = NthFrame(i, iSeg, g_bAnimPlayingBack[i]), b = NthFrame(i, iSeg + 1, g_bAnimPlayingBack[i]);
+		if (g_iAnimLoop[i] == 0)
+		{
+			int iSeg = RoundToFloor(fT);
+			
+			fF = fT - float(iSeg);
+			
+			// Eased, so each frame starts and stops smoothly.
+			fF = fF * fF * (3.0 - 2.0 * fF);
+			
+			a = NthFrame(i, iSeg, g_bAnimPlayingBack[i]);
+			b = NthFrame(i, iSeg + 1, g_bAnimPlayingBack[i]);
+		}
 		
 		for (int k = 0; k < 3; k++)
 		{
@@ -2141,6 +2210,7 @@ public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
 		
 		kvSave.SetNum("x_animmask", g_iAnimMask[iEntity]);
 		kvSave.SetFloat("x_animstep", g_fAnimStep[iEntity]);
+		kvSave.SetNum("x_animloop", g_iAnimLoop[iEntity]);
 		
 		for (int f = 0; f < ANIM_FRAMES; f++)
 		{
@@ -2163,6 +2233,7 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 		
 		g_iAnimMask[iEntity] = kvSave.GetNum("x_animmask", 0);
 		g_fAnimStep[iEntity] = kvSave.GetFloat("x_animstep", 0.5);
+		g_iAnimLoop[iEntity] = kvSave.GetNum("x_animloop", 0);
 		g_bAnimBackward[iEntity] = false;
 		g_fAnimStart[iEntity] = 0.0;
 		

@@ -673,3 +673,8 @@
 		   behind open again and the final door shut until someone walks up to it. Beating it still ends it for the map.
 		 - Pressing E on an internet cel (or TV) linked to a camera shows the camera reliably: holding E used to switch
 		   the view on and straight back off. Linking works in either order (camera first, or the internet cel/TV first).
+		 - Looping animations: !animate loop makes a prop's frames loop round (1, 2... last, 1...), and !animate loop
+		   bounce goes back and forth. A linked button starts the loop and the next press stops it where it is.
+		   !animate loop off plays them once per press again. Saves keep it.
+		 - Pressing E to stop looking through a camera no longer turns it straight back on: the view switches once per
+		   press of E.
