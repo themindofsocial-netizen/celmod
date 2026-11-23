@@ -619,5 +619,5 @@
 		   only the gravity gun, and the door slams shut and locks behind you a few seconds later (so friends can
 		   follow). Wide Eyes fires lasers at you: a thin line warns where each one goes, then it fires down that line,
 		   so step out of it. Manhacks fly in: catch one with the gravity gun and launch it into the boss. Once it's
-		   hurt, lasers fire from the ceiling too. Beat it and everyone still in the arena gets the Blood emblem,
-		   10000 CL and their weapons back, and it stays dead until the next map; if everyone dies, it resets. The vent on the way down takes your weapons away.
+		   hurt, lasers fire from the ceiling too. Beat it and everyone still in the arena gets the Blood emblem, 200
+		   tactics XP, 10000 CL and their weapons back, and it stays dead until the next map; if everyone dies, it resets. The vent on the way down takes your weapons away.

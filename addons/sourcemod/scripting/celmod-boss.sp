@@ -40,7 +40,7 @@
 #define MAX_SHOTS 8
 #define MAX_POINTS 16
 
-ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvEmblem, g_cvLaserDamage, g_cvManhacks, g_cvLockDelay;
+ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvXP, g_cvEmblem, g_cvLaserDamage, g_cvManhacks, g_cvLockDelay;
 
 bool g_bMapReady;
 bool g_bFight;
@@ -97,6 +97,7 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 
 	MarkNativeAsOptional("Cel_AddToClientBalance");
 	MarkNativeAsOptional("Cel_GiveCollectible");
+	MarkNativeAsOptional("Cel_AddTacticsXP");
 	MarkNativeAsOptional("Cel_PrintToChat");
 	MarkNativeAsOptional("Cel_PrintToChatAll");
 
@@ -111,6 +112,7 @@ public void OnPluginStart()
 	g_cvReward = CreateConVar("cm_boss_reward", "10000", "CL each player still standing gets for beating the boss.", _, true, 0.0);
 	g_cvLaserDamage = CreateConVar("cm_boss_laser_damage", "30", "Damage of one of the boss's lasers.", _, true, 0.0);
 	g_cvManhacks = CreateConVar("cm_boss_manhacks", "3", "Manhacks in the arena at once (one more for each extra player).", _, true, 1.0, true, 12.0);
+	g_cvXP = CreateConVar("cm_tactics_xp_boss", "200", "Tactics experience everyone still in the arena gets for beating the boss.", _, true, 0.0);
 	g_cvEmblem = CreateConVar("cm_boss_emblem", "blood", "Emblem everyone still in the arena gets for beating the boss (empty = none).");
 	g_cvLockDelay = CreateConVar("cm_boss_lock_delay", "4", "Seconds after the first player drops in before the door locks behind them (so friends can follow).", _, true, 0.0);
 
@@ -874,6 +876,12 @@ void BossDefeated(int iBoss)
 			{
 				Cel_AddToClientBalance(i, iReward);
 				Format(sReward, sizeof(sReward), "%s{green}%d CL{default}, ", sReward, iReward);
+			}
+
+			if (g_cvXP.IntValue > 0 && GetFeatureStatus(FeatureType_Native, "Cel_AddTacticsXP") == FeatureStatus_Available)
+			{
+				Cel_AddXP(i, g_cvXP.IntValue);
+				Format(sReward, sizeof(sReward), "%s{green}%d XP{default}, ", sReward, g_cvXP.IntValue);
 			}
 
 			Chat(i, "You beat {green}%s{default}! You get %syour weapons back.", BOSS_NAME, sReward);
