@@ -1395,7 +1395,8 @@ void ShowBossHud()
 	{
 		if (g_bInFight[i] && IsClientInGame(i))
 		{
-			ShowHudText(i, 3, "%s  -  %s%s\n[%s] %d/%d", BOSS_NAME, g_sStageName[g_iStage > 0 && g_iStage < 4 ? g_iStage : 1], GetGameTime() < g_fShieldUntil ? " (shielded)" : "", sBar, iLeft, g_iMaxHits);
+			// Channel 5: channel 3 is celmod-hud's command feed, which kept replacing the bar.
+			ShowHudText(i, 5, "%s  -  %s%s\n[%s] %d/%d", BOSS_NAME, g_sStageName[g_iStage > 0 && g_iStage < 4 ? g_iStage : 1], GetGameTime() < g_fShieldUntil ? " (shielded)" : "", sBar, iLeft, g_iMaxHits);
 		}
 	}
 }

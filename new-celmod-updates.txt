@@ -649,3 +649,4 @@
 		   shielded for a few seconds. When the fight ends, win or lose, Wide Eyes is gone for the rest of the map.
 		 - gm_bloodyconstruct_cm12: the final door opens when you walk up to it. The door behind it stays open until
 		   someone drops into the arena, then shuts for good 5 seconds later.
+		 - The boss's name and health bar no longer keep vanishing (the command feed was drawn on the same HUD channel).
