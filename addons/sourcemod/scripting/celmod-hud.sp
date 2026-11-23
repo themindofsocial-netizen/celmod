@@ -18,12 +18,16 @@ Handle g_hHudTimer;
 int g_iClientColor[MAXPLAYERS + 1][4];
 bool g_bHudColorChosen[MAXPLAYERS + 1]; //!hudcolor: a colour the player picked (kept, never re-randomized)
 
+char g_sLabel[MAXENTITIES + 1][48]; //!label: a name given to a button or cel, shown when it's looked at
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_ChooseHudColor", Native_ChooseHudColor);
 	CreateNative("Cel_GetHudColor", Native_GetHudColor);
 	CreateNative("Cel_SendHudMessage", Native_SendHudMessage);
 	CreateNative("Cel_SetHudColor", Native_SetHudColor);
+	
+	MarkNativeAsOptional("Cel_GetTriggerLink");
 	
 	return APLRes_Success;
 }
@@ -54,6 +58,7 @@ public void OnPluginStart()
 	
 	RegConsoleCmd("v_hudcolor", Command_HudColor, "|CelMod| Changes the colour of your HUD text: !hudcolor <colour or r g b>, or random.");
 	RegConsoleCmd("v_switch", Command_Switch, "|CelMod| Switches the side the hud is on the screen.");
+	RegConsoleCmd("v_label", Command_Label, "|CelMod| Names the button or cel you are looking at, shown when anyone looks at it: !label <name>, or !label off.");
 	RegConsoleCmd("v_feed", Command_Feed, "|CelMod| Turns the command feed (the list of recent commands) on or off.");
 }
 
@@ -835,6 +840,12 @@ public Action Timer_HUD(Handle hTimer)
 						Cel_GetHudColor(iEntity, iHUDColor);
 					}
 					
+					//A label (!label) goes on top, so a button says what it's for.
+					if (iEntity <= MAXENTITIES && g_sLabel[iEntity][0] != '\0' && sHUDMessage[0] != '\0')
+					{
+						Format(sHUDMessage, sizeof(sHUDMessage), "\"%s\"\n%s", g_sLabel[iEntity], sHUDMessage);
+					}
+					
 					//Anything that is for sale shows its price to everyone looking at it.
 					if (Cel_IsEntityForSale(iEntity))
 					{
@@ -897,4 +908,135 @@ void FormatPlayerHUD(int iClient, const char[] sBalance, char[] sMessage, int iM
 	sBar[10] = '\0';
 	
 	Format(sMessage, iMaxLength, "Money: %s\nTactics Lvl: %d\nEXP: %s", sBalance, Cel_GetTacticsLevel(iClient), sBar);
+}
+
+//!label <name>: names a button or cel so you remember what it's for. It shows on top of the HUD for anyone looking at
+//it, and saves keep it. Buttons and the other bits, cels (doors, lights, internet cels...), and the props that work
+//like cels (sound, music, message and camera cels, TVs linked to a camera); not emblems, hats, celweps or weapons.
+public Action Command_Label(int iClient, int iArgs)
+{
+	if (iClient < 1)
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]label <name>{default} names the button or cel you're looking at (shown when anyone looks at it). {green}[tag]label off{default} removes it.");
+		return Plugin_Handled;
+	}
+	
+	int iEntity = Cel_GetClientAimTarget(iClient);
+	
+	if (iEntity == -1)
+	{
+		Cel_NotLooking(iClient);
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_CanEdit(iClient, iEntity))
+	{
+		Cel_NotYours(iClient, iEntity);
+		return Plugin_Handled;
+	}
+	
+	if (!CanLabel(iEntity))
+	{
+		Cel_ReplyToCommand(iClient, "Only buttons and cels can be labelled (not props, emblems, hats or weapons).");
+		return Plugin_Handled;
+	}
+	
+	char sLabel[48];
+	
+	GetCmdArgString(sLabel, sizeof(sLabel));
+	StripQuotes(sLabel);
+	TrimString(sLabel);
+	
+	//One line of plain text.
+	ReplaceString(sLabel, sizeof(sLabel), "\n", " ");
+	ReplaceString(sLabel, sizeof(sLabel), "\r", " ");
+	ReplaceString(sLabel, sizeof(sLabel), "\"", "'");
+	
+	if (StrEqual(sLabel, "off", false) || StrEqual(sLabel, "none", false) || StrEqual(sLabel, "clear", false) || sLabel[0] == '\0')
+	{
+		if (g_sLabel[iEntity][0] == '\0')
+		{
+			Cel_ReplyToCommand(iClient, "That has no label.");
+		} else {
+			g_sLabel[iEntity][0] = '\0';
+			Cel_ReplyToCommand(iClient, "Label removed.");
+		}
+		
+		return Plugin_Handled;
+	}
+	
+	strcopy(g_sLabel[iEntity], sizeof(g_sLabel[]), sLabel);
+	
+	Cel_ReplyToCommand(iClient, "Labelled {green}%s{default}.", sLabel);
+	
+	return Plugin_Handled;
+}
+
+bool CanLabel(int iEntity)
+{
+	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !Cel_IsEntity(iEntity))
+	{
+		return false;
+	}
+	
+	switch (Cel_GetEntityType(iEntity))
+	{
+		case ENTTYPE_EMBLEM, ENTTYPE_HAT, ENTTYPE_CELWEP, ENTTYPE_WEAPONSPWNER, ENTTYPE_CLEER:
+		{
+			return false;
+		}
+	}
+	
+	if (Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_BIT) || Cel_CheckEntityCatagory(iEntity, ENTCATAGORY_CEL))
+	{
+		return true;
+	}
+	
+	//Props that work like cels.
+	char sName[32];
+	
+	Cel_GetPropName(iEntity, sName, sizeof(sName));
+	
+	static const char sCelProps[][] = { "sound", "music", "message", "camera", "tv", "monitor1", "monitor2", "monitor3" };
+	
+	for (int i = 0; i < sizeof(sCelProps); i++)
+	{
+		if (StrEqual(sName, sCelProps[i], false))
+		{
+			return true;
+		}
+	}
+	
+	//Anything linked to something (a TV linked to a camera).
+	return GetFeatureStatus(FeatureType_Native, "Cel_GetTriggerLink") == FeatureStatus_Available && Cel_GetTriggerLink(iEntity, 0) > 0;
+}
+
+public void OnEntityDestroyed(int iEntity)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		g_sLabel[iEntity][0] = '\0';
+	}
+}
+
+//Saves keep labels.
+public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES && g_sLabel[iEntity][0] != '\0')
+	{
+		kvSave.SetString("x_label", g_sLabel[iEntity]);
+	}
+}
+
+public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
+{
+	if (iEntity > 0 && iEntity <= MAXENTITIES)
+	{
+		kvSave.GetString("x_label", g_sLabel[iEntity], sizeof(g_sLabel[]), "");
+	}
 }
