@@ -1474,7 +1474,7 @@
 		"skeleton"	{ "name" "Skeleton"		"model" "models/humans/skeleton/skeleton.mdl"	"price" "1000000"	"season" "halloween" }
 		"admin"		{ "name" "Combine Elite"	"model" "models/combine_super_soldier.mdl"	"price" "0"	"admin" "b" }
 		// Earned in the Missing: Jimmy quest on gm_bloodyconstruct_cm12 (celmod-missingperson).
-		"police"	{ "name" "Police Officer"	"model" "models/celmod/cop4.mdl"	"price" "0"	"unlock" "Find Jimmy's wrench on gm_bloodyconstruct_cm12 and take it to Sgt. Malone at the police scene." }
+		"police"	{ "name" "Police Officer"	"model" "models/celmod/cop1_player.mdl"	"price" "0"	"unlock" "Find Jimmy's wrench on gm_bloodyconstruct_cm12 and take it to Sgt. Malone at the police scene." }
 	}
 
 	"Hats"
