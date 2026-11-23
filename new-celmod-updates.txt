@@ -632,3 +632,7 @@
 		 - !label <name> names the button or cel you're looking at (buttons, doors, internet cels, sound, music and
 		   camera cels, TVs linked to a camera...), so you remember what it's for: the name shows at the top of the HUD for
 		   anyone looking at it, and saves keep it. !label off removes it. Not for props, emblems, hats or weapons.
+		 - The Guess Booth is a Combine booth now: Dr. Breen stands behind his console at the back (and welcomes you to
+		   it), with a Combine wall behind him, posts at the corners and railings down the sides. Its square and text are
+		   Combine blue, and the three holograms float higher and further apart over Combine emitters, all at the same
+		   size.

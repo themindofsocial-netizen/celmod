@@ -7,7 +7,7 @@
 /*
  * |CelMod| Guess Booth
  *
- * A small yellow square at a spot an admin chose for the map (!setguessbooth, saved as data/celmod/guessbooth/<map>.txt),
+ * A small Combine-blue square at a spot an admin chose for the map (!setguessbooth, saved as data/celmod/guessbooth/<map>.txt),
  * with three props floating in it. Maps without a saved spot have no Guess Booth.
  * One of the three is the winner. A player standing in the booth gets one guess per map; a right guess pays out.
  *
@@ -17,10 +17,11 @@
  */
 
 #define BOOTH_HALF 136.0
-#define DISPLAY_SIZE 40.0
-#define KLEINER_MODEL "models/kleiner.mdl"
-#define HAT_MODEL "models/celmod/delaware.mdl"
-#define KLEINER_HELLO "vo/k_lab/kl_ahhhh.wav"
+#define DISPLAY_SIZE 38.0
+#define HOST_MODEL "models/breen.mdl"
+#define HOST_HELLO "vo/breencast/br_welcome01.wav"
+#define HOLO_HEIGHT 60.0
+#define HOLO_SPACING 80.0
 
 bool g_bAuction;
 
@@ -41,16 +42,27 @@ ConVar g_cvXPGuess;
 
 float g_fAuctionEnd;
 float g_fCenter[3];
-//Which way the booth faces: the way the admin who placed it was looking. Dr. Kleiner stands at the far side facing
+//Which way the booth faces: the way the admin who placed it was looking. Dr. Breen stands at the far side facing
 //back, and the three props run left to right in front of him. 90 (north) is the old fixed layout.
 float g_fBoothYaw = 90.0;
 
 int g_iAuctionRef = INVALID_ENT_REFERENCE;
 int g_iBeam = -1;
-int g_iKleinerRef = INVALID_ENT_REFERENCE;
-int g_iConeRef = INVALID_ENT_REFERENCE;
+int g_iHostRef = INVALID_ENT_REFERENCE;
+ArrayList g_alStructure; //the Combine props the booth is built from
 
-//Players Dr. Kleiner has already greeted on this map.
+//The stock Half-Life 2 props the booth is built from.
+char g_sStructureModels[][] =
+{
+	"models/props_combine/breenconsole.mdl",
+	"models/props_combine/combine_barricade_tall01a.mdl",
+	"models/props_combine/combine_fence01a.mdl",
+	"models/props_combine/combine_fence01b.mdl",
+	"models/props_combine/railing_256.mdl",
+	"models/props_combine/combine_emitter01.mdl"
+};
+
+//Players Dr. Breen has already greeted on this map.
 bool g_bGreeted[MAXPLAYERS + 1];
 int g_iPropRef[3] = { INVALID_ENT_REFERENCE, INVALID_ENT_REFERENCE, INVALID_ENT_REFERENCE };
 int g_iTopBid;
@@ -120,12 +132,22 @@ public void OnMapStart()
 {
 	g_iBeam = PrecacheModel("materials/sprites/laserbeam.vmt", true);
 	
-	PrecacheModel(KLEINER_MODEL, true);
-	PrecacheModel(HAT_MODEL, true);
-	PrecacheSound(KLEINER_HELLO, true);
+	PrecacheModel(HOST_MODEL, true);
+	PrecacheSound(HOST_HELLO, true);
 	
-	g_iKleinerRef = INVALID_ENT_REFERENCE;
-	g_iConeRef = INVALID_ENT_REFERENCE;
+	for (int i = 0; i < sizeof(g_sStructureModels); i++)
+	{
+		PrecacheModel(g_sStructureModels[i], true);
+	}
+	
+	g_iHostRef = INVALID_ENT_REFERENCE;
+	
+	if (g_alStructure == null)
+	{
+		g_alStructure = new ArrayList();
+	}
+	
+	g_alStructure.Clear();
 	
 	for (int i = 0; i <= MAXPLAYERS; i++)
 	{
@@ -291,8 +313,8 @@ void RemoveBooth()
 		RemoveRef(g_iPropRef[i]);
 	}
 	
-	RemoveRef(g_iKleinerRef);
-	RemoveRef(g_iConeRef);
+	RemoveRef(g_iHostRef);
+	RemoveStructure();
 	
 	g_bBooth = false;
 }
@@ -426,6 +448,33 @@ int SpawnDisplay(const char[] sModel, float fCenter[3], bool bCheckSize = false,
 		}
 	}
 	
+	//Holograms all show at about the same size: small props grow, big ones shrink.
+	if (bHologram)
+	{
+		float fLongest = 0.0;
+		
+		for (int i = 0; i < 3; i++)
+		{
+			if (fMaxs[i] - fMins[i] > fLongest)
+			{
+				fLongest = fMaxs[i] - fMins[i];
+			}
+		}
+		
+		if (fLongest > 1.0)
+		{
+			float fScale = DISPLAY_SIZE / fLongest;
+			
+			if (fScale < 0.4) fScale = 0.4;
+			if (fScale > 2.5) fScale = 2.5;
+			
+			SetEntPropFloat(iEntity, Prop_Send, "m_flModelScale", fScale);
+			
+			ScaleVector(fMins, fScale);
+			ScaleVector(fMaxs, fScale);
+		}
+	}
+	
 	for (int i = 0; i < 3; i++)
 	{
 		fOrigin[i] = fCenter[i] - (fMins[i] + fMaxs[i]) * 0.5;
@@ -459,7 +508,7 @@ void RemoveRef(int &iRef)
 	iRef = INVALID_ENT_REFERENCE;
 }
 
-//A point in the booth: forward (toward Kleiner), right and up from the centre, turned to the booth's facing.
+//A point in the booth: forward (toward Dr. Breen), right and up from the centre, turned to the booth's facing.
 void BoothPoint(const float fCenter[3], float fForward, float fRight, float fUp, float fOut[3])
 {
 	float fYaw = DegToRad(g_fBoothYaw);
@@ -506,7 +555,8 @@ void PlaceBooth(float fOrigin[3])
 	g_fCenter = fOrigin;
 	g_bBooth = (alAliases.Length >= 3);
 	
-	PlaceKleiner(fOrigin);
+	PlaceHost(fOrigin);
+	BuildStructure(fOrigin);
 	
 	if (g_bBooth)
 	{
@@ -525,8 +575,8 @@ void PlaceBooth(float fOrigin[3])
 			alAliases.Erase(iPick);
 			alModels.Erase(iPick);
 			
-			//Left to right as seen from the front of the booth.
-			BoothPoint(fOrigin, 0.0, (iShown - 1) * 72.0, 72.0, fPos);
+			//Left to right as seen from the front of the booth, each over its emitter.
+			BoothPoint(fOrigin, 0.0, (iShown - 1) * HOLO_SPACING, HOLO_HEIGHT, fPos);
 			
 			int iEntity = SpawnDisplay(sValue, fPos, true, true);
 			
@@ -559,135 +609,159 @@ void PlaceBooth(float fOrigin[3])
 	delete alModels;
 }
 
-//Dr. Kleiner stands at the back of the booth, frozen in his A-pose, facing whoever walks up.
-void PlaceKleiner(float fCenter[3])
+//Dr. Breen stands at the back of the booth behind his console, facing whoever walks up.
+void PlaceHost(float fCenter[3])
 {
 	float fAngles[3], fPos[3];
 	
-	RemoveRef(g_iKleinerRef);
-	RemoveRef(g_iConeRef);
+	RemoveRef(g_iHostRef);
 	
-	int iKleiner = CreateEntityByName("prop_dynamic_override");
+	int iHost = CreateEntityByName("prop_dynamic_override");
 	
-	if (iKleiner == -1)
+	if (iHost == -1)
 	{
 		return;
 	}
 	
-	BoothPoint(fCenter, BOOTH_HALF - 24.0, 0.0, 0.0, fPos);
+	BoothPoint(fCenter, BOOTH_HALF - 28.0, 0.0, 0.0, fPos);
 	
 	//Facing into the booth, back toward whoever walks up.
 	fAngles[1] = g_fBoothYaw + 180.0;
 	
-	DispatchKeyValue(iKleiner, "model", KLEINER_MODEL);
-	DispatchKeyValue(iKleiner, "solid", "2");
-	DispatchKeyValue(iKleiner, "DefaultAnim", "ragdoll");
+	DispatchKeyValue(iHost, "model", HOST_MODEL);
+	DispatchKeyValue(iHost, "solid", "2");
 	
-	DispatchSpawn(iKleiner);
-	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
-	// when its model is a physics-only prop (hats, the traffic cone...).
-	DispatchKeyValue(iKleiner, "classname", "cel_booth_kleiner");
+	DispatchSpawn(iHost);
+	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override.
+	DispatchKeyValue(iHost, "classname", "cel_booth_host");
 	
-	TeleportEntity(iKleiner, fPos, fAngles, NULL_VECTOR);
+	TeleportEntity(iHost, fPos, fAngles, NULL_VECTOR);
 	
-	//Standing idle (the model's own idle animation, found in its files); his old arms-out pose if it has none.
+	//Standing idle (the model's own idle animation, found in its files).
 	char sIdle[64];
 	
-	if (FindIdleSequence(KLEINER_MODEL, sIdle, sizeof(sIdle)))
+	if (FindIdleSequence(HOST_MODEL, sIdle, sizeof(sIdle)))
 	{
 		SetVariantString(sIdle);
-		AcceptEntityInput(iKleiner, "SetDefaultAnimation");
+		AcceptEntityInput(iHost, "SetDefaultAnimation");
 		
 		SetVariantString(sIdle);
-		AcceptEntityInput(iKleiner, "SetAnimation");
-	} else {
-		SetVariantString("ragdoll");
-		AcceptEntityInput(iKleiner, "SetAnimation");
-		
-		SetEntPropFloat(iKleiner, Prop_Send, "m_flPlaybackRate", 0.0);
+		AcceptEntityInput(iHost, "SetAnimation");
 	}
 	
-	g_iKleinerRef = EntIndexToEntRef(iKleiner);
+	g_iHostRef = EntIndexToEntRef(iHost);
+}
+
+//The booth's Combine frame: each piece is sat on the floor and turned by its own size (its long side along the edge
+//it stands on), so nothing depends on how a model happens to be built.
+void BuildStructure(float fCenter[3])
+{
+	RemoveStructure();
 	
-	//The Delaware hat on his head, fixed to his eyes like a player's hat, where the hat sits on players
-	//(collectibles.txt, or its !tune'd place in tuning.txt).
-	char sHatModel[PLATFORM_MAX_PATH];
-	float fHatOffset[3] = { -1.0, 0.0, 6.0 }, fHatAngles[3], fHatScale = 1.0;
-	int iHatSkin = 0;
+	float fPos[3];
 	
-	strcopy(sHatModel, sizeof(sHatModel), HAT_MODEL);
-	ReadDelawareHat(sHatModel, sizeof(sHatModel), fHatOffset, fHatAngles, fHatScale, iHatSkin);
+	//Dr. Breen's console, in front of him, facing the players.
+	BoothPoint(fCenter, BOOTH_HALF - 76.0, 0.0, 0.0, fPos);
+	AddPiece("models/props_combine/breenconsole.mdl", fPos, g_fBoothYaw + 180.0, false, true);
 	
-	int iHat = CreateEntityByName("prop_dynamic_override");
+	//The back wall behind him, across the far edge.
+	BoothPoint(fCenter, BOOTH_HALF + 8.0, 0.0, 0.0, fPos);
+	AddPiece("models/props_combine/combine_barricade_tall01a.mdl", fPos, g_fBoothYaw + 90.0, true, true);
 	
-	if (iHat != -1 && LookupEntityAttachment(iKleiner, "eyes") > 0)
+	//A post at each corner.
+	for (int iCorner = 0; iCorner < 4; iCorner++)
 	{
-		PrecacheModel(sHatModel);
+		float fForward = (iCorner < 2) ? BOOTH_HALF : -BOOTH_HALF;
+		float fRight = (iCorner % 2 == 0) ? -BOOTH_HALF : BOOTH_HALF;
 		
-		DispatchKeyValue(iHat, "model", sHatModel);
-		DispatchKeyValue(iHat, "solid", "0");
-		
-		if (fHatScale != 1.0)
-		{
-			DispatchKeyValueFloat(iHat, "modelscale", fHatScale);
-		}
-		
-		DispatchSpawn(iHat);
-		// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override and is deleted
-		// when its model is a physics-only prop (hats, the traffic cone...).
-		DispatchKeyValue(iHat, "classname", "cel_booth_hat");
-		
-		SetEntProp(iHat, Prop_Send, "m_nSkin", iHatSkin);
-		
-		TeleportEntity(iHat, fPos, fAngles, NULL_VECTOR);
-		
-		SetVariantString("!activator");
-		AcceptEntityInput(iHat, "SetParent", iKleiner, iHat);
-		
-		SetVariantString("eyes");
-		AcceptEntityInput(iHat, "SetParentAttachment", iHat, iHat);
-		
-		SetEntPropVector(iHat, Prop_Send, "m_vecOrigin", fHatOffset);
-		SetEntPropVector(iHat, Prop_Send, "m_angRotation", fHatAngles);
-		
-		g_iConeRef = EntIndexToEntRef(iHat);
-	} else if (iHat != -1) {
-		AcceptEntityInput(iHat, "Kill");
+		BoothPoint(fCenter, fForward, fRight, 0.0, fPos);
+		AddPiece((iCorner % 2 == 0) ? "models/props_combine/combine_fence01a.mdl" : "models/props_combine/combine_fence01b.mdl", fPos, g_fBoothYaw + 90.0, false, true);
+	}
+	
+	//Railings along the two sides; the front stays open.
+	for (int iSide = -1; iSide <= 1; iSide += 2)
+	{
+		BoothPoint(fCenter, 0.0, iSide * (BOOTH_HALF + 4.0), 0.0, fPos);
+		AddPiece("models/props_combine/railing_256.mdl", fPos, g_fBoothYaw, true, true);
+	}
+	
+	//An emitter on the floor under each hologram, projecting it.
+	for (int i = 0; i < 3; i++)
+	{
+		BoothPoint(fCenter, 0.0, (i - 1) * HOLO_SPACING, 0.0, fPos);
+		AddPiece("models/props_combine/combine_emitter01.mdl", fPos, g_fBoothYaw + 180.0, false, false);
 	}
 }
 
-//The Delaware hat's model and where it sits: collectibles.txt "Hats" > "delaware", then tuning.txt "hat delaware".
-void ReadDelawareHat(char[] sModel, int iMaxLength, float fOffset[3], float fAngles[3], float &fScale, int &iSkin)
+//One piece of the frame, its bottom on the floor at fPos. bAlong: its long side runs along fYaw.
+void AddPiece(const char[] sModel, const float fPos[3], float fYaw, bool bAlong, bool bSolid)
 {
-	char sPath[PLATFORM_MAX_PATH];
-	
-	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/collectibles.txt");
-	
-	KeyValues kvItems = new KeyValues("Collectibles");
-	
-	if (kvItems.ImportFromFile(sPath) && kvItems.JumpToKey("Hats") && kvItems.JumpToKey("delaware"))
+	if (g_alStructure == null)
 	{
-		kvItems.GetString("model", sModel, iMaxLength, sModel);
-		kvItems.GetVector("offset", fOffset, fOffset);
-		kvItems.GetVector("angles", fAngles, fAngles);
-		fScale = kvItems.GetFloat("scale", fScale);
-		iSkin = kvItems.GetNum("skin", iSkin);
+		g_alStructure = new ArrayList();
 	}
 	
-	delete kvItems;
+	int iPiece = CreateEntityByName("prop_dynamic_override");
 	
-	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/tuning.txt");
-	
-	KeyValues kvTuning = new KeyValues("Tuning");
-	
-	if (kvTuning.ImportFromFile(sPath) && kvTuning.JumpToKey("hat delaware"))
+	if (iPiece == -1)
 	{
-		kvTuning.GetVector("offset", fOffset, fOffset);
-		kvTuning.GetVector("angles", fAngles, fAngles);
-		fScale = kvTuning.GetFloat("scale", fScale);
+		return;
 	}
 	
-	delete kvTuning;
+	DispatchKeyValue(iPiece, "model", sModel);
+	DispatchKeyValue(iPiece, "solid", bSolid ? "6" : "0");
+	DispatchKeyValue(iPiece, "disableshadows", "1");
+	
+	if (!DispatchSpawn(iPiece))
+	{
+		return;
+	}
+	
+	DispatchKeyValue(iPiece, "classname", "cel_booth_frame");
+	
+	SetEntProp(iPiece, Prop_Data, "m_takedamage", 0, 1);
+	
+	float fMins[3], fMaxs[3], fAngles[3], fOrigin[3];
+	
+	GetEntPropVector(iPiece, Prop_Send, "m_vecMins", fMins);
+	GetEntPropVector(iPiece, Prop_Send, "m_vecMaxs", fMaxs);
+	
+	fAngles[1] = fYaw;
+	
+	//A model that is longer along its own Y than its X is turned a quarter, so its long side follows fYaw.
+	if (bAlong && (fMaxs[1] - fMins[1]) > (fMaxs[0] - fMins[0]))
+	{
+		fAngles[1] += 90.0;
+	}
+	
+	//Centred over fPos and standing on the floor, wherever the model's own origin is.
+	float fMidX = (fMins[0] + fMaxs[0]) * 0.5, fMidY = (fMins[1] + fMaxs[1]) * 0.5;
+	float fCos = Cosine(DegToRad(fAngles[1])), fSin = Sine(DegToRad(fAngles[1]));
+	
+	fOrigin[0] = fPos[0] - (fMidX * fCos - fMidY * fSin);
+	fOrigin[1] = fPos[1] - (fMidX * fSin + fMidY * fCos);
+	fOrigin[2] = fPos[2] - fMins[2];
+	
+	TeleportEntity(iPiece, fOrigin, fAngles, NULL_VECTOR);
+	
+	g_alStructure.Push(EntIndexToEntRef(iPiece));
+}
+
+void RemoveStructure()
+{
+	if (g_alStructure == null)
+	{
+		return;
+	}
+	
+	for (int i = 0; i < g_alStructure.Length; i++)
+	{
+		int iRef = g_alStructure.Get(i);
+		
+		RemoveRef(iRef);
+	}
+	
+	g_alStructure.Clear();
 }
 
 //Looks through a model's animations (its own, and the ones in the models it includes) for an idle one, so the
@@ -906,12 +980,12 @@ public Action Timer_Spin(Handle hTimer)
 	return Plugin_Continue;
 }
 
-//Draws the yellow square, tells players near the booth what it is, and ends the auction on time.
+//Draws the booth's Combine-blue square, tells players near the booth what it is, and ends the auction on time.
 public Action Timer_Booth(Handle hTimer)
 {
 	char sText[192];
 	float fA[3], fB[3], fOrigin[3];
-	int iYellow[4] = { 255, 220, 0, 255 };
+	int iBlue[4] = { 40, 150, 255, 255 };
 	
 	if (!g_bBooth || g_iBeam < 1)
 	{
@@ -925,7 +999,7 @@ public Action Timer_Booth(Handle hTimer)
 		BoothPoint(g_fCenter, (iEdge >= 2) ? BOOTH_HALF : -BOOTH_HALF, (iEdge == 1 || iEdge == 2) ? BOOTH_HALF : -BOOTH_HALF, 4.0, fA);
 		BoothPoint(g_fCenter, (iNext >= 2) ? BOOTH_HALF : -BOOTH_HALF, (iNext == 1 || iNext == 2) ? BOOTH_HALF : -BOOTH_HALF, 4.0, fB);
 		
-		TE_SetupBeamPoints(fA, fB, g_iBeam, 0, 0, 0, 1.05, 3.0, 3.0, 0, 0.0, iYellow, 0);
+		TE_SetupBeamPoints(fA, fB, g_iBeam, 0, 0, 0, 1.05, 3.0, 3.0, 0, 0.0, iBlue, 0);
 		TE_SendToAll();
 	}
 	
@@ -943,7 +1017,7 @@ public Action Timer_Booth(Handle hTimer)
 		
 		float fBase[3], fTop[3];
 		
-		BoothPoint(g_fCenter, 0.0, (i - 1) * 72.0, 2.0, fBase);
+		BoothPoint(g_fCenter, 0.0, (i - 1) * HOLO_SPACING, 10.0, fBase);
 		GetEntPropVector(iProp, Prop_Data, "m_vecAbsOrigin", fTop);
 		
 		TE_SetupBeamPoints(fBase, fTop, g_iBeam, 0, 0, 0, 1.05, 2.0, 24.0, 0, 0.0, iHolo, 0);
@@ -966,16 +1040,16 @@ public Action Timer_Booth(Handle hTimer)
 			continue;
 		}
 		
-		//Dr. Kleiner greets everyone once a map, the first time they step into the booth.
-		int iKleiner = EntRefToEntIndex(g_iKleinerRef);
+		//Dr. Breen greets everyone once a map, the first time they step into the booth.
+		int iHost = EntRefToEntIndex(g_iHostRef);
 		
-		if (!g_bGreeted[i] && IsInBooth(i) && iKleiner != INVALID_ENT_REFERENCE)
+		if (!g_bGreeted[i] && IsInBooth(i) && iHost != INVALID_ENT_REFERENCE)
 		{
 			g_bGreeted[i] = true;
 			
-			EmitSoundToClient(i, KLEINER_HELLO, iKleiner);
+			EmitSoundToClient(i, HOST_HELLO, iHost);
 			
-			Cel_PrintToChat(i, "{green}Dr. Kleiner:{default} Ah, hello! Welcome to the Guess Booth. One of these three props is your winner, and it's not the same for everyone. Pick it with {green}!guess 1{default}, {green}2{default} or {green}3{default}.");
+			Cel_PrintToChat(i, "{green}Dr. Breen:{default} Welcome. Welcome to the Guess Booth. One of these three props is your winner, and it's not the same for everyone. Pick it with {green}!guess 1{default}, {green}2{default} or {green}3{default}.");
 		}
 		
 		if (g_bAuction)
@@ -991,7 +1065,7 @@ public Action Timer_Booth(Handle hTimer)
 		}
 		
 		//A quiet message at the top of the screen; hint text beeps every time it is shown.
-		Cel_SendHudMessage(i, 4, -1.0, 0.12, 255, 220, 0, 255, 0, 0.0, 0.2, 1.1, 0.0, sText);
+		Cel_SendHudMessage(i, 4, -1.0, 0.12, 40, 150, 255, 255, 0, 0.0, 0.2, 1.1, 0.0, sText);
 	}
 	
 	if (g_bAuction && iLeft <= 0)
@@ -1062,7 +1136,7 @@ public Action Command_Guess(int iClient, int iArgs)
 	
 	if (!IsInBooth(iClient))
 	{
-		Cel_ReplyToCommand(iClient, "Stand inside the yellow square of the Guess Booth to guess.");
+		Cel_ReplyToCommand(iClient, "Stand inside the blue square of the Guess Booth to guess.");
 		return Plugin_Handled;
 	}
 	
