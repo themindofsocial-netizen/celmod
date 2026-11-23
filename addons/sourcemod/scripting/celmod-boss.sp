@@ -53,7 +53,8 @@ ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvXP, g_cvEmblem, 
 bool g_bMapReady;
 bool g_bFight;
 bool g_bDoorLocked;
-bool g_bDoorClosing; // startboss was touched: finaldoor_block closes for good a few seconds later
+bool g_bDoorClosing;
+int g_iFightId; // which fight a door timer belongs to // startboss was touched: finaldoor_block closes for good a few seconds later
 int g_iStage; // 1, 2 or 3, like a Dark Souls boss's phases
 float g_fShieldUntil; // between stages it can't be hurt
 
@@ -554,12 +555,18 @@ void StartFight()
 	{
 		g_bDoorClosing = true;
 
-		CreateTimer(g_cvLockDelay.FloatValue, Timer_LockDoor, _, TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(g_cvLockDelay.FloatValue, Timer_LockDoor, g_iFightId, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
-public Action Timer_LockDoor(Handle hTimer)
+public Action Timer_LockDoor(Handle hTimer, any iFightId)
 {
+	// The fight it was for already ended (everyone died within the first seconds): the door stays open.
+	if (iFightId != g_iFightId)
+	{
+		return Plugin_Stop;
+	}
+
 	int iDoor = FindByName("func_door", "finaldoor_block");
 
 	if (iDoor != -1)
@@ -1906,7 +1913,7 @@ void BossDefeated(int iBoss)
 	// Dead for the rest of the map.
 	g_bBeaten = true;
 
-	EndFight();
+	EndFight(true);
 }
 
 // Ends the fight once nobody is left in it. True if it ended.
@@ -1917,16 +1924,19 @@ bool CheckFightOver()
 		return false;
 	}
 
-	ChatAll("{green}%s{default} wins. It sinks back into the dark until the next map.", BOSS_NAME);
+	ChatAll("{green}%s{default} wins. The arena resets: try again.", BOSS_NAME);
 
-	EndFight();
+	EndFight(false);
 
 	return true;
 }
 
-void EndFight()
+// Won: Wide Eyes is gone and the door stays shut for the rest of the map. Lost (everyone in the arena died): it all
+// goes back the way it started, for another try.
+void EndFight(bool bWon)
 {
 	g_bFight = false;
+	g_iFightId++; // a door timer from this fight does nothing now
 
 	for (int i = 0; i < MAX_SHOTS; i++)
 	{
@@ -1957,16 +1967,61 @@ void EndFight()
 		g_bRock[i] = false;
 	}
 
-	// The fight is over for this map (the door behind is shut for good): Wide Eyes goes.
 	int iBoss = EntRefToEntIndex(g_iBossRef);
+
+	if (bWon)
+	{
+		// Beaten for this map (the door behind is shut for good): Wide Eyes goes.
+		if (iBoss != INVALID_ENT_REFERENCE)
+		{
+			AcceptEntityInput(iBoss, "Kill");
+		}
+
+		g_iBossRef = INVALID_ENT_REFERENCE;
+		g_bBeaten = true;
+		return;
+	}
+
+	// Lost: Wide Eyes back where it waits, at full strength.
+	g_iHits = 0;
+	g_iStage = 1;
+	g_fShieldUntil = 0.0;
 
 	if (iBoss != INVALID_ENT_REFERENCE)
 	{
-		AcceptEntityInput(iBoss, "Kill");
+		SetEntityRenderColor(iBoss, 255, 255, 255, 255);
+		TeleportEntity(iBoss, g_fBossPos, g_fBossAngles, NULL_VECTOR);
+	} else {
+		SpawnBoss();
 	}
 
-	g_iBossRef = INVALID_ENT_REFERENCE;
-	g_bBeaten = true;
+	g_fBossCur = g_fBossPos;
+	g_fBossGoal = g_fBossPos;
+
+	// The doors as they started: the one behind open (until someone drops in again), the final door shut until
+	// someone walks up to it.
+	int iBlock = FindByName("func_door", "finaldoor_block");
+
+	if (iBlock != -1)
+	{
+		AcceptEntityInput(iBlock, "Unlock");
+		AcceptEntityInput(iBlock, "Open");
+	}
+
+	int iFinal = FindByName("func_door", "finaldoor");
+
+	if (iFinal != -1)
+	{
+		AcceptEntityInput(iFinal, "Close");
+	}
+
+	g_bDoorLocked = false;
+	g_bDoorClosing = false;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_bInFight[i] = false;
+	}
 }
 
 public void Event_PlayerDeath(Event eEvent, const char[] sName, bool bDontBroadcast)

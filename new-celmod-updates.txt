@@ -669,3 +669,5 @@
 		 - Throwing a manhack into the boss counts reliably: its whole flight path is checked (a fast throw could pass
 		   through between checks), and a throw is recognised by how fast it really moves.
 		 - New player model in the shop: Skull Kid, 150000 CL (!buymodel skullkid, then !playermodel skullkid).
+		 - If everyone in the boss arena dies, the fight resets: Wide Eyes back where it started at full health, the door
+		   behind open again and the final door shut until someone walks up to it. Beating it still ends it for the map.
