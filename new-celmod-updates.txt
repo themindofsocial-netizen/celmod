@@ -642,3 +642,10 @@
 		   or upgraded emblem and press E: it's taken apart into the emblems it was made from (a big emblem back into its
 		   copies, an upgraded one back into the ones it took) for 50000 CL (cm_breaker_cost). It spawns the same way, fades
 		   in up close and works once a map. Admins: !powerbooth power or !powerbooth breaker picks which one.
+		 - The boss is much harder: three times the health, and three stages like a Dark Souls boss. "The Gaze" fires
+		   single lasers; "The Watcher Wakes" adds laser bursts that follow you, volleys from the ceiling and a floor
+		   shockwave you have to jump over; "Blind Fury" does it all faster, fires from both eyes, drops rocks where you
+		   stand (a red ring marks each) and sends more manhacks. Between stages it roars, throws everyone back and is
+		   shielded for a few seconds. When the fight ends, win or lose, Wide Eyes is gone for the rest of the map.
+		 - gm_bloodyconstruct_cm12: the final door opens when you walk up to it. The door behind it stays open until
+		   someone drops into the arena, then shuts for good 5 seconds later.

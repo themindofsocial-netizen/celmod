@@ -36,15 +36,40 @@
 #define SND_DEATH "npc/combine_gunship/gunship_explode2.wav"
 #define SND_LOCK "doors/heavy_metal_stop1.wav"
 #define SND_ROAR "npc/combine_gunship/gunship_moan.wav"
+#define SND_SLAM "ambient/explosions/explode_4.wav"
+#define SND_ROCK "ambient/explosions/explode_7.wav"
+#define SND_SHIELD "ambient/energy/zap1.wav"
 
 #define MAX_SHOTS 8
 #define MAX_POINTS 16
 
-ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvXP, g_cvEmblem, g_cvLaserDamage, g_cvManhacks, g_cvLockDelay;
+ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvXP, g_cvEmblem, g_cvLaserDamage, g_cvManhacks, g_cvLockDelay, g_cvSlamDamage, g_cvRockDamage;
 
 bool g_bMapReady;
 bool g_bFight;
 bool g_bDoorLocked;
+bool g_bDoorClosing; // startboss was touched: finaldoor_block closes for good a few seconds later
+int g_iStage; // 1, 2 or 3, like a Dark Souls boss's phases
+float g_fShieldUntil; // between stages it can't be hurt
+
+// The floor shockwave (stage 2+): an expanding ring you jump over.
+bool g_bWave;
+float g_fWaveStart;
+float g_fWaveCenter[3];
+bool g_bWaveHit[MAXPLAYERS + 1];
+
+// Falling rocks (stage 3): a ring marks where each lands.
+#define MAX_ROCKS 8
+bool g_bRock[MAX_ROCKS];
+float g_fRockPos[MAX_ROCKS][3];
+float g_fRockTime[MAX_ROCKS];
+
+// Laser bursts (stage 2+): more shots at the same player, each aimed where they are now.
+int g_iBurstLeft;
+int g_iBurstTarget;
+float g_fNextBurst;
+
+int g_iAttack; // which attack is next, so they take turns
 bool g_bBeaten; // once beaten, it stays dead until the next map
 bool g_bInFight[MAXPLAYERS + 1];
 
@@ -107,14 +132,16 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 public void OnPluginStart()
 {
 	g_cvEnable = CreateConVar("cm_boss_enable", "1", "Whether the boss fight on maps that have one (gm_bloodyconstruct_cm12) is on.");
-	g_cvHits = CreateConVar("cm_boss_hits", "8", "Manhack hits it takes to beat the boss with one player.", _, true, 1.0);
-	g_cvHitsPerPlayer = CreateConVar("cm_boss_hits_per_player", "2", "Extra hits it takes for each more player in the fight.", _, true, 0.0);
+	g_cvHits = CreateConVar("cm_boss_hits", "24", "Manhack hits it takes to beat the boss with one player (split over its three stages).", _, true, 3.0);
+	g_cvHitsPerPlayer = CreateConVar("cm_boss_hits_per_player", "6", "Extra hits it takes for each more player in the fight.", _, true, 0.0);
+	g_cvSlamDamage = CreateConVar("cm_boss_slam_damage", "25", "Damage of the floor shockwave (stage 2 on), unless you jump over it.", _, true, 0.0);
+	g_cvRockDamage = CreateConVar("cm_boss_rock_damage", "40", "Damage of a falling rock (stage 3).", _, true, 0.0);
 	g_cvReward = CreateConVar("cm_boss_reward", "10000", "CL each player still standing gets for beating the boss.", _, true, 0.0);
 	g_cvLaserDamage = CreateConVar("cm_boss_laser_damage", "30", "Damage of one of the boss's lasers.", _, true, 0.0);
 	g_cvManhacks = CreateConVar("cm_boss_manhacks", "3", "Manhacks in the arena at once (one more for each extra player).", _, true, 1.0, true, 12.0);
 	g_cvXP = CreateConVar("cm_tactics_xp_boss", "200", "Tactics experience everyone still in the arena gets for beating the boss.", _, true, 0.0);
 	g_cvEmblem = CreateConVar("cm_boss_emblem", "blood", "Emblem everyone still in the arena gets for beating the boss (empty = none).");
-	g_cvLockDelay = CreateConVar("cm_boss_lock_delay", "4", "Seconds after the first player drops in before the door locks behind them (so friends can follow).", _, true, 0.0);
+	g_cvLockDelay = CreateConVar("cm_boss_lock_delay", "5", "Seconds the door behind stays open after the first player drops in (so friends can follow); then it closes for the rest of the map.", _, true, 0.0);
 
 	HookEntityOutput("trigger_multiple", "OnStartTouch", Output_StartTouch);
 	HookEntityOutput("trigger_push", "OnStartTouch", Output_StartTouch);
@@ -152,10 +179,14 @@ public void OnMapStart()
 	PrecacheSound(SND_DEATH, true);
 	PrecacheSound(SND_LOCK, true);
 	PrecacheSound(SND_ROAR, true);
+	PrecacheSound(SND_SLAM, true);
+	PrecacheSound(SND_ROCK, true);
+	PrecacheSound(SND_SHIELD, true);
 
 	g_bMapReady = false;
 	g_bFight = false;
 	g_bDoorLocked = false;
+	g_bDoorClosing = false;
 	g_iBossRef = INVALID_ENT_REFERENCE;
 	g_bBeaten = false;
 	g_alManhacks.Clear();
@@ -261,6 +292,23 @@ public Action Timer_SetupArena(Handle hTimer)
 
 	SpawnBoss();
 
+	// The final door opens for anyone who walks up to it (its trigger starts switched off in the map), and the door
+	// behind it stays open until the fight starts.
+	int iTrigger = FindByName("trigger_multiple", "finaldoor_trig");
+
+	if (iTrigger != -1)
+	{
+		AcceptEntityInput(iTrigger, "Enable");
+	}
+
+	int iBlock = FindByName("func_door", "finaldoor_block");
+
+	if (iBlock != -1)
+	{
+		AcceptEntityInput(iBlock, "Unlock");
+		AcceptEntityInput(iBlock, "Open");
+	}
+
 	g_bMapReady = true;
 	g_hThink = CreateTimer(0.1, Timer_Think, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
@@ -319,6 +367,13 @@ public void Output_StartTouch(const char[] sOutput, int iCaller, int iActivator,
 
 			Chat(iActivator, "Something in the vent pulled your weapons away.");
 		}
+	} else if (StrEqual(sName, "finaldoor_trig")) {
+		int iDoor = FindByName("func_door", "finaldoor");
+
+		if (iDoor != -1)
+		{
+			AcceptEntityInput(iDoor, "Open", iActivator, iActivator);
+		}
 	} else if (StrEqual(sName, "startboss") && g_bMapReady) {
 		EnterArena(iActivator);
 	}
@@ -339,7 +394,7 @@ void EnterArena(int iClient)
 		{
 			g_fNextNotice[iClient] = fNow + 5.0;
 
-			Chat(iClient, "{green}%s{default} has already been beaten on this map.", BOSS_NAME);
+			Chat(iClient, "{green}%s{default} is gone from this map.", BOSS_NAME);
 		}
 
 		return;
@@ -385,6 +440,16 @@ void StartFight()
 	g_bFight = true;
 	g_bDoorLocked = false;
 	g_iHits = 0;
+	g_iStage = 1;
+	g_fShieldUntil = 0.0;
+	g_iAttack = 0;
+	g_iBurstLeft = 0;
+	g_bWave = false;
+
+	for (int i = 0; i < MAX_ROCKS; i++)
+	{
+		g_bRock[i] = false;
+	}
 
 	float fNow = GetGameTime();
 
@@ -406,16 +471,17 @@ void StartFight()
 		EmitSoundToAll(SND_ROAR, iBoss, SNDCHAN_VOICE, SNDLEVEL_SCREAMING);
 	}
 
-	CreateTimer(g_cvLockDelay.FloatValue, Timer_LockDoor, _, TIMER_FLAG_NO_MAPCHANGE);
+	// The door behind stays open a moment, then shuts for good.
+	if (!g_bDoorClosing)
+	{
+		g_bDoorClosing = true;
+
+		CreateTimer(g_cvLockDelay.FloatValue, Timer_LockDoor, _, TIMER_FLAG_NO_MAPCHANGE);
+	}
 }
 
 public Action Timer_LockDoor(Handle hTimer)
 {
-	if (!g_bFight)
-	{
-		return Plugin_Stop;
-	}
-
 	int iDoor = FindByName("func_door", "finaldoor_block");
 
 	if (iDoor != -1)
@@ -431,24 +497,11 @@ public Action Timer_LockDoor(Handle hTimer)
 		if (g_bInFight[i] && IsClientInGame(i))
 		{
 			EmitSoundToClient(i, SND_LOCK);
-			Chat(i, "The door slams shut and locks behind you.");
+			Chat(i, "The door slams shut behind you. There's no way back.");
 		}
 	}
 
 	return Plugin_Stop;
-}
-
-void OpenDoor()
-{
-	int iDoor = FindByName("func_door", "finaldoor_block");
-
-	if (iDoor != -1)
-	{
-		AcceptEntityInput(iDoor, "Unlock");
-		AcceptEntityInput(iDoor, "Open");
-	}
-
-	g_bDoorLocked = false;
 }
 
 // ---- The fight ----------------------------------------------------------------------------------------------------
@@ -494,36 +547,19 @@ public Action Timer_Think(Handle hTimer)
 	CheckManhackHits(iBoss, fEye, fNow);
 	RunShots(iBoss, fNow);
 
-	bool bHurt = g_iHits * 2 >= g_iMaxHits;
+	RunWave(iBoss, fNow);
+	RunRocks(iBoss, fNow);
+	RunBurst(fEye, fNow);
 
-	// A new laser every few seconds, faster once it's hurt; then the ceiling joins in.
-	if (fNow >= g_fNextAttack)
+	// Its attacks, by stage; none while it's staggered between stages.
+	if (fNow >= g_fNextAttack && fNow >= g_fShieldUntil)
 	{
-		int iTarget = RandomFighter();
-
-		if (iTarget != -1)
-		{
-			AimShot(fEye, iTarget, bHurt ? 0.9 : 1.2);
-
-			if (bHurt && g_iCeilingCount > 0)
-			{
-				int iSecond = RandomFighter();
-
-				if (iSecond != -1)
-				{
-					AimShot(g_fCeiling[GetRandomInt(0, g_iCeilingCount - 1)], iSecond, 1.1);
-				}
-			}
-
-			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
-		}
-
-		g_fNextAttack = fNow + (bHurt ? 2.0 : 3.0);
+		Attack(iBoss, fEye, fNow);
 	}
 
 	if (fNow >= g_fNextManhack)
 	{
-		g_fNextManhack = fNow + 4.0;
+		g_fNextManhack = fNow + (g_iStage == 3 ? 2.5 : 4.0);
 
 		SpawnManhacks();
 	}
@@ -666,7 +702,7 @@ void SpawnManhacks()
 		}
 	}
 
-	int iWant = g_cvManhacks.IntValue + CountFighters() - 1;
+	int iWant = g_cvManhacks.IntValue + CountFighters() - 1 + (g_iStage == 3 ? 2 : 0);
 
 	if (g_alManhacks.Length >= iWant || !g_bHasManhackPoint)
 	{
@@ -765,6 +801,20 @@ void CheckManhackHits(int iBoss, const float fEye[3], float fNow)
 
 		g_alManhacks.Erase(i);
 
+		// Staggered between stages: the throw sparks off its shield.
+		if (fNow < g_fShieldUntil)
+		{
+			TE_SetupSparks(fPos, NULL_VECTOR, 8, 6);
+			TE_SendToAll();
+
+			EmitSoundToAll(SND_SHIELD, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
+
+			SDKHooks_TakeDamage(iHack, iBoss, iBoss, 500.0, DMG_BLAST);
+			AcceptEntityInput(iHack, "Kill");
+
+			continue;
+		}
+
 		TE_SetupExplosion(fPos, g_iExplosionSprite, 1.0, 1, 0, 80, 0);
 		TE_SendToAll();
 
@@ -792,23 +842,360 @@ void BossHit(int iBoss)
 	SetEntityRenderColor(iBoss, 255, 80, 80, 255);
 	CreateTimer(0.3, Timer_UnFlash, _, TIMER_FLAG_NO_MAPCHANGE);
 
-	if (g_iHits * 2 >= g_iMaxHits && (g_iHits - 1) * 2 < g_iMaxHits)
+	if (g_iHits >= g_iMaxHits)
 	{
-		for (int i = 1; i <= MaxClients; i++)
+		ShowBossHud();
+		BossDefeated(iBoss);
+		return;
+	}
+
+	// A third of its health gone: the next stage.
+	int iStage = 1 + (g_iHits * 3) / g_iMaxHits;
+
+	if (iStage > g_iStage)
+	{
+		NextStage(iBoss, iStage);
+	}
+
+	ShowBossHud();
+}
+
+// ---- Stages -------------------------------------------------------------------------------------------------------
+
+char g_sStageName[][] = { "", "The Gaze", "The Watcher Wakes", "Blind Fury" };
+
+// Between stages: it roars, staggers behind a shield for a few seconds, and throws everyone back.
+void NextStage(int iBoss, int iStage)
+{
+	g_iStage = iStage;
+
+	float fNow = GetGameTime(), fEye[3];
+
+	g_fShieldUntil = fNow + 4.0;
+	g_fNextAttack = g_fShieldUntil + 0.5;
+	g_iBurstLeft = 0;
+
+	BossCenter(iBoss, fEye);
+
+	EmitSoundToAll(SND_ROAR, iBoss, SNDCHAN_VOICE, SNDLEVEL_SCREAMING);
+
+	int iColor[4] = { 255, 200, 60, 255 };
+
+	if (iStage == 3)
+	{
+		iColor = { 255, 40, 30, 255 };
+	}
+
+	TE_SetupBeamRingPoint(fEye, 20.0, 900.0, g_iLaserSprite, 0, 0, 0, 0.8, 24.0, 0.0, iColor, 0, 0);
+	TE_SendToAll();
+
+	// Thrown back from it, and the room shakes.
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!g_bInFight[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
 		{
-			if (g_bInFight[i] && IsClientInGame(i))
+			continue;
+		}
+
+		float fPos[3], fPush[3];
+
+		GetClientAbsOrigin(i, fPos);
+		SubtractVectors(fPos, fEye, fPush);
+		fPush[2] = 0.0;
+		NormalizeVector(fPush, fPush);
+		ScaleVector(fPush, 550.0);
+		fPush[2] = 280.0;
+
+		TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fPush);
+
+		Shake(i, 12.0, 3.0);
+
+		Chat(i, "{green}%s{default}: {green}%s{default}. It's shielded for a moment!", BOSS_NAME, g_sStageName[iStage]);
+	}
+
+	// The last stage: it glows red from now on.
+	if (iStage == 3)
+	{
+		SetEntityRenderColor(iBoss, 255, 120, 120, 255);
+	}
+}
+
+// Takes turns between its attacks; later stages have more of them, and use them faster.
+void Attack(int iBoss, const float fEye[3], float fNow)
+{
+	int iTarget = RandomFighter();
+
+	if (iTarget == -1)
+	{
+		return;
+	}
+
+	int iKinds = (g_iStage == 1) ? 1 : (g_iStage == 2 ? 4 : 5);
+	int iKind = g_iAttack++ % iKinds;
+
+	switch (iKind)
+	{
+		// A single laser (both eyes in the last stage).
+		case 0:
+		{
+			AimShot(fEye, iTarget, g_iStage == 1 ? 1.1 : 0.8);
+
+			if (g_iStage == 3)
 			{
-				Chat(i, "{green}%s{default} is furious: the ceiling is firing too!", BOSS_NAME);
+				int iOther = RandomFighter();
+
+				AimShot(fEye, iOther != -1 ? iOther : iTarget, 1.0);
+			}
+
+			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
+		}
+
+		// A burst: three quick shots, each aimed where they've moved to.
+		case 1:
+		{
+			g_iBurstLeft = 3;
+			g_iBurstTarget = GetClientUserId(iTarget);
+			g_fNextBurst = fNow;
+
+			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
+		}
+
+		// The ceiling opens fire: one laser at each fighter.
+		case 2:
+		{
+			if (g_iCeilingCount == 0)
+			{
+				AimShot(fEye, iTarget, 0.8);
+			} else {
+				for (int i = 1; i <= MaxClients; i++)
+				{
+					if (g_bInFight[i] && IsClientInGame(i) && IsPlayerAlive(i))
+					{
+						AimShot(g_fCeiling[GetRandomInt(0, g_iCeilingCount - 1)], i, 1.0);
+					}
+				}
+			}
+
+			EmitSoundToAll(SND_CHARGE, iBoss, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
+		}
+
+		// It slams the floor: a ring runs out across the arena. Jump over it.
+		case 3:
+		{
+			StartWave(iBoss, fNow);
+		}
+
+		// Rocks fall where everyone stands.
+		case 4:
+		{
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (g_bInFight[i] && IsClientInGame(i) && IsPlayerAlive(i))
+				{
+					float fPos[3];
+
+					GetClientAbsOrigin(i, fPos);
+					DropRock(fPos, fNow + 1.3);
+				}
 			}
 		}
 	}
 
-	ShowBossHud();
+	float fGap = (g_iStage == 1) ? 2.6 : (g_iStage == 2 ? 2.2 : 1.6);
 
-	if (g_iHits >= g_iMaxHits)
+	g_fNextAttack = fNow + fGap + (iKind == 3 ? 1.5 : 0.0);
+}
+
+void RunBurst(const float fEye[3], float fNow)
+{
+	if (g_iBurstLeft < 1 || fNow < g_fNextBurst)
 	{
-		BossDefeated(iBoss);
+		return;
 	}
+
+	int iTarget = GetClientOfUserId(g_iBurstTarget);
+
+	if (iTarget < 1 || !g_bInFight[iTarget] || !IsPlayerAlive(iTarget))
+	{
+		g_iBurstLeft = 0;
+		return;
+	}
+
+	AimShot(fEye, iTarget, 0.7);
+
+	g_iBurstLeft--;
+	g_fNextBurst = fNow + 0.4;
+}
+
+void StartWave(int iBoss, float fNow)
+{
+	g_bWave = true;
+	g_fWaveStart = fNow + 1.0;
+
+	g_fWaveCenter = g_fBossPos;
+	g_fWaveCenter[2] = g_fSpawnPos[2] + 6.0;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_bWaveHit[i] = false;
+	}
+
+	// Its warning: it roars and the floor under it glows.
+	EmitSoundToAll(SND_ROAR, iBoss, SNDCHAN_VOICE, SNDLEVEL_SCREAMING);
+
+	TE_SetupBeamRingPoint(g_fWaveCenter, 140.0, 20.0, g_iLaserSprite, 0, 0, 0, 1.0, 12.0, 0.0, { 255, 160, 40, 255 }, 0, 0);
+	TE_SendToAll();
+}
+
+#define WAVE_SPEED 650.0
+#define WAVE_REACH 2400.0
+
+void RunWave(int iBoss, float fNow)
+{
+	if (!g_bWave || fNow < g_fWaveStart)
+	{
+		return;
+	}
+
+	float fRadius = (fNow - g_fWaveStart) * WAVE_SPEED;
+
+	// Sent once: the game grows the ring itself, at the same speed.
+	if (fRadius < WAVE_SPEED * 0.11)
+	{
+		TE_SetupBeamRingPoint(g_fWaveCenter, 10.0, WAVE_REACH * 2.0, g_iLaserSprite, 0, 0, 0, WAVE_REACH / WAVE_SPEED, 18.0, 2.0, { 255, 140, 30, 255 }, 0, 0);
+		TE_SendToAll();
+
+		EmitAmbientSound(SND_SLAM, g_fWaveCenter, SOUND_FROM_WORLD, SNDLEVEL_SCREAMING);
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (g_bInFight[i] && IsClientInGame(i))
+			{
+				Shake(i, 6.0, 1.0);
+			}
+		}
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!g_bInFight[i] || g_bWaveHit[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			continue;
+		}
+
+		float fPos[3];
+
+		GetClientAbsOrigin(i, fPos);
+
+		float fDistance = SquareRoot(Pow(fPos[0] - g_fWaveCenter[0], 2.0) + Pow(fPos[1] - g_fWaveCenter[1], 2.0));
+
+		// The ring passes under them: on the ground it hits; in the air (a jump) it passes.
+		if (fDistance > fRadius - 70.0 && fDistance < fRadius + 20.0)
+		{
+			g_bWaveHit[i] = true;
+
+			if (GetEntityFlags(i) & FL_ONGROUND)
+			{
+				SDKHooks_TakeDamage(i, iBoss, iBoss, g_cvSlamDamage.FloatValue, DMG_SONIC);
+
+				float fPush[3];
+
+				fPush[2] = 320.0;
+				TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fPush);
+			}
+		}
+	}
+
+	if (fRadius > WAVE_REACH)
+	{
+		g_bWave = false;
+	}
+}
+
+void DropRock(const float fPos[3], float fWhen)
+{
+	for (int i = 0; i < MAX_ROCKS; i++)
+	{
+		if (!g_bRock[i])
+		{
+			g_bRock[i] = true;
+			g_fRockPos[i] = fPos;
+			g_fRockPos[i][2] += 4.0;
+			g_fRockTime[i] = fWhen;
+			return;
+		}
+	}
+}
+
+void RunRocks(int iBoss, float fNow)
+{
+	for (int r = 0; r < MAX_ROCKS; r++)
+	{
+		if (!g_bRock[r])
+		{
+			continue;
+		}
+
+		if (fNow < g_fRockTime[r])
+		{
+			// The mark where it lands, tightening as it falls.
+			float fLeft = g_fRockTime[r] - fNow;
+
+			// (Ring sizes are across, not from the middle: 180 marks the 90 it hits.)
+			TE_SetupBeamRingPoint(g_fRockPos[r], 180.0 + fLeft * 120.0, 180.0, g_iLaserSprite, 0, 0, 0, 0.12, 4.0, 0.0, { 255, 40, 30, 220 }, 0, 0);
+			TE_SendToAll();
+			continue;
+		}
+
+		g_bRock[r] = false;
+
+		TE_SetupExplosion(g_fRockPos[r], g_iExplosionSprite, 2.5, 1, 0, 0, 0);
+		TE_SendToAll();
+
+		float fUp[3] = { 0.0, 0.0, 1.0 };
+
+		TE_SetupDust(g_fRockPos[r], fUp, 60.0, 1.0);
+		TE_SendToAll();
+
+		EmitAmbientSound(SND_ROCK, g_fRockPos[r], SOUND_FROM_WORLD, SNDLEVEL_SCREAMING);
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (!g_bInFight[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+			{
+				continue;
+			}
+
+			float fPos[3];
+
+			GetClientAbsOrigin(i, fPos);
+
+			if (SquareRoot(Pow(fPos[0] - g_fRockPos[r][0], 2.0) + Pow(fPos[1] - g_fRockPos[r][1], 2.0)) < 90.0 && FloatAbs(fPos[2] - g_fRockPos[r][2]) < 96.0)
+			{
+				SDKHooks_TakeDamage(i, iBoss, iBoss, g_cvRockDamage.FloatValue, DMG_CRUSH);
+			}
+		}
+	}
+}
+
+// Shakes one player's screen.
+void Shake(int iClient, float fAmplitude, float fDuration)
+{
+	Handle hMessage = StartMessageOne("Shake", iClient);
+
+	if (hMessage == null)
+	{
+		return;
+	}
+
+	BfWrite bfShake = UserMessageToBfWrite(hMessage);
+
+	bfShake.WriteByte(0);
+	bfShake.WriteFloat(fAmplitude);
+	bfShake.WriteFloat(150.0);
+	bfShake.WriteFloat(fDuration);
+
+	EndMessage();
 }
 
 public Action Timer_UnFlash(Handle hTimer)
@@ -817,7 +1204,12 @@ public Action Timer_UnFlash(Handle hTimer)
 
 	if (iBoss != INVALID_ENT_REFERENCE)
 	{
-		SetEntityRenderColor(iBoss, 255, 255, 255, 255);
+		if (g_iStage == 3)
+		{
+			SetEntityRenderColor(iBoss, 255, 120, 120, 255);
+		} else {
+			SetEntityRenderColor(iBoss, 255, 255, 255, 255);
+		}
 	}
 
 	return Plugin_Stop;
@@ -907,7 +1299,7 @@ bool CheckFightOver()
 		return false;
 	}
 
-	ChatAll("{green}%s{default} wins this time. The way down is open again.", BOSS_NAME);
+	ChatAll("{green}%s{default} wins. It sinks back into the dark until the next map.", BOSS_NAME);
 
 	EndFight();
 
@@ -935,14 +1327,24 @@ void EndFight()
 
 	g_alManhacks.Clear();
 
-	OpenDoor();
+	g_bWave = false;
+	g_iBurstLeft = 0;
 
+	for (int i = 0; i < MAX_ROCKS; i++)
+	{
+		g_bRock[i] = false;
+	}
+
+	// The fight is over for this map (the door behind is shut for good): Wide Eyes goes.
 	int iBoss = EntRefToEntIndex(g_iBossRef);
 
 	if (iBoss != INVALID_ENT_REFERENCE)
 	{
-		TeleportEntity(iBoss, g_fBossPos, g_fBossAngles, NULL_VECTOR);
+		AcceptEntityInput(iBoss, "Kill");
 	}
+
+	g_iBossRef = INVALID_ENT_REFERENCE;
+	g_bBeaten = true;
 }
 
 public void Event_PlayerDeath(Event eEvent, const char[] sName, bool bDontBroadcast)
@@ -993,7 +1395,7 @@ void ShowBossHud()
 	{
 		if (g_bInFight[i] && IsClientInGame(i))
 		{
-			ShowHudText(i, 3, "%s\n[%s] %d/%d", BOSS_NAME, sBar, iLeft, g_iMaxHits);
+			ShowHudText(i, 3, "%s  -  %s%s\n[%s] %d/%d", BOSS_NAME, g_sStageName[g_iStage > 0 && g_iStage < 4 ? g_iStage : 1], GetGameTime() < g_fShieldUntil ? " (shielded)" : "", sBar, iLeft, g_iMaxHits);
 		}
 	}
 }
