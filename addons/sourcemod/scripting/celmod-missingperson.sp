@@ -18,12 +18,17 @@
  * "police" player model for good (Cel_GivePlayerModel, the same as !givemodel), after which the player can wear it
  * with !playermodel police. The model's entry lives in data/celmod/collectibles.txt under PlayerModels.
  *
+ * It can be done once: whoever owns the police model can't pick the wrench up again. Solving it also gives tactics
+ * experience (cm_tactics_xp_jimmy).
+ *
  * The evidence only lasts until the player leaves or the map changes.
  */
 
 #define MODEL_ID "police"
 #define SND_REWARD "vo/npc/male01/fantastic01.wav"
 #define SND_AGAIN "vo/npc/male01/nice.wav"
+
+ConVar g_cvXP;
 
 bool g_bEvidence[MAXPLAYERS + 1];
 float g_fNextTalk[MAXPLAYERS + 1];
@@ -42,12 +47,15 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 	MarkNativeAsOptional("Cel_GivePlayerModel");
 	MarkNativeAsOptional("Cel_OwnsPlayerModel");
 	MarkNativeAsOptional("Cel_PrintToChat");
+	MarkNativeAsOptional("Cel_AddTacticsXP");
 
 	return APLRes_Success;
 }
 
 public void OnPluginStart()
 {
+	g_cvXP = CreateConVar("cm_tactics_xp_jimmy", "50", "Tactics experience for handing Jimmy's wrench to Sgt. Malone (once, with the police model).", _, true, 0.0);
+
 	HookEntityOutput("func_button", "OnPressed", Output_ButtonPressed);
 
 	// Late load: hook the sergeant's button if the map is already running.
@@ -172,10 +180,11 @@ public Action Hook_SargeUse(int iEntity, int iActivator, int iCaller, UseType ut
 	int iSarge = FindByName("prop_dynamic", "pd_sarge");
 	int iSpeaker = (iSarge != -1) ? iSarge : iEntity;
 
+	// The case is solved once: someone who already has the badge gets nothing more for it.
 	if (iOwned == 1)
 	{
 		EmitSoundToAll(SND_AGAIN, iSpeaker, SNDCHAN_VOICE);
-		Subtitle(iActivator, "Sgt. Malone: Nice. Another piece of Jimmy's kit. Good work, officer.");
+		Subtitle(iActivator, "Sgt. Malone: You already cracked this one, officer. I'll file it with the rest.");
 
 		return Plugin_Handled;
 	}
@@ -191,6 +200,12 @@ public Action Hook_SargeUse(int iEntity, int iActivator, int iCaller, UseType ut
 	EmitSoundToAll(SND_REWARD, iSpeaker, SNDCHAN_VOICE);
 	Subtitle(iActivator, "Sgt. Malone: Fantastic! Jimmy's wrench... the bugs took him down that tunnel. You did better police work than my whole squad. Welcome to the force.");
 	Chat(iActivator, "{green}Police Officer{default} player model unlocked! Wear it with {green}[tag]playermodel police{default}.");
+
+	// Experience for solving it: only here, and this only happens once (the model is theirs from now on).
+	if (g_cvXP.IntValue > 0)
+	{
+		Cel_AddXP(iActivator, g_cvXP.IntValue);
+	}
 	LogAction(iActivator, -1, "%L unlocked the %s player model on gm_bloodyconstruct.", iActivator, MODEL_ID);
 
 	return Plugin_Handled;
