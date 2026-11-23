@@ -18,9 +18,8 @@
  * players can look through cameras at once.
  */
 
-// Half-Life 2's security camera. It has no physics model, so it's a fixed (non-physics) prop: it stays where it's put,
-// on a wall or a ceiling too.
-#define CAMERA_MODEL "models/combine_camera/combine_camera.mdl"
+// The city scanner, for now: a physics prop (freeze it where it should watch). Its eye looks the way it faces.
+#define CAMERA_MODEL "models/combine_scanner.mdl"
 #define VIEW_MODEL "models/props_junk/popcan01a.mdl"
 #define SND_VIEW "buttons/combine_button1.wav"
 #define SND_LEAVE "buttons/combine_button2.wav"

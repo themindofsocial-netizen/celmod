@@ -656,4 +656,4 @@
 		   stage, and getting within its field burns you and throws you back, so throw from a distance.
 		 - No more teleport into the boss arena: you walk in, and whoever isn't in when the door shuts is locked out.
 		 - The boss's name and health bar show again.
-		 - The camera cel is Half-Life 2's security camera now. It stays where you put it (walls and ceilings too).
+		 - The camera cel is a city scanner now (freeze it where it should watch).
