@@ -26,6 +26,7 @@
 int g_iViewing[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the camera a player is looking through
 int g_iViewHelper[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per camera: the invisible point players see from
 int g_iLastButtons[MAXPLAYERS + 1];
+int g_iDrewViewmodel[MAXPLAYERS + 1] = { 1, ... }; // whether their weapon was shown before they looked through a camera
 bool g_bIsCamera[MAXENTITIES + 1];
 bool g_bTVHooked[MAXENTITIES + 1];
 
@@ -211,13 +212,24 @@ bool ViewCamera(int iClient, int iCamera)
 		return false;
 	}
 
+	// Your own weapon isn't in the camera's picture (put back as it was afterwards: third person hides it too).
+	// Remembered only when starting to watch, not when switching from one camera to another.
+	if (EntRefToEntIndex(g_iViewing[iClient]) == INVALID_ENT_REFERENCE)
+	{
+		g_iDrewViewmodel[iClient] = GetEntProp(iClient, Prop_Send, "m_bDrawViewmodel");
+	}
+
+	SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", 0);
+
 	SetClientViewEntity(iClient, iHelper);
 
 	g_iViewing[iClient] = EntIndexToEntRef(iCamera);
 	g_iLastButtons[iClient] = GetClientButtons(iClient);
 
 	EmitSoundToClient(iClient, SND_VIEW);
-	PrintHintText(iClient, "Looking through a camera\nPress E, jump or attack to stop");
+	// One line: HL2DM's hint box draws a second line on top of the first.
+	PrintHintText(iClient, "Looking through a camera: press E, jump or attack to stop");
+
 
 	return true;
 }
@@ -229,6 +241,7 @@ void StopViewing(int iClient, bool bSound)
 	if (IsClientInGame(iClient))
 	{
 		SetClientViewEntity(iClient, iClient);
+		SetEntProp(iClient, Prop_Send, "m_bDrawViewmodel", g_iDrewViewmodel[iClient]);
 
 		if (bSound)
 		{
