@@ -626,10 +626,6 @@
 		 - Admins: !goto <player> teleports you to a player, !bring <player> brings one to you and !bringall brings
 		   everyone. They land on free spots beside you (never in a wall or a prop), facing you.
 		 - Camera cel: !camera spawns a security camera. Press E on it to look through it (E, jump or attack takes you
-		   back). !link a button to it and the button shows whoever presses it the camera's view; !link an internet
-		   cel to it and pressing E on the internet cel shows the camera instead of its page; !link a TV (or a lab
-		   monitor) to it and the TV's screen shows what the camera sees, live. The game draws one camera at a time,
-		   so all TVs show the camera most recently linked or looked through. Saves keep the links.
-		 - A TV linked to a camera shows it on its own screen (only the screen changes), and goes back to its normal
-		   screen when it's unlinked. The server makes the TV's screen model once with tools/make_camera_screens.py
-		   (see fastdl/README.md); until then the camera shows on a picture over the TV's front.
+		   back). !link a button, an internet cel or a TV (or a lab monitor) to it, and pressing that shows the camera's
+		   view (the internet cel shows it instead of its page). Any number of players can watch at once, and saves keep
+		   the links.

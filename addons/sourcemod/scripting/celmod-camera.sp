@@ -12,42 +12,28 @@
  *   !camera              spawns a security camera cel. Press E on it to look through it.
  *   button  -> camera    (!link) the button shows whoever presses it the camera's view.
  *   internet cel -> camera  pressing E on the internet cel shows the camera's view instead of its page.
- *   TV      -> camera    the TV's screen shows what the camera sees, live.
+ *   TV      -> camera    pressing E on the TV shows the camera's view.
  *
- * Looking through a camera: you stand still where you are, and E, jump or attack takes you back.
- *
- * A TV's own screen shows the camera when data/celmod/camerascreens.txt has a copy of its model for it (made on the
- * server with tools/make_camera_screens.py: the same model with only the screen's material swapped). Linked, the TV
- * wears that copy; unlinked, its own model again. A TV without one gets the picture laid over its front instead.
- *
- * TV screens use the game's camera render target (_rt_Camera, what Half-Life 2's security monitors use). The game
- * draws only one camera into it at a time, so every TV shows the same live camera: the one most recently linked to a
- * TV or looked through. That's a limit of the engine, not of CelMod.
+ * Looking through a camera: you stand still where you are, and E, jump or attack takes you back. Any number of
+ * players can look through cameras at once.
  */
 
 #define CAMERA_MODEL "models/props_combine/combinecamera001.mdl"
 #define VIEW_MODEL "models/props_junk/popcan01a.mdl"
-#define SCREEN_MATERIAL "materials/celmod/camerascreen.vmt"
-#define SCREEN_SPRITE "celmod/camerascreen.vmt"
 #define SND_VIEW "buttons/combine_button1.wav"
 #define SND_LEAVE "buttons/combine_button2.wav"
 
 int g_iViewing[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the camera a player is looking through
 int g_iViewHelper[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per camera: the invisible point players see from
-int g_iPointCamera[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per camera: its point_camera, for TVs
-int g_iScreen[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per TV: the sprite showing the camera
-int g_iScreenFor[MAXENTITIES + 1] = { INVALID_ENT_REFERENCE, ... }; // per TV: the camera its screen was made for
-int g_iLiveCamera = INVALID_ENT_REFERENCE;
 int g_iLastButtons[MAXPLAYERS + 1];
 bool g_bIsCamera[MAXENTITIES + 1];
-StringMap g_smToCamera; // TV model -> its copy whose screen shows the camera
-StringMap g_smToNormal; // and back
+bool g_bTVHooked[MAXENTITIES + 1];
 
 public Plugin myinfo =
 {
 	name = "|CelMod| Camera",
 	author = CEL_AUTHOR,
-	description = "Camera cels: look through them with buttons and internet cels, and show them on TVs.",
+	description = "Camera cels: look through them with E, buttons, internet cels and TVs.",
 	version = CEL_VERSION,
 	url = CEL_URL
 };
@@ -64,27 +50,17 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 
 public void OnPluginStart()
 {
-	RegConsoleCmd("v_camera", Command_Camera, "|CelMod| Spawns a camera cel: look through it with E, a button or an internet cel, or show it on a TV.");
+	RegConsoleCmd("v_camera", Command_Camera, "|CelMod| Spawns a camera cel: look through it with E, or from a linked button, internet cel or TV.");
 
-	g_smToCamera = new StringMap();
-	g_smToNormal = new StringMap();
-
-	CreateTimer(0.5, Timer_Screens, _, TIMER_REPEAT);
+	CreateTimer(0.5, Timer_TVs, _, TIMER_REPEAT);
 }
 
 public void OnMapStart()
 {
 	PrecacheModel(CAMERA_MODEL, true);
 	PrecacheModel(VIEW_MODEL, true);
-	PrecacheModel(SCREEN_SPRITE, true);
 	PrecacheSound(SND_VIEW, true);
 	PrecacheSound(SND_LEAVE, true);
-
-	AddFileToDownloadsTable(SCREEN_MATERIAL);
-
-	g_iLiveCamera = INVALID_ENT_REFERENCE;
-
-	LoadScreenModels();
 }
 
 public void OnClientDisconnect(int iClient)
@@ -113,11 +89,9 @@ public void OnEntityDestroyed(int iEntity)
 		}
 
 		KillRef(g_iViewHelper[iEntity]);
-		KillRef(g_iPointCamera[iEntity]);
 	}
 
-	KillRef(g_iScreen[iEntity]);
-	g_iScreenFor[iEntity] = INVALID_ENT_REFERENCE;
+	g_bTVHooked[iEntity] = false;
 }
 
 // ---- Spawning ------------------------------------------------------------------------------------------------------
@@ -245,12 +219,6 @@ bool ViewCamera(int iClient, int iCamera)
 	EmitSoundToClient(iClient, SND_VIEW);
 	PrintHintText(iClient, "Looking through a camera\nPress E, jump or attack to stop");
 
-	// Looked through, with a TV showing it: it's the one TVs show.
-	if (CameraHasScreen(iCamera))
-	{
-		MakeLive(iCamera);
-	}
-
 	return true;
 }
 
@@ -363,7 +331,7 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fV
 
 // ---- TVs -----------------------------------------------------------------------------------------------------------
 
-// Props that are TVs: a TV linked to a camera shows it on its screen.
+// Props that are TVs: pressing E on one linked to a camera shows the camera's view.
 bool IsTV(int iEntity)
 {
 	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity) || !Cel_IsEntity(iEntity))
@@ -378,331 +346,51 @@ bool IsTV(int iEntity)
 	return StrEqual(sName, "tv", false) || StrEqual(sName, "monitor1", false) || StrEqual(sName, "monitor2", false) || StrEqual(sName, "monitor3", false);
 }
 
-// data/celmod/camerascreens.txt: TV models that have a copy whose own screen shows the camera (made by
-// tools/make_camera_screens.py). A linked TV wears the copy, so only its screen changes; unlinked, it gets its own
-// model back. TVs without one get a picture laid over the front instead.
-void LoadScreenModels()
-{
-	g_smToCamera.Clear();
-	g_smToNormal.Clear();
-
-	char sPath[PLATFORM_MAX_PATH], sNormal[PLATFORM_MAX_PATH], sCopy[PLATFORM_MAX_PATH], sMaterial[PLATFORM_MAX_PATH];
-
-	BuildPath(Path_SM, sPath, sizeof(sPath), "data/celmod/camerascreens.txt");
-
-	KeyValues kvScreens = new KeyValues("CameraScreens");
-
-	if (!kvScreens.ImportFromFile(sPath) || !kvScreens.JumpToKey("Screens") || !kvScreens.GotoFirstSubKey())
-	{
-		delete kvScreens;
-		return;
-	}
-
-	do
-	{
-		kvScreens.GetSectionName(sNormal, sizeof(sNormal));
-		kvScreens.GetString("model", sCopy, sizeof(sCopy), "");
-		kvScreens.GetString("material", sMaterial, sizeof(sMaterial), "");
-
-		// Only once the copy is really on the server (made with the tool).
-		if (sCopy[0] == '\0' || !FileExists(sCopy, true))
-		{
-			continue;
-		}
-
-		StringToLower(sNormal);
-		StringToLower(sCopy);
-
-		g_smToCamera.SetString(sNormal, sCopy);
-		g_smToNormal.SetString(sCopy, sNormal);
-
-		PrecacheModel(sCopy, true);
-
-		AddModelFiles(sCopy);
-
-		if (sMaterial[0] != '\0' && FileExists(sMaterial, false))
-		{
-			AddFileToDownloadsTable(sMaterial);
-		}
-	}
-	while (kvScreens.GotoNextKey());
-
-	delete kvScreens;
-}
-
-void AddModelFiles(const char[] sModel)
-{
-	static const char sExtensions[][] = { ".mdl", ".vvd", ".phy", ".dx80.vtx", ".dx90.vtx", ".sw.vtx" };
-	char sBase[PLATFORM_MAX_PATH], sFile[PLATFORM_MAX_PATH];
-
-	strcopy(sBase, sizeof(sBase), sModel);
-	sBase[strlen(sBase) - 4] = '\0';
-
-	for (int i = 0; i < sizeof(sExtensions); i++)
-	{
-		FormatEx(sFile, sizeof(sFile), "%s%s", sBase, sExtensions[i]);
-
-		if (FileExists(sFile, false))
-		{
-			AddFileToDownloadsTable(sFile);
-		}
-	}
-}
-
-void StringToLower(char[] sText)
-{
-	for (int i = 0; sText[i] != '\0'; i++)
-	{
-		sText[i] = CharToLower(sText[i]);
-	}
-}
-
-// The TV's model now, and the one it should wear for its link (its camera copy when linked, its own otherwise).
-bool ScreenModelFor(int iTV, bool bLinked, char[] sWant, int iMaxLength)
-{
-	char sModel[PLATFORM_MAX_PATH];
-
-	GetEntPropString(iTV, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
-	StringToLower(sModel);
-
-	if (bLinked)
-	{
-		if (g_smToCamera.GetString(sModel, sWant, iMaxLength))
-		{
-			return true;
-		}
-
-		// Already wearing the copy.
-		char sNormal[PLATFORM_MAX_PATH];
-
-		if (g_smToNormal.GetString(sModel, sNormal, sizeof(sNormal)))
-		{
-			strcopy(sWant, iMaxLength, sModel);
-			return true;
-		}
-
-		return false;
-	}
-
-	return g_smToNormal.GetString(sModel, sWant, iMaxLength);
-}
-
-void WearModel(int iTV, const char[] sModel)
-{
-	char sNow[PLATFORM_MAX_PATH];
-
-	GetEntPropString(iTV, Prop_Data, "m_ModelName", sNow, sizeof(sNow));
-
-	if (!StrEqual(sNow, sModel, false))
-	{
-		SetEntityModel(iTV, sModel);
-	}
-}
-
-// Keeps every TV's screen matching its link: the camera on it while it's linked, its own screen once it isn't.
-public Action Timer_Screens(Handle hTimer)
+// TVs linked to a camera (with !link, or in a loaded build) can be pressed with E.
+public Action Timer_TVs(Handle hTimer)
 {
 	if (GetFeatureStatus(FeatureType_Native, "Cel_GetTriggerLink") != FeatureStatus_Available)
 	{
 		return Plugin_Continue;
 	}
 
-	bool bLiveShown;
-	int iLive = EntRefToEntIndex(g_iLiveCamera);
-	char sModel[PLATFORM_MAX_PATH];
-
 	for (int iTV = MaxClients + 1; iTV <= MAXENTITIES; iTV++)
 	{
-		if (!IsValidEntity(iTV) || !Cel_IsEntity(iTV))
-		{
-			if (g_iScreen[iTV] != INVALID_ENT_REFERENCE)
-			{
-				KillRef(g_iScreen[iTV]);
-			}
-
-			g_iScreenFor[iTV] = INVALID_ENT_REFERENCE;
-			continue;
-		}
-
-		if (!IsTV(iTV))
+		if (g_bTVHooked[iTV] || !IsTV(iTV))
 		{
 			continue;
 		}
 
 		int iCamera = Cel_GetTriggerLink(iTV, 0);
-		bool bLinked = (iCamera != -1 && g_bIsCamera[iCamera]);
 
-		if (!bLinked)
-		{
-			// Back to its own screen.
-			if (ScreenModelFor(iTV, false, sModel, sizeof(sModel)))
-			{
-				WearModel(iTV, sModel);
-			}
-
-			KillRef(g_iScreen[iTV]);
-			g_iScreenFor[iTV] = INVALID_ENT_REFERENCE;
-			continue;
-		}
-
-		if (iCamera == iLive)
-		{
-			bLiveShown = true;
-		}
-
-		bool bNew = (EntRefToEntIndex(g_iScreenFor[iTV]) != iCamera);
-
-		// Its own screen shows the camera (the copy of its model), or a picture over its front.
-		if (ScreenModelFor(iTV, true, sModel, sizeof(sModel)))
-		{
-			WearModel(iTV, sModel);
-			KillRef(g_iScreen[iTV]);
-		} else if (bNew || EntRefToEntIndex(g_iScreen[iTV]) == INVALID_ENT_REFERENCE) {
-			KillRef(g_iScreen[iTV]);
-			MakeScreen(iTV);
-		}
-
-		if (!bNew)
+		if (iCamera == -1 || !g_bIsCamera[iCamera])
 		{
 			continue;
 		}
 
-		// Newly linked (or to another camera): that camera goes live.
-		g_iScreenFor[iTV] = EntIndexToEntRef(iCamera);
+		SetEntProp(iTV, Prop_Data, "m_spawnflags", GetEntProp(iTV, Prop_Data, "m_spawnflags") | 256);
 
-		MakeLive(iCamera);
+		SDKHook(iTV, SDKHook_UsePost, Hook_TVUse);
 
-		bLiveShown = true;
-		iLive = iCamera;
-	}
-
-	// No TV shows the live camera any more: it stops drawing (a live camera costs every player some frame rate).
-	if (!bLiveShown && iLive != INVALID_ENT_REFERENCE)
-	{
-		int iPoint = EntRefToEntIndex(g_iPointCamera[iLive]);
-
-		if (iPoint != INVALID_ENT_REFERENCE)
-		{
-			AcceptEntityInput(iPoint, "SetOff");
-		}
-
-		g_iLiveCamera = INVALID_ENT_REFERENCE;
+		g_bTVHooked[iTV] = true;
 	}
 
 	return Plugin_Continue;
 }
 
-bool CameraHasScreen(int iCamera)
+public void Hook_TVUse(int iTV, int iActivator, int iCaller, UseType utType, float fValue)
 {
-	for (int iTV = MaxClients + 1; iTV <= MAXENTITIES; iTV++)
-	{
-		if (g_iScreenFor[iTV] != INVALID_ENT_REFERENCE && EntRefToEntIndex(g_iScreenFor[iTV]) == iCamera)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
-// The screen: a flat sprite of the camera picture over the front of the TV, turned with it.
-void MakeScreen(int iTV)
-{
-	int iSprite = CreateEntityByName("env_sprite_oriented");
-
-	if (iSprite == -1)
+	if (iActivator < 1 || iActivator > MaxClients || !IsClientInGame(iActivator) || Cel_IsLocked(iTV))
 	{
 		return;
 	}
 
-	float fOrigin[3], fAngles[3], fMins[3], fMaxs[3], fForward[3], fCenter[3];
+	int iCamera = Cel_GetTriggerLink(iTV, 0);
 
-	GetEntPropVector(iTV, Prop_Data, "m_vecAbsOrigin", fOrigin);
-	GetEntPropVector(iTV, Prop_Data, "m_angAbsRotation", fAngles);
-	GetEntPropVector(iTV, Prop_Send, "m_vecMins", fMins);
-	GetEntPropVector(iTV, Prop_Send, "m_vecMaxs", fMaxs);
-
-	GetAngleVectors(fAngles, fForward, NULL_VECTOR, NULL_VECTOR);
-
-	// The middle of the TV's front face.
-	float fRight[3], fUp[3];
-
-	GetAngleVectors(fAngles, NULL_VECTOR, fRight, fUp);
-
-	float fMidY = (fMins[1] + fMaxs[1]) * 0.5, fMidZ = (fMins[2] + fMaxs[2]) * 0.5;
-
-	for (int i = 0; i < 3; i++)
+	if (iCamera != -1 && g_bIsCamera[iCamera])
 	{
-		fCenter[i] = fOrigin[i] + fForward[i] * (fMaxs[0] + 0.6) - fRight[i] * fMidY + fUp[i] * fMidZ;
+		ViewCamera(iActivator, iCamera);
 	}
-
-	// The camera picture is 256 pixels square: sized to most of the TV's front.
-	float fSide = fMaxs[1] - fMins[1];
-	float fHeight = fMaxs[2] - fMins[2];
-
-	if (fHeight < fSide)
-	{
-		fSide = fHeight;
-	}
-
-	char sScale[16];
-
-	FormatEx(sScale, sizeof(sScale), "%.4f", (fSide * 0.7) / 256.0);
-
-	DispatchKeyValue(iSprite, "model", SCREEN_SPRITE);
-	DispatchKeyValue(iSprite, "scale", sScale);
-	DispatchKeyValue(iSprite, "rendermode", "0");
-	DispatchKeyValue(iSprite, "spawnflags", "1");
-
-	TeleportEntity(iSprite, fCenter, fAngles, NULL_VECTOR);
-	DispatchSpawn(iSprite);
-	AcceptEntityInput(iSprite, "ShowSprite");
-
-	SetVariantString("!activator");
-	AcceptEntityInput(iSprite, "SetParent", iTV, iSprite);
-
-	g_iScreen[iTV] = EntIndexToEntRef(iSprite);
-}
-
-// Makes this camera the one every TV shows (the game draws one at a time).
-void MakeLive(int iCamera)
-{
-	if (EntRefToEntIndex(g_iLiveCamera) == iCamera)
-	{
-		return;
-	}
-
-	int iPoint = EntRefToEntIndex(g_iPointCamera[iCamera]);
-
-	if (iPoint == INVALID_ENT_REFERENCE)
-	{
-		iPoint = CreateEntityByName("point_camera");
-
-		if (iPoint == -1)
-		{
-			return;
-		}
-
-		float fPos[3], fAngles[3];
-
-		LensPosition(iCamera, fPos, fAngles);
-
-		DispatchKeyValue(iPoint, "FOV", "75");
-		DispatchKeyValue(iPoint, "UseScreenAspectRatio", "0");
-		DispatchKeyValue(iPoint, "spawnflags", "0");
-
-		TeleportEntity(iPoint, fPos, fAngles, NULL_VECTOR);
-		DispatchSpawn(iPoint);
-
-		SetVariantString("!activator");
-		AcceptEntityInput(iPoint, "SetParent", iCamera, iPoint);
-
-		g_iPointCamera[iCamera] = EntIndexToEntRef(iPoint);
-	}
-
-	AcceptEntityInput(iPoint, "SetOnAndTurnOthersOff");
-
-	g_iLiveCamera = EntIndexToEntRef(iCamera);
 }
 
 void KillRef(int &iRef)

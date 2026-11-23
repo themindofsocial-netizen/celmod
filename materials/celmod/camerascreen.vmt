@@ -1,7 +1,0 @@
-// |CelMod| camera cel: a TV's screen. Shows the live camera picture (the game's camera render target).
-"Sprite"
-{
-	"$spriteorientation" "oriented"
-	"$spriteorigin" "[ 0.50 0.50 ]"
-	"$basetexture" "_rt_Camera"
-}

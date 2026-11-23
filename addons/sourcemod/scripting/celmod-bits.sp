@@ -218,7 +218,7 @@ public Action Command_Link(int iClient, int iArgs)
 				{
 					Cel_ReplyToCommand(iClient, "Linked: pressing {green}E{default} on the internet cel now shows the camera's view.");
 				} else {
-					Cel_ReplyToCommand(iClient, "Linked: the TV now shows what the camera sees.");
+					Cel_ReplyToCommand(iClient, "Linked: pressing {green}E{default} on the TV now shows the camera's view.");
 				}
 
 				return Plugin_Handled;
@@ -1848,8 +1848,7 @@ bool IsUsableCel(int iEntity)
 	return StrEqual(sName, "sound", false) || StrEqual(sName, "music", false) || StrEqual(sName, "message", false) || StrEqual(sName, "camera", false);
 }
 
-//Internet cels and TVs link to a camera cel (celmod-camera): the internet cel shows the camera's view when pressed,
-//the TV shows it on its screen.
+//Internet cels and TVs link to a camera cel (celmod-camera): pressing E on either shows the camera's view.
 bool IsCameraScreen(int iEntity)
 {
 	if (iEntity <= MaxClients || iEntity > MAXENTITIES || !IsValidEntity(iEntity) || !Cel_IsEntity(iEntity))
