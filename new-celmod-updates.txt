@@ -666,3 +666,5 @@
 		 - The boss's lasers hit what they touch: they're checked against your whole body (not just your feet and
 		   eyes), and stay deadly for as long as the beam shows.
 		 - Fixed a boss laser sound that looped forever (the stalker's laser sounds loop): one-shot sounds now.
+		 - Throwing a manhack into the boss counts reliably: its whole flight path is checked (a fast throw could pass
+		   through between checks), and a throw is recognised by how fast it really moves.

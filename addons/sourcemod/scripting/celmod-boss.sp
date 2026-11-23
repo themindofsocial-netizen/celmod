@@ -122,6 +122,8 @@ bool g_bShotHit[MAX_SHOTS][MAXPLAYERS + 1]; // who it already hurt (once each)
 // Manhacks of the fight, and until when one counts as thrown (it was in a gravity gun a moment ago).
 ArrayList g_alManhacks;
 float g_fThrownUntil[MAXENTITIES + 1];
+float g_fHackLast[MAXENTITIES + 1][3]; // where each manhack was at the last check
+bool g_bHackSeen[MAXENTITIES + 1];
 
 Handle g_hThink;
 bool g_bLate;
@@ -279,6 +281,7 @@ public void OnEntityDestroyed(int iEntity)
 	if (iEntity > 0 && iEntity <= MAXENTITIES)
 	{
 		g_fThrownUntil[iEntity] = 0.0;
+		g_bHackSeen[iEntity] = false;
 	}
 }
 
@@ -1028,7 +1031,7 @@ void CheckManhackHits(int iBoss, const float fEye[3], float fNow)
 		}
 	}
 
-	float fRadius = BossRadius(iBoss);
+	float fRadius = BossRadius(iBoss) + 20.0;
 
 	for (int i = g_alManhacks.Length - 1; i >= 0; i--)
 	{
@@ -1040,18 +1043,38 @@ void CheckManhackHits(int iBoss, const float fEye[3], float fNow)
 			continue;
 		}
 
-		float fPos[3], fVel[3];
+		float fPos[3], fLast[3];
 
 		GetEntPropVector(iHack, Prop_Data, "m_vecAbsOrigin", fPos);
-		GetEntPropVector(iHack, Prop_Data, "m_vecAbsVelocity", fVel);
 
-		if (GetVectorDistance(fPos, fEye) > fRadius)
+		fLast = g_bHackSeen[iHack] ? g_fHackLast[iHack] : fPos;
+		g_fHackLast[iHack] = fPos;
+		g_bHackSeen[iHack] = true;
+
+		// Held in a gravity gun right now (the manhack's own flag, where the game has it).
+		if (HasEntProp(iHack, Prop_Data, "m_bHeld") && GetEntProp(iHack, Prop_Data, "m_bHeld"))
+		{
+			g_fThrownUntil[iHack] = fNow + 3.0;
+		}
+
+		// Its speed, measured from how far it moved since the last check (a tenth of a second ago): a thrown
+		// manhack covers far more ground than one flying by itself.
+		float fSpeed = GetVectorDistance(fPos, fLast) / 0.1;
+
+		if (fSpeed > 600.0)
+		{
+			g_fThrownUntil[iHack] = fNow + 1.0;
+		}
+
+		// Its whole path since the last check, not just where it is now: a fast throw can cross the boss between
+		// two checks.
+		if (DistanceToSegment(fEye, fLast, fPos) > fRadius)
 		{
 			continue;
 		}
 
-		// Thrown: it left a gravity gun a moment ago, or it's flying far faster than a manhack flies by itself.
-		if (fNow > g_fThrownUntil[iHack] && GetVectorLength(fVel) < 700.0)
+		// Thrown: it was in a gravity gun a moment ago, or it's flying far faster than a manhack flies by itself.
+		if (fNow > g_fThrownUntil[iHack])
 		{
 			continue;
 		}
@@ -1073,7 +1096,6 @@ void CheckManhackHits(int iBoss, const float fEye[3], float fNow)
 		}
 
 		BloodBurst(fPos, 5, 70.0);
-		TE_SendToAll();
 
 		EmitSoundToAll(SND_HIT, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
 
