@@ -18,7 +18,9 @@
  * players can look through cameras at once.
  */
 
-#define CAMERA_MODEL "models/props_combine/combinecamera001.mdl"
+// Half-Life 2's security camera. It has no physics model, so it's a fixed (non-physics) prop: it stays where it's put,
+// on a wall or a ceiling too.
+#define CAMERA_MODEL "models/combine_camera/combine_camera.mdl"
 #define VIEW_MODEL "models/props_junk/popcan01a.mdl"
 #define SND_VIEW "buttons/combine_button1.wav"
 #define SND_LEAVE "buttons/combine_button2.wav"
@@ -118,6 +120,7 @@ public Action Command_Camera(int iClient, int iArgs)
 	// Facing the way you look, so it sees what you see.
 	fAngles[0] = 0.0;
 
+	// Asked for as a physics prop: CelMod makes a model without a physics model a solid fixed prop itself.
 	int iCamera = Cel_SpawnProp(iClient, "camera", "prop_physics_override", CAMERA_MODEL, fAngles, fOrigin, 255, 255, 255, 255);
 
 	if (iCamera == -1)
@@ -313,6 +316,14 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fV
 {
 	if (g_iViewing[iClient] == INVALID_ENT_REFERENCE)
 	{
+		// E on a camera: the game only lets E "use" physics props, and the camera is a fixed one.
+		if ((iButtons & IN_USE) && !(g_iLastButtons[iClient] & IN_USE) && IsPlayerAlive(iClient))
+		{
+			UseLookedAtCamera(iClient);
+		}
+
+		g_iLastButtons[iClient] = iButtons;
+
 		return Plugin_Continue;
 	}
 
@@ -340,6 +351,36 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons, int &iImpulse, float fV
 	fVel[2] = 0.0;
 
 	return Plugin_Changed;
+}
+
+void UseLookedAtCamera(int iClient)
+{
+	int iTarget = GetClientAimTarget(iClient, false);
+
+	if (iTarget <= MaxClients || iTarget > MAXENTITIES || !g_bIsCamera[iTarget] || Cel_IsLocked(iTarget))
+	{
+		return;
+	}
+
+	// Older cameras (physics props, "cel_physics") are used by the game itself.
+	char sClass[32];
+
+	GetEntityClassname(iTarget, sClass, sizeof(sClass));
+
+	if (StrContains(sClass, "physics", false) != -1)
+	{
+		return;
+	}
+
+	float fEye[3], fPos[3];
+
+	GetClientEyePosition(iClient, fEye);
+	GetEntPropVector(iTarget, Prop_Data, "m_vecAbsOrigin", fPos);
+
+	if (GetVectorDistance(fEye, fPos) <= 120.0)
+	{
+		ViewCamera(iClient, iTarget);
+	}
 }
 
 // ---- TVs -----------------------------------------------------------------------------------------------------------
