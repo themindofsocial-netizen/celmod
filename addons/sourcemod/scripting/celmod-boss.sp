@@ -30,14 +30,18 @@
 #define LASER_SPRITE "sprites/laserbeam.vmt"
 
 #define SND_CHARGE "npc/strider/charging.wav"
-#define SND_FIRE "npc/strider/fire.wav"
-#define SND_HIT "npc/manhack/grind5.wav"
+#define SND_FIRE "npc/stalker/laser_burn.wav"
+#define SND_HIT "physics/flesh/flesh_bloody_impact_hard1.wav"
+#define SND_BURN "npc/stalker/laser_flesh.wav"
+#define SND_SPLAT "physics/flesh/flesh_squishy_impact_hard1.wav"
+#define SND_GORE "physics/flesh/flesh_bloody_break.wav"
+#define SND_LEECH "npc/barnacle/barnacle_tongue_pull1.wav"
 #define SND_PAIN "npc/combine_gunship/gunship_pain.wav"
 #define SND_DEATH "npc/combine_gunship/gunship_explode2.wav"
 #define SND_LOCK "doors/heavy_metal_stop1.wav"
 #define SND_ROAR "npc/combine_gunship/gunship_moan.wav"
 #define SND_SLAM "ambient/explosions/explode_4.wav"
-#define SND_ROCK "ambient/explosions/explode_7.wav"
+#define SND_ROCK "physics/flesh/flesh_squishy_impact_hard1.wav"
 #define SND_SHIELD "ambient/energy/zap1.wav"
 
 #define MAX_SHOTS 24
@@ -110,6 +114,9 @@ bool g_bShot[MAX_SHOTS];
 float g_fShotStart[MAX_SHOTS][3];
 float g_fShotEnd[MAX_SHOTS][3];
 float g_fShotTime[MAX_SHOTS];
+bool g_bShotFired[MAX_SHOTS]; // fired, and still deadly while its beam shows
+float g_fShotLiveUntil[MAX_SHOTS];
+bool g_bShotHit[MAX_SHOTS][MAXPLAYERS + 1]; // who it already hurt (once each)
 
 // Manhacks of the fight, and until when one counts as thrown (it was in a gravity gun a moment ago).
 ArrayList g_alManhacks;
@@ -117,6 +124,17 @@ float g_fThrownUntil[MAXENTITIES + 1];
 
 Handle g_hThink;
 bool g_bLate;
+int g_iBloodSpray;
+int g_iBloodDrop;
+int g_iBloodDecal[4];
+
+// Bloodletting (stage 2+): blood-laser tethers that drain everyone it can see. Break its sight or get away.
+#define LEECH_RANGE 1100.0
+#define LEECH_TIME 2.5
+bool g_bLeech;
+float g_fLeechStart;
+float g_fNextLeechTick;
+bool g_bLeeched[MAXPLAYERS + 1]; // still held since the tether caught them
 bool g_bDrawTick; // warnings are redrawn every other think (0.2 s), to keep players' network traffic down
 int g_iExplosionSprite;
 
@@ -189,6 +207,21 @@ public void OnMapStart()
 	PrecacheSound(SND_CHARGE, true);
 	PrecacheSound(SND_FIRE, true);
 	PrecacheSound(SND_HIT, true);
+	PrecacheSound(SND_BURN, true);
+	PrecacheSound(SND_SPLAT, true);
+	PrecacheSound(SND_GORE, true);
+	PrecacheSound(SND_LEECH, true);
+
+	g_iBloodSpray = PrecacheModel("sprites/bloodspray.vmt", true);
+	g_iBloodDrop = PrecacheModel("sprites/blood.vmt", true);
+
+	for (int i = 0; i < 4; i++)
+	{
+		char sDecal[32];
+
+		FormatEx(sDecal, sizeof(sDecal), "decals/blood%d", i + 1);
+		g_iBloodDecal[i] = PrecacheDecal(sDecal, true);
+	}
 	PrecacheSound(SND_PAIN, true);
 	PrecacheSound(SND_DEATH, true);
 	PrecacheSound(SND_LOCK, true);
@@ -592,6 +625,7 @@ public Action Timer_Think(Handle hTimer)
 	RunRocks(iBoss, fNow);
 	RunBurst(fEye, fNow);
 	RunSweep(iBoss, fEye, fNow);
+	RunLeech(iBoss, fEye, fNow);
 	RunAura(iBoss, fEye, fNow);
 
 	// Its attacks, by stage; none while it's staggered between stages.
@@ -714,7 +748,7 @@ void RunAura(int iBoss, const float fEye[3], float fNow)
 	fFloor[2] = g_fSpawnPos[2] + 4.0;
 
 	// Its edge, faintly on the floor (ring sizes are across).
-	TE_SetupBeamRingPoint(fFloor, AURA_RADIUS * 2.0, AURA_RADIUS * 2.0 + 1.0, g_iLaserSprite, 0, 0, 0, 0.32, 3.0, 1.5, { 160, 40, 255, 120 }, 0, 0);
+	TE_SetupBeamRingPoint(fFloor, AURA_RADIUS * 2.0, AURA_RADIUS * 2.0 + 1.0, g_iLaserSprite, 0, 0, 0, 0.32, 3.0, 1.5, { 120, 0, 0, 140 }, 0, 0);
 	TE_SendToAll();
 
 	for (int i = 1; i <= MaxClients; i++)
@@ -736,6 +770,7 @@ void RunAura(int iBoss, const float fEye[3], float fNow)
 		}
 
 		SDKHooks_TakeDamage(i, iBoss, iBoss, 12.0, DMG_SHOCK);
+		Bleed(i);
 
 		fPush[0] = fPos[0] - fEye[0];
 		fPush[1] = fPos[1] - fEye[1];
@@ -746,7 +781,7 @@ void RunAura(int iBoss, const float fEye[3], float fNow)
 
 		TeleportEntity(i, NULL_VECTOR, NULL_VECTOR, fPush);
 
-		TE_SetupBeamPoints(fEye, fPos, g_iLaserSprite, 0, 0, 0, 0.2, 4.0, 1.0, 0, 6.0, { 170, 60, 255, 255 }, 0);
+		TE_SetupBeamPoints(fEye, fPos, g_iLaserSprite, 0, 0, 0, 0.2, 4.0, 1.0, 0, 6.0, { 200, 0, 0, 255 }, 0);
 		TE_SendToAll();
 	}
 }
@@ -792,6 +827,7 @@ void AimShot(const float fFrom[3], int iTarget, float fWarning)
 	g_fShotEnd[iShot] = fEnd;
 	g_fShotTime[iShot] = GetGameTime() + fWarning;
 	g_bShot[iShot] = true;
+	g_bShotFired[iShot] = false;
 }
 
 void RunShots(int iBoss, float fNow)
@@ -803,47 +839,110 @@ void RunShots(int iBoss, float fNow)
 			continue;
 		}
 
-		if (fNow < g_fShotTime[i])
+		if (!g_bShotFired[i] && fNow < g_fShotTime[i])
 		{
 			// The warning: a thin flickering line along where it'll fire.
 			if (g_bDrawTick)
 			{
-				TE_SetupBeamPoints(g_fShotStart[i], g_fShotEnd[i], g_iLaserSprite, 0, 0, 0, 0.22, 1.5, 1.5, 0, 1.0, { 255, 60, 0, 160 }, 0);
+				TE_SetupBeamPoints(g_fShotStart[i], g_fShotEnd[i], g_iLaserSprite, 0, 0, 0, 0.22, 1.5, 1.5, 0, 1.0, { 140, 0, 0, 170 }, 0);
 				TE_SendToAll();
 			}
 
 			continue;
 		}
 
-		g_bShot[i] = false;
+		if (!g_bShotFired[i])
+		{
+			g_bShotFired[i] = true;
+			g_fShotLiveUntil[i] = fNow + 0.35;
 
-		TE_SetupBeamPoints(g_fShotStart[i], g_fShotEnd[i], g_iLaserSprite, 0, 0, 0, 0.35, 14.0, 10.0, 0, 2.0, { 255, 20, 20, 255 }, 0);
-		TE_SendToAll();
+			for (int c = 0; c <= MaxClients; c++)
+			{
+				g_bShotHit[i][c] = false;
+			}
 
-		TE_SetupSparks(g_fShotEnd[i], NULL_VECTOR, 8, 4);
-		TE_SendToAll();
+			// A blood-red beam with a hot core.
+			TE_SetupBeamPoints(g_fShotStart[i], g_fShotEnd[i], g_iLaserSprite, 0, 0, 0, 0.35, 16.0, 12.0, 0, 1.5, { 170, 0, 0, 255 }, 0);
+			TE_SendToAll();
+			TE_SetupBeamPoints(g_fShotStart[i], g_fShotEnd[i], g_iLaserSprite, 0, 0, 0, 0.25, 4.0, 3.0, 0, 0.0, { 255, 120, 110, 255 }, 0);
+			TE_SendToAll();
 
-		EmitSoundToAll(SND_FIRE, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
+			// It leaves blood where it lands.
+			BloodDecal(g_fShotEnd[i]);
 
+			EmitSoundToAll(SND_FIRE, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
+		}
+
+		// Deadly for as long as the beam shows: anyone whose body it touches (once each).
 		for (int c = 1; c <= MaxClients; c++)
 		{
-			if (!g_bInFight[c] || !IsClientInGame(c) || !IsPlayerAlive(c))
+			if (g_bShotHit[i][c] || !g_bInFight[c] || !IsClientInGame(c) || !IsPlayerAlive(c))
 			{
 				continue;
 			}
 
-			float fFeet[3], fHead[3];
-
-			GetClientAbsOrigin(c, fFeet);
-			GetClientEyePosition(c, fHead);
-			fFeet[2] += 12.0;
-
-			if (DistanceToSegment(fFeet, g_fShotStart[i], g_fShotEnd[i]) < 24.0 || DistanceToSegment(fHead, g_fShotStart[i], g_fShotEnd[i]) < 24.0)
+			if (SegmentHitsPlayer(c, g_fShotStart[i], g_fShotEnd[i], 6.0))
 			{
+				g_bShotHit[i][c] = true;
+
 				SDKHooks_TakeDamage(c, iBoss, iBoss, g_cvLaserDamage.FloatValue, DMG_ENERGYBEAM);
+				Bleed(c);
 			}
 		}
+
+		if (fNow >= g_fShotLiveUntil[i])
+		{
+			g_bShot[i] = false;
+		}
 	}
+}
+
+// Whether a line passes through a player's body (their real box, taller standing than crouched), give or take a
+// little padding.
+bool SegmentHitsPlayer(int iClient, const float fA[3], const float fB[3], float fPad)
+{
+	float fOrigin[3], fMins[3], fMaxs[3];
+
+	GetClientAbsOrigin(iClient, fOrigin);
+	GetClientMins(iClient, fMins);
+	GetClientMaxs(iClient, fMaxs);
+
+	float fLow = 0.0, fHigh = 1.0;
+
+	for (int a = 0; a < 3; a++)
+	{
+		float fBoxMin = fOrigin[a] + fMins[a] - fPad, fBoxMax = fOrigin[a] + fMaxs[a] + fPad;
+		float fDelta = fB[a] - fA[a];
+
+		if (FloatAbs(fDelta) < 0.0001)
+		{
+			if (fA[a] < fBoxMin || fA[a] > fBoxMax)
+			{
+				return false;
+			}
+
+			continue;
+		}
+
+		float fT1 = (fBoxMin - fA[a]) / fDelta, fT2 = (fBoxMax - fA[a]) / fDelta;
+
+		if (fT1 > fT2)
+		{
+			float fSwap = fT1;
+			fT1 = fT2;
+			fT2 = fSwap;
+		}
+
+		if (fT1 > fLow) fLow = fT1;
+		if (fT2 < fHigh) fHigh = fT2;
+
+		if (fLow > fHigh)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void SpawnManhacks()
@@ -970,7 +1069,7 @@ void CheckManhackHits(int iBoss, const float fEye[3], float fNow)
 			continue;
 		}
 
-		TE_SetupExplosion(fPos, g_iExplosionSprite, 1.0, 1, 0, 80, 0);
+		BloodBurst(fPos, 5, 70.0);
 		TE_SendToAll();
 
 		EmitSoundToAll(SND_HIT, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
@@ -1017,7 +1116,7 @@ void BossHit(int iBoss)
 
 // ---- Stages -------------------------------------------------------------------------------------------------------
 
-char g_sStageName[][] = { "", "The Gaze", "The Watcher Wakes", "Blind Fury" };
+char g_sStageName[][] = { "", "Bloodshot", "Hemorrhage", "Exsanguination" };
 
 // Between stages: it roars, staggers behind a shield for a few seconds, and throws everyone back.
 void NextStage(int iBoss, int iStage)
@@ -1034,12 +1133,15 @@ void NextStage(int iBoss, int iStage)
 
 	EmitSoundToAll(SND_ROAR, iBoss, SNDCHAN_VOICE, SNDLEVEL_SCREAMING);
 
-	int iColor[4] = { 255, 200, 60, 255 };
+	int iColor[4] = { 170, 0, 0, 255 };
 
 	if (iStage == 3)
 	{
-		iColor = { 255, 40, 30, 255 };
+		iColor = { 255, 0, 0, 255 };
 	}
+
+	BloodBurst(fEye, 8, 120.0);
+	EmitSoundToAll(SND_GORE, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
 
 	TE_SetupBeamRingPoint(fEye, 20.0, 900.0, g_iLaserSprite, 0, 0, 0, 0.8, 24.0, 0.0, iColor, 0, 0);
 	TE_SendToAll();
@@ -1084,7 +1186,7 @@ void Attack(int iBoss, const float fEye[3], float fNow)
 		return;
 	}
 
-	int iKinds = (g_iStage == 1) ? 3 : (g_iStage == 2 ? 5 : 6);
+	int iKinds = (g_iStage == 1) ? 3 : (g_iStage == 2 ? 6 : 7);
 	int iKind = g_iAttack++ % iKinds;
 	float fWarn = (g_iStage == 1) ? 0.8 : (g_iStage == 2 ? 0.65 : 0.5);
 
@@ -1165,7 +1267,13 @@ void Attack(int iBoss, const float fEye[3], float fNow)
 		}
 
 		// The floor laser: a beam sweeps all the way round it along the floor. Jump over it.
+		// Bloodletting: blood-laser tethers latch onto everyone it can see and drain them.
 		case 5:
+		{
+			StartLeech(iBoss, fNow);
+		}
+
+		case 6:
 		{
 			g_bSweep = true;
 			g_fSweepStart = fNow + 1.0;
@@ -1182,7 +1290,7 @@ void Attack(int iBoss, const float fEye[3], float fNow)
 
 	float fGap = (g_iStage == 1) ? 1.8 : (g_iStage == 2 ? 1.4 : 1.0);
 
-	g_fNextAttack = fNow + fGap + ((iKind == 2 || iKind == 5) ? 1.2 : 0.0);
+	g_fNextAttack = fNow + fGap + ((iKind == 2 || iKind == 5 || iKind == 6) ? 1.2 : 0.0);
 }
 
 #define SWEEP_TIME 3.0
@@ -1210,7 +1318,7 @@ void RunSweep(int iBoss, const float fEye[3], float fNow)
 
 		if (g_bDrawTick)
 		{
-			TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.22, 2.0, 2.0, 0, 1.0, { 255, 60, 200, 180 }, 0);
+			TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.22, 2.0, 2.0, 0, 1.0, { 140, 0, 0, 180 }, 0);
 			TE_SendToAll();
 		}
 		return;
@@ -1230,9 +1338,9 @@ void RunSweep(int iBoss, const float fEye[3], float fNow)
 	fEnd[0] += Cosine(DegToRad(fYaw)) * SWEEP_LENGTH;
 	fEnd[1] += Sine(DegToRad(fYaw)) * SWEEP_LENGTH;
 
-	TE_SetupBeamPoints(fEye, fStart, g_iLaserSprite, 0, 0, 0, 0.12, 6.0, 6.0, 0, 1.0, { 255, 40, 180, 255 }, 0);
+	TE_SetupBeamPoints(fEye, fStart, g_iLaserSprite, 0, 0, 0, 0.12, 6.0, 6.0, 0, 1.0, { 200, 0, 0, 255 }, 0);
 	TE_SendToAll();
-	TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.12, 10.0, 10.0, 0, 1.5, { 255, 40, 180, 255 }, 0);
+	TE_SetupBeamPoints(fStart, fEnd, g_iLaserSprite, 0, 0, 0, 0.12, 10.0, 10.0, 0, 1.5, { 200, 0, 0, 255 }, 0);
 	TE_SendToAll();
 
 	for (int i = 1; i <= MaxClients; i++)
@@ -1242,21 +1350,11 @@ void RunSweep(int iBoss, const float fEye[3], float fNow)
 			continue;
 		}
 
-		float fFeet[3];
-
-		GetClientAbsOrigin(i, fFeet);
-
-		// Only along the floor: a jump clears it.
-		if (fFeet[2] > fFloorZ + 10.0)
-		{
-			continue;
-		}
-
-		fFeet[2] = fFloorZ;
-
-		if (DistanceToSegment(fFeet, fStart, fEnd) < 28.0)
+		// Along the floor: a jump lifts you over it.
+		if (SegmentHitsPlayer(i, fStart, fEnd, 4.0))
 		{
 			SDKHooks_TakeDamage(i, iBoss, iBoss, g_cvLaserDamage.FloatValue, DMG_ENERGYBEAM);
+			Bleed(i);
 
 			g_fNextSweepHit[i] = fNow + 0.5;
 		}
@@ -1300,7 +1398,7 @@ void StartWave(int iBoss, float fNow)
 	// Its warning: it roars and the floor under it glows.
 	EmitSoundToAll(SND_ROAR, iBoss, SNDCHAN_VOICE, SNDLEVEL_SCREAMING);
 
-	TE_SetupBeamRingPoint(g_fWaveCenter, 140.0, 20.0, g_iLaserSprite, 0, 0, 0, 1.0, 12.0, 0.0, { 255, 160, 40, 255 }, 0, 0);
+	TE_SetupBeamRingPoint(g_fWaveCenter, 140.0, 20.0, g_iLaserSprite, 0, 0, 0, 1.0, 12.0, 0.0, { 150, 0, 0, 255 }, 0, 0);
 	TE_SendToAll();
 }
 
@@ -1319,10 +1417,13 @@ void RunWave(int iBoss, float fNow)
 	// Sent once: the game grows the ring itself, at the same speed.
 	if (fRadius < WAVE_SPEED * 0.11)
 	{
-		TE_SetupBeamRingPoint(g_fWaveCenter, 10.0, WAVE_REACH * 2.0, g_iLaserSprite, 0, 0, 0, WAVE_REACH / WAVE_SPEED, 18.0, 2.0, { 255, 140, 30, 255 }, 0, 0);
+		TE_SetupBeamRingPoint(g_fWaveCenter, 10.0, WAVE_REACH * 2.0, g_iLaserSprite, 0, 0, 0, WAVE_REACH / WAVE_SPEED, 18.0, 2.0, { 160, 0, 0, 255 }, 0, 0);
 		TE_SendToAll();
 
 		EmitAmbientSound(SND_SLAM, g_fWaveCenter, SOUND_FROM_WORLD, SNDLEVEL_SCREAMING);
+		EmitAmbientSound(SND_GORE, g_fWaveCenter, SOUND_FROM_WORLD, SNDLEVEL_SCREAMING);
+
+		BloodBurst(g_fWaveCenter, 10, 160.0);
 
 		for (int i = 1; i <= MaxClients; i++)
 		{
@@ -1354,6 +1455,7 @@ void RunWave(int iBoss, float fNow)
 			if (GetEntityFlags(i) & FL_ONGROUND)
 			{
 				SDKHooks_TakeDamage(i, iBoss, iBoss, g_cvSlamDamage.FloatValue, DMG_SONIC);
+				Bleed(i);
 
 				float fPush[3];
 
@@ -1401,7 +1503,7 @@ void RunRocks(int iBoss, float fNow)
 			// (Ring sizes are across, not from the middle: 180 marks the 90 it hits.)
 			if (g_bDrawTick)
 			{
-				TE_SetupBeamRingPoint(g_fRockPos[r], 180.0 + fLeft * 120.0, 180.0, g_iLaserSprite, 0, 0, 0, 0.22, 4.0, 0.0, { 255, 40, 30, 220 }, 0, 0);
+				TE_SetupBeamRingPoint(g_fRockPos[r], 180.0 + fLeft * 120.0, 180.0, g_iLaserSprite, 0, 0, 0, 0.22, 4.0, 0.0, { 150, 0, 0, 230 }, 0, 0);
 				TE_SendToAll();
 			}
 			continue;
@@ -1409,13 +1511,9 @@ void RunRocks(int iBoss, float fNow)
 
 		g_bRock[r] = false;
 
-		TE_SetupExplosion(g_fRockPos[r], g_iExplosionSprite, 2.5, 1, 0, 0, 0);
-		TE_SendToAll();
-
-		float fUp[3] = { 0.0, 0.0, 1.0 };
-
-		TE_SetupDust(g_fRockPos[r], fUp, 60.0, 1.0);
-		TE_SendToAll();
+		// A glob of blood bursts where it lands.
+		BloodBurst(g_fRockPos[r], 6, 90.0);
+		BloodDecal(g_fRockPos[r]);
 
 		EmitAmbientSound(SND_ROCK, g_fRockPos[r], SOUND_FROM_WORLD, SNDLEVEL_SCREAMING);
 
@@ -1433,8 +1531,191 @@ void RunRocks(int iBoss, float fNow)
 			if (SquareRoot(Pow(fPos[0] - g_fRockPos[r][0], 2.0) + Pow(fPos[1] - g_fRockPos[r][1], 2.0)) < 90.0 && FloatAbs(fPos[2] - g_fRockPos[r][2]) < 96.0)
 			{
 				SDKHooks_TakeDamage(i, iBoss, iBoss, g_cvRockDamage.FloatValue, DMG_CRUSH);
+				Bleed(i);
 			}
 		}
+	}
+}
+
+// ---- Blood ------------------------------------------------------------------------------------------------------
+
+// A spray of blood from a point, in all directions.
+void BloodBurst(const float fPos[3], int iCount, float fSpread)
+{
+	for (int i = 0; i < iCount; i++)
+	{
+		float fDir[3], fAt[3];
+
+		fDir[0] = GetRandomFloat(-1.0, 1.0);
+		fDir[1] = GetRandomFloat(-1.0, 1.0);
+		fDir[2] = GetRandomFloat(0.2, 1.0);
+
+		fAt = fPos;
+		fAt[0] += GetRandomFloat(-fSpread, fSpread) * 0.3;
+		fAt[1] += GetRandomFloat(-fSpread, fSpread) * 0.3;
+
+		TE_SetupBloodSprite(fAt, fDir, { 160, 0, 0, 255 }, RoundToFloor(fSpread / 10.0) + 6, g_iBloodSpray, g_iBloodDrop);
+		TE_SendToAll(i * 0.03);
+	}
+}
+
+// A blood stain on the floor under a point.
+void BloodDecal(const float fPos[3])
+{
+	float fDown[3], fHit[3];
+
+	fDown = fPos;
+	fDown[2] -= 256.0;
+
+	TR_TraceRayFilter(fPos, fDown, MASK_SOLID_BRUSHONLY, RayType_EndPoint, Filter_WorldOnly);
+
+	if (!TR_DidHit())
+	{
+		return;
+	}
+
+	TR_GetEndPosition(fHit);
+
+	TE_Start("World Decal");
+	TE_WriteVector("m_vecOrigin", fHit);
+	TE_WriteNum("m_nIndex", g_iBloodDecal[GetRandomInt(0, 3)]);
+	TE_SendToAll();
+}
+
+// A player hit: they bleed, and it burns.
+void Bleed(int iClient)
+{
+	float fPos[3];
+
+	GetClientAbsOrigin(iClient, fPos);
+	fPos[2] += 40.0;
+
+	BloodBurst(fPos, 3, 40.0);
+	BloodDecal(fPos);
+
+	EmitSoundToAll(SND_BURN, iClient, SNDCHAN_AUTO, SNDLEVEL_NORMAL);
+}
+
+void StartLeech(int iBoss, float fNow)
+{
+	g_bLeech = true;
+	g_fLeechStart = fNow + 0.8;
+	g_fNextLeechTick = g_fLeechStart;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_bLeeched[i] = true;
+	}
+
+	EmitSoundToAll(SND_LEECH, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
+}
+
+// Can the boss's eye see this player, close enough to drain them?
+bool LeechReaches(const float fEye[3], int iClient)
+{
+	float fChest[3];
+
+	GetClientAbsOrigin(iClient, fChest);
+	fChest[2] += 40.0;
+
+	if (GetVectorDistance(fEye, fChest) > LEECH_RANGE)
+	{
+		return false;
+	}
+
+	TR_TraceRayFilter(fEye, fChest, MASK_SOLID, RayType_EndPoint, Filter_NotPlayersOrBoss);
+
+	return !TR_DidHit();
+}
+
+public bool Filter_NotPlayersOrBoss(int iEntity, int iContentsMask)
+{
+	return iEntity > MaxClients && iEntity != EntRefToEntIndex(g_iBossRef) && g_alManhacks.FindValue(EntIndexToEntRef(iEntity)) == -1;
+}
+
+void RunLeech(int iBoss, const float fEye[3], float fNow)
+{
+	if (!g_bLeech)
+	{
+		return;
+	}
+
+	bool bWarning = fNow < g_fLeechStart, bTick = !bWarning && fNow >= g_fNextLeechTick;
+
+	if (bTick)
+	{
+		g_fNextLeechTick = fNow + 0.3;
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!g_bLeeched[i] || !g_bInFight[i] || !IsClientInGame(i) || !IsPlayerAlive(i))
+		{
+			g_bLeeched[i] = false;
+			continue;
+		}
+
+		// Out of its sight or reach: the tether snaps, and stays snapped for this attack.
+		if (!LeechReaches(fEye, i))
+		{
+			g_bLeeched[i] = false;
+			continue;
+		}
+
+		float fChest[3];
+
+		GetClientAbsOrigin(i, fChest);
+		fChest[2] += 40.0;
+
+		if (g_bDrawTick || bTick)
+		{
+			TE_SetupBeamPoints(fEye, fChest, g_iLaserSprite, 0, 0, 0, 0.22, bWarning ? 1.0 : 6.0, bWarning ? 1.0 : 3.0, 0, bWarning ? 0.0 : 4.0, bWarning ? { 120, 0, 0, 150 } : { 200, 0, 0, 255 }, 0);
+			TE_SendToAll();
+		}
+
+		if (bTick)
+		{
+			SDKHooks_TakeDamage(i, iBoss, iBoss, 8.0, DMG_ENERGYBEAM);
+
+			BloodBurst(fChest, 1, 30.0);
+		}
+	}
+
+	if (fNow < g_fLeechStart + LEECH_TIME)
+	{
+		return;
+	}
+
+	g_bLeech = false;
+
+	// Anyone it held the whole time feeds it: it heals a hit's worth (never back past the start of its stage).
+	bool bFed = false;
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_bLeeched[i] && g_bInFight[i] && IsClientInGame(i) && IsPlayerAlive(i))
+		{
+			bFed = true;
+		}
+	}
+
+	int iStageStart = ((g_iStage - 1) * g_iMaxHits + 2) / 3;
+
+	if (bFed && g_iHits > iStageStart)
+	{
+		g_iHits--;
+
+		EmitSoundToAll(SND_GORE, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (g_bInFight[i] && IsClientInGame(i))
+			{
+				Chat(i, "{green}%s{default} feeds on your blood and heals. Break its sight to escape the tethers!", BOSS_NAME);
+			}
+		}
+
+		ShowBossHud();
 	}
 }
 
@@ -1492,6 +1773,22 @@ void BossDefeated(int iBoss)
 
 		TE_SetupExplosion(fPos, g_iExplosionSprite, 4.0, 1, 0, 200, 0);
 		TE_SendToAll(i * 0.25);
+	}
+
+	// It bursts: blood everywhere.
+	BloodBurst(fEye, 16, 220.0);
+	EmitSoundToAll(SND_GORE, iBoss, SNDCHAN_AUTO, SNDLEVEL_SCREAMING);
+
+	for (int i = 0; i < 12; i++)
+	{
+		float fSplat[3];
+
+		fSplat = fEye;
+		fSplat[0] += GetRandomFloat(-260.0, 260.0);
+		fSplat[1] += GetRandomFloat(-260.0, 260.0);
+		fSplat[2] = g_fSpawnPos[2] + 8.0;
+
+		BloodDecal(fSplat);
 	}
 
 	EmitSoundToAll(SND_DEATH, iBoss, SNDCHAN_VOICE, SNDLEVEL_SCREAMING);
@@ -1589,6 +1886,7 @@ void EndFight()
 
 	g_bWave = false;
 	g_bSweep = false;
+	g_bLeech = false;
 	g_iBurstLeft = 0;
 
 	for (int i = 0; i < MAX_ROCKS; i++)

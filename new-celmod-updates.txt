@@ -658,3 +658,10 @@
 		 - The boss's name and health bar stay on screen: HUD text is sent reliably (it was dropped when the fight's
 		   effects filled a player's connection), and the fight's warning effects send half as much.
 		 - The camera cel is a city scanner now (freeze it where it should watch).
+		 - The boss is all blood and lasers: blood-red beams that burn (and leave blood where they land), a blood tide
+		   instead of the shockwave, blood rain instead of rocks, and it bleeds when hit and bursts when it dies. New
+		   attack, Bloodletting (stages 2 and 3): blood-laser tethers latch onto everyone it can see and drain them;
+		   break its line of sight or get away, or it feeds and heals. Its stages are Bloodshot, Hemorrhage and
+		   Exsanguination.
+		 - The boss's lasers hit what they touch: they're checked against your whole body (not just your feet and
+		   eyes), and stay deadly for as long as the beam shows.
