@@ -755,7 +755,7 @@ public Action Command_Bring(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 
-	if (!SendPlayerTo(iTarget, iClient, 0))
+	if (!SendPlayerTo(iTarget, iClient, 0, true))
 	{
 		Cel_ReplyToCommand(iClient, "There's no room next to you for {green}%N{default}.", iTarget);
 		return Plugin_Handled;
@@ -785,7 +785,7 @@ public Action Command_BringAll(int iClient, int iArgs)
 		}
 
 		// Each one a step further round the circle, so they don't all try the same spot.
-		if (SendPlayerTo(i, iClient, iSlot))
+		if (SendPlayerTo(i, iClient, iSlot, true))
 		{
 			iBrought++;
 
@@ -822,7 +822,7 @@ bool IsTeleportAdmin(int iClient)
 
 //Moves iPlayer to a free spot beside iTo, facing them. iSlot picks the spot: round iTo in rings, the first ring right
 //in front of where iTo looks. False if there's nowhere to stand.
-bool SendPlayerTo(int iPlayer, int iTo, int iSlot)
+bool SendPlayerTo(int iPlayer, int iTo, int iSlot, bool bLand = false)
 {
 	float fCenter[3], fLook[3], fMins[3] = { -16.0, -16.0, 0.0 }, fMaxs[3] = { 16.0, 16.0, 72.0 };
 
@@ -866,6 +866,12 @@ bool SendPlayerTo(int iPlayer, int iTo, int iSlot)
 		GetVectorAngles(fDir, fFace);
 		fFace[0] = 0.0;
 		fFace[2] = 0.0;
+
+		// Brought players land on their feet: flying into a dungeon or parkour area would kill them.
+		if (bLand && GetEntityMoveType(iPlayer) == MOVETYPE_NOCLIP)
+		{
+			SetEntityMoveType(iPlayer, MOVETYPE_WALK);
+		}
 
 		TeleportEntity(iPlayer, fSpot, fFace, fZero);
 

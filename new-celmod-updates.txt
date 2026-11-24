@@ -694,3 +694,4 @@
 		 - gm_bloodyconstruct_cm12: the vent keeps your gravity gun when it takes your weapons; the crowbar in the dungeon
 		   gives a crowbar to everyone who presses E on it (and stays put); the final door opens whenever someone walks up
 		   to it, after a boss reset too; and the fan winds up and down smoothly.
+		 - !bring and !bringall turn off the brought player's noclip, so they don't die if they land in a dungeon.
