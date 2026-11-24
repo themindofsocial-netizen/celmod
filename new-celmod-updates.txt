@@ -705,3 +705,6 @@
 		   form (its model).
 		 - Many more manhacks in the boss fight: two every 1.5 seconds (faster in the last stage), up to 6 at once plus one
 		   per extra player (cm_boss_manhacks, cm_boss_manhack_interval).
+		 - Blood emblem: Wide Eyes' form works on every map, and now a player-sized Wide Eyes floats where you are (you're
+		   invisible) with the Blood emblem beside it, instead of a model that couldn't animate or hold the emblem.
+		   Bloodletting heals you by what it really drains, and tells you when its target can't be hurt there.

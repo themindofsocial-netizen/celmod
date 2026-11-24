@@ -31,8 +31,9 @@
 //               demon     A tower of dark power rises where you aim (value = damage). Right click shakes nearby screens.
 //               blink     Teleports you to where you aim.
 //               boss      Wide Eyes' powers (the boss's): a blood laser (value = damage). Right click latches a
-//                         Bloodletting tether onto the nearest target in sight, draining them to heal you. While held,
-//                         you take Wide Eyes' form (its model, where the server has it).
+//                         Bloodletting tether onto the nearest target in sight, draining them to heal you by what it
+//                         takes. While held, you take Wide Eyes' form: you turn invisible and a player-sized Wide Eyes
+//                         floats where you are (the emblem still shows beside it).
 //               Passive powers:
 //               speed     Run faster. value = speed multiplier.
 //               sprint    Sprint never runs out.

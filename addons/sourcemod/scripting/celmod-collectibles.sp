@@ -304,6 +304,9 @@ int g_iBossSpray = -1;
 int g_iBossBeam = -1;
 int g_iBossDrop = -1;
 int g_iBossDecal[4];
+int g_iBossFormRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the Wide Eyes floating where they are
+RenderMode g_rmBossSaved[MAXPLAYERS + 1];
+int g_iBossSavedAlpha[MAXPLAYERS + 1];
 
 bool g_bLate;
 bool g_bDropBox[MAXENTITIES + 1];
@@ -793,6 +796,11 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
+	if (g_bBossForm[iClient])
+	{
+		SetBossForm(iClient, false);
+	}
+
 	g_bBossForm[iClient] = false;
 
 	// A map change disconnects everyone without a player_disconnect event, before OnMapEnd: a box held right then
@@ -2651,14 +2659,10 @@ void BossPowersMapStart()
 	PrecacheSound("npc/barnacle/barnacle_tongue_pull1.wav", true);
 	PrecacheSound("player/pl_burnpain1.wav", true);
 
-	// Its model is part of gm_bloodyconstruct_cm12's content: the form only where the server has it.
-	g_bBossModelOk = FileExists(BOSS_FORM_MODEL, true);
+	// Its model is on the server and the FastDL (a check for the file missed it on some maps, so there's none).
+	g_bBossModelOk = (PrecacheModel(BOSS_FORM_MODEL, true) > 0);
 
-	if (g_bBossModelOk)
-	{
-		PrecacheModel(BOSS_FORM_MODEL, true);
-		AddModelToDownloads(BOSS_FORM_MODEL);
-	}
+	AddModelToDownloads(BOSS_FORM_MODEL);
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -2666,44 +2670,98 @@ void BossPowersMapStart()
 	}
 }
 
+// Wide Eyes isn't a character model (no walking animations, no hands), so the player isn't turned into it: they go
+// invisible and a Wide Eyes the size of a player floats where they are, turning with them. Their weapon (the Blood
+// emblem in their hand) still shows, floating beside the eye.
 void SetBossForm(int iClient, bool bOn)
 {
 	g_bBossForm[iClient] = bOn;
 
-	if (!IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	int iForm = EntRefToEntIndex(g_iBossFormRef[iClient]);
+
+	if (iForm != INVALID_ENT_REFERENCE)
+	{
+		AcceptEntityInput(iForm, "Kill");
+	}
+
+	g_iBossFormRef[iClient] = INVALID_ENT_REFERENCE;
+
+	if (!IsClientInGame(iClient))
 	{
 		return;
 	}
 
-	if (bOn)
+	if (!bOn)
 	{
-		SetEntityModel(iClient, BOSS_FORM_MODEL);
-	} else if (g_iPlayerModel[iClient] >= 0 && g_iPlayerModel[iClient] < g_iPlayerModelCount) {
-		ApplyPlayerModel(iClient);
-	} else {
-		// No model of their own chosen: the game's model for them comes back.
-		char sModel[PLATFORM_MAX_PATH];
+		// Seen as before.
+		SetEntityRenderMode(iClient, g_rmBossSaved[iClient]);
 
-		GetClientInfo(iClient, "cl_playermodel", sModel, sizeof(sModel));
+		int iColor[4];
 
-		if (sModel[0] == '\0' || !IsModelPrecached(sModel))
-		{
-			strcopy(sModel, sizeof(sModel), "models/humans/group03/male_07.mdl");
-		}
-
-		SetEntityModel(iClient, sModel);
+		GetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], iColor[3]);
+		SetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], g_iBossSavedAlpha[iClient]);
+		return;
 	}
 
-	// A hat sits on the model's attachments: it goes on again on the new one.
-	if (g_iActiveHat[iClient] != -1)
+	if (!IsPlayerAlive(iClient))
 	{
-		CreateHatEntity(iClient);
+		return;
 	}
 
-	if (g_bHeldShown[iClient])
+	int iColor[4];
+
+	g_rmBossSaved[iClient] = GetEntityRenderMode(iClient);
+	GetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], iColor[3]);
+	g_iBossSavedAlpha[iClient] = iColor[3];
+
+	// Invisible by colour, not by "no draw": a no-draw player's weapons vanish too.
+	SetEntityRenderMode(iClient, RENDER_TRANSCOLOR);
+	SetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], 0);
+
+	iForm = CreateEntityByName("prop_dynamic_override");
+
+	if (iForm == -1)
 	{
-		RestoreWeapon(iClient);
+		return;
 	}
+
+	DispatchKeyValue(iForm, "model", BOSS_FORM_MODEL);
+	DispatchKeyValue(iForm, "solid", "0");
+	DispatchKeyValue(iForm, "disableshadows", "1");
+	DispatchSpawn(iForm);
+
+	// The size of a player.
+	float fMins[3], fMaxs[3], fScale = 1.0;
+
+	GetEntPropVector(iForm, Prop_Send, "m_vecMins", fMins);
+	GetEntPropVector(iForm, Prop_Send, "m_vecMaxs", fMaxs);
+
+	float fTall = fMaxs[2] - fMins[2];
+
+	if (fTall > 1.0)
+	{
+		fScale = 64.0 / fTall;
+
+		if (fScale > 4.0) fScale = 4.0;
+		if (fScale < 0.1) fScale = 0.1;
+	}
+
+	SetEntPropFloat(iForm, Prop_Send, "m_flModelScale", fScale);
+
+	// Middle of the body, turning with them.
+	float fOrigin[3], fAngles[3];
+
+	GetClientAbsOrigin(iClient, fOrigin);
+	GetClientAbsAngles(iClient, fAngles);
+
+	fOrigin[2] += 36.0 - (fMins[2] + fMaxs[2]) * 0.5 * fScale;
+
+	TeleportEntity(iForm, fOrigin, fAngles, NULL_VECTOR);
+
+	SetVariantString("!activator");
+	AcceptEntityInput(iForm, "SetParent", iClient, iForm);
+
+	g_iBossFormRef[iClient] = EntIndexToEntRef(iForm);
 }
 
 void BossBlood(const float fPos[3], int iCount)
@@ -2875,10 +2933,23 @@ public Action Timer_BloodTether(Handle hTimer, DataPack dpTether)
 	TE_SetupBeamPoints(fEye, fPos, g_iBossBeam, 0, 0, 0, 0.27, 5.0, 2.0, 0, 4.0, { 200, 0, 0, 255 }, 0);
 	TE_SendToAll();
 
+	int iBefore = GetEntProp(iTarget, Prop_Data, "m_iHealth");
+
 	SDKHooks_TakeDamage(iTarget, iClient, iClient, 6.0, DMG_ENERGYBEAM);
+
+	int iTaken = iBefore - (IsValidEntity(iTarget) ? GetEntProp(iTarget, Prop_Data, "m_iHealth") : 0);
+
+	// Nothing taken (players can't hurt each other outside deathmatch lands): it says so and lets go.
+	if (iTaken <= 0)
+	{
+		PrintHintText(iClient, "Bloodletting can't drain them here (players only hurt each other in deathmatch lands)");
+		return Plugin_Stop;
+	}
+
 	BossBlood(fPos, 1);
 
-	int iHealth = GetClientHealth(iClient) + 6, iMax = ClientMaxHealth(iClient);
+	// Healed by what it took.
+	int iHealth = GetClientHealth(iClient) + iTaken, iMax = ClientMaxHealth(iClient);
 
 	SetEntityHealth(iClient, iHealth > iMax ? iMax : iHealth);
 
@@ -3598,15 +3669,8 @@ public Action Timer_Think(Handle hTimer)
 		// Blood held: the player takes Wide Eyes' form; put away, their own model comes back.
 		bool bForm = (g_bBossModelOk && g_bHoldingGravGun[i] && iItem != -1 && !g_bInEvent[i] && StrEqual(g_Items[iItem].sPower, "boss"));
 
-		// (Checked against the model too: dying and respawning gives the player their own model back.)
-		char sNowModel[PLATFORM_MAX_PATH];
-
-		if (bForm)
-		{
-			GetClientModel(i, sNowModel, sizeof(sNowModel));
-		}
-
-		if (bForm != g_bBossForm[i] || (bForm && !StrEqual(sNowModel, BOSS_FORM_MODEL, false)))
+		// (Made again if it's gone: dying and respawning clears it.)
+		if (bForm != g_bBossForm[i] || (bForm && EntRefToEntIndex(g_iBossFormRef[i]) == INVALID_ENT_REFERENCE))
 		{
 			SetBossForm(i, bForm);
 		}
