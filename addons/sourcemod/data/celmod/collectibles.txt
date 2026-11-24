@@ -1172,6 +1172,7 @@
 	"power"			"boss"
 	"value"			"35"
 	"cooldown"		"1.2"
+	"playercolor"	"60 0 0 255"
 	"upgradesto"	"inferno"
 	"upgradecost"	"3"
 	"dropweight"	"15"
