@@ -708,3 +708,5 @@
 		 - Blood emblem: Wide Eyes' form works on every map, and now a player-sized Wide Eyes floats where you are (you're
 		   invisible) with the Blood emblem beside it, instead of a model that couldn't animate or hold the emblem.
 		   Bloodletting heals you by what it really drains, and tells you when its target can't be hurt there.
+		 - Blood emblem: no more Wide Eyes form. Held, it's frightening instead: blood drips from your hand, a dim
+		   blood-red glow pulses around you and a slow heartbeat thumps.

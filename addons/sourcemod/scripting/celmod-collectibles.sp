@@ -296,17 +296,14 @@ int g_iPlayerModelCount;
 PlayerModel g_PlayerModels[MAX_PLAYERMODELS];
 
 // The Blood emblem (power "boss"): Wide Eyes' powers. Left click a blood laser, right click a Bloodletting tether, and
-// while it's held you take its form (its model), where the server has the model.
-#define BOSS_FORM_MODEL "models/celmod/wide_eyes.mdl"
-bool g_bBossForm[MAXPLAYERS + 1];
-bool g_bBossModelOk;
+// while it's held it's frightening: it drips blood, a blood-red glow pulses around its holder and a heartbeat thumps.
+bool g_bBossForm[MAXPLAYERS + 1]; // the aura is on
+int g_iBloodTick[MAXPLAYERS + 1];
 int g_iBossSpray = -1;
 int g_iBossBeam = -1;
 int g_iBossDrop = -1;
 int g_iBossDecal[4];
-int g_iBossFormRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the Wide Eyes floating where they are
-RenderMode g_rmBossSaved[MAXPLAYERS + 1];
-int g_iBossSavedAlpha[MAXPLAYERS + 1];
+int g_iBossFormRef[MAXPLAYERS + 1] = { INVALID_ENT_REFERENCE, ... }; // the red glow around the holder
 
 bool g_bLate;
 bool g_bDropBox[MAXENTITIES + 1];
@@ -2658,11 +2655,7 @@ void BossPowersMapStart()
 	PrecacheSound("npc/strider/fire.wav", true);
 	PrecacheSound("npc/barnacle/barnacle_tongue_pull1.wav", true);
 	PrecacheSound("player/pl_burnpain1.wav", true);
-
-	// Its model is on the server and the FastDL (a check for the file missed it on some maps, so there's none).
-	g_bBossModelOk = (PrecacheModel(BOSS_FORM_MODEL, true) > 0);
-
-	AddModelToDownloads(BOSS_FORM_MODEL);
+	PrecacheSound("player/heartbeat1.wav", true);
 
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -2670,98 +2663,91 @@ void BossPowersMapStart()
 	}
 }
 
-// Wide Eyes isn't a character model (no walking animations, no hands), so the player isn't turned into it: they go
-// invisible and a Wide Eyes the size of a player floats where they are, turning with them. Their weapon (the Blood
-// emblem in their hand) still shows, floating beside the eye.
+// The Blood emblem's aura while it's held: a dim blood-red glow pulsing around the holder (drips and the heartbeat
+// come from BloodAuraTick).
 void SetBossForm(int iClient, bool bOn)
 {
 	g_bBossForm[iClient] = bOn;
 
-	int iForm = EntRefToEntIndex(g_iBossFormRef[iClient]);
+	int iLight = EntRefToEntIndex(g_iBossFormRef[iClient]);
 
-	if (iForm != INVALID_ENT_REFERENCE)
+	if (iLight != INVALID_ENT_REFERENCE)
 	{
-		AcceptEntityInput(iForm, "Kill");
+		AcceptEntityInput(iLight, "Kill");
 	}
 
 	g_iBossFormRef[iClient] = INVALID_ENT_REFERENCE;
 
-	if (!IsClientInGame(iClient))
-	{
-		return;
-	}
-
 	if (!bOn)
 	{
-		// Seen as before.
-		SetEntityRenderMode(iClient, g_rmBossSaved[iClient]);
+		if (IsClientInGame(iClient))
+		{
+			StopSound(iClient, SNDCHAN_AUTO, "player/heartbeat1.wav");
+		}
 
-		int iColor[4];
-
-		GetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], iColor[3]);
-		SetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], g_iBossSavedAlpha[iClient]);
 		return;
 	}
 
-	if (!IsPlayerAlive(iClient))
+	if (!IsClientInGame(iClient) || !IsPlayerAlive(iClient))
 	{
 		return;
 	}
 
-	int iColor[4];
+	iLight = CreateEntityByName("light_dynamic");
 
-	g_rmBossSaved[iClient] = GetEntityRenderMode(iClient);
-	GetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], iColor[3]);
-	g_iBossSavedAlpha[iClient] = iColor[3];
-
-	// Invisible by colour, not by "no draw": a no-draw player's weapons vanish too.
-	SetEntityRenderMode(iClient, RENDER_TRANSCOLOR);
-	SetEntityRenderColor(iClient, iColor[0], iColor[1], iColor[2], 0);
-
-	iForm = CreateEntityByName("prop_dynamic_override");
-
-	if (iForm == -1)
+	if (iLight == -1)
 	{
 		return;
 	}
 
-	DispatchKeyValue(iForm, "model", BOSS_FORM_MODEL);
-	DispatchKeyValue(iForm, "solid", "0");
-	DispatchKeyValue(iForm, "disableshadows", "1");
-	DispatchSpawn(iForm);
+	DispatchKeyValue(iLight, "_light", "200 0 0 255");
+	DispatchKeyValue(iLight, "brightness", "2");
+	DispatchKeyValue(iLight, "distance", "170");
+	DispatchKeyValue(iLight, "style", "2"); // a slow, strong pulse
 
-	// The size of a player.
-	float fMins[3], fMaxs[3], fScale = 1.0;
+	float fPos[3];
 
-	GetEntPropVector(iForm, Prop_Send, "m_vecMins", fMins);
-	GetEntPropVector(iForm, Prop_Send, "m_vecMaxs", fMaxs);
+	GetClientAbsOrigin(iClient, fPos);
+	fPos[2] += 40.0;
 
-	float fTall = fMaxs[2] - fMins[2];
-
-	if (fTall > 1.0)
-	{
-		fScale = 64.0 / fTall;
-
-		if (fScale > 4.0) fScale = 4.0;
-		if (fScale < 0.1) fScale = 0.1;
-	}
-
-	SetEntPropFloat(iForm, Prop_Send, "m_flModelScale", fScale);
-
-	// Middle of the body, turning with them.
-	float fOrigin[3], fAngles[3];
-
-	GetClientAbsOrigin(iClient, fOrigin);
-	GetClientAbsAngles(iClient, fAngles);
-
-	fOrigin[2] += 36.0 - (fMins[2] + fMaxs[2]) * 0.5 * fScale;
-
-	TeleportEntity(iForm, fOrigin, fAngles, NULL_VECTOR);
+	TeleportEntity(iLight, fPos, NULL_VECTOR, NULL_VECTOR);
+	DispatchSpawn(iLight);
+	AcceptEntityInput(iLight, "TurnOn");
 
 	SetVariantString("!activator");
-	AcceptEntityInput(iForm, "SetParent", iClient, iForm);
+	AcceptEntityInput(iLight, "SetParent", iClient, iLight);
 
-	g_iBossFormRef[iClient] = EntIndexToEntRef(iForm);
+	g_iBossFormRef[iClient] = EntIndexToEntRef(iLight);
+}
+
+// Every 0.2 seconds while Blood is held: blood drips from the hand, and a slow heartbeat thumps.
+void BloodAuraTick(int iClient)
+{
+	g_iBloodTick[iClient]++;
+
+	if (g_iBloodTick[iClient] % 2 == 0)
+	{
+		float fHand[3], fDown[3] = { 0.0, 0.0, -1.0 };
+		int iAttachment = LookupEntityAttachment(iClient, "anim_attachment_RH");
+
+		if (iAttachment > 0)
+		{
+			float fAngles[3];
+
+			GetEntityAttachment(iClient, iAttachment, fHand, fAngles);
+		} else {
+			GetClientEyePosition(iClient, fHand);
+			fHand[2] -= 24.0;
+		}
+
+		TE_SetupBloodSprite(fHand, fDown, { 120, 0, 0, 255 }, 4, g_iBossSpray, g_iBossDrop);
+		TE_SendToAll();
+	}
+
+	if (g_iBloodTick[iClient] % 8 == 0)
+	{
+		EmitSoundToAll("player/heartbeat1.wav", iClient, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.6);
+	}
 }
 
 void BossBlood(const float fPos[3], int iCount)
@@ -3666,13 +3652,18 @@ public Action Timer_Think(Handle hTimer)
 			g_bHoldingGravGun[i] = StrEqual(sClassname, GRAVGUN_CLASS);
 		}
 
-		// Blood held: the player takes Wide Eyes' form; put away, their own model comes back.
-		bool bForm = (g_bBossModelOk && g_bHoldingGravGun[i] && iItem != -1 && !g_bInEvent[i] && StrEqual(g_Items[iItem].sPower, "boss"));
+		// Blood held: its aura (a blood-red glow, dripping blood and a heartbeat).
+		bool bForm = (g_bHoldingGravGun[i] && iItem != -1 && !g_bInEvent[i] && StrEqual(g_Items[iItem].sPower, "boss"));
 
-		// (Made again if it's gone: dying and respawning clears it.)
+		// (The glow is made again if it's gone: dying and respawning clears it.)
 		if (bForm != g_bBossForm[i] || (bForm && EntRefToEntIndex(g_iBossFormRef[i]) == INVALID_ENT_REFERENCE))
 		{
 			SetBossForm(i, bForm);
+		}
+
+		if (bForm)
+		{
+			BloodAuraTick(i);
 		}
 
 		// Third person model: other players see the emblem in this player's hand in place of the
