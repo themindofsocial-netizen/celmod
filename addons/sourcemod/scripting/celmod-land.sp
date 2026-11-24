@@ -69,6 +69,7 @@ Land g_liLand[MAXPLAYERS+1];
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	MarkNativeAsOptional("Cel_GetGuessBoothArea");
+	CreateNative("Cel_SetFloorSkin", Native_SetFloorSkin);
 	CreateNative("Cel_ClearLand", Native_ClearLand);
 	CreateNative("Cel_CreateLand", Native_CreateLand);
 	CreateNative("Cel_DrawLandBorders", Native_DrawLandBorders);
@@ -476,6 +477,10 @@ public void OnMapStart()
 	g_iPhys = PrecacheModel("materials/sprites/physbeam.vmt");
 	
 	PrecacheLandSkins();
+	
+	//A plugin's floor (the Guess Booth's) is set again by that plugin on each map.
+	g_alSkinTiles[0].Clear();
+	g_iLandSkin[0] = 0;
 	
 	g_iSkullPixels[1] = PrecacheSkull(SKULL_COOP);
 	g_iSkullPixels[2] = PrecacheSkull(SKULL_DM);
@@ -1950,6 +1955,69 @@ void ApplyLandSkin(int iClient)
 	}
 }
 
+//Cel_SetFloorSkin(mins, maxs, skin): covers an area's floor with a land skin, drawn and kept up like a land's (the
+//Guess Booth's floor). Skin 0 removes it. Uses the spare slot 0 of the land skin lists, which no player has.
+public int Native_SetFloorSkin(Handle hPlugin, int iNumParams)
+{
+	float fMin[3], fMax[3], fStart[3], fEnd[3], fHit[3];
+	int iSkin = GetNativeCell(3);
+
+	GetNativeArray(1, fMin, 3);
+	GetNativeArray(2, fMax, 3);
+
+	bool bHad = g_alSkinTiles[0].Length > 0;
+
+	g_alSkinTiles[0].Clear();
+	g_iLandSkin[0] = (iSkin >= 1 && iSkin <= LANDSKIN_COUNT) ? iSkin : 0;
+
+	if (g_iLandSkin[0] == 0)
+	{
+		if (bHad)
+		{
+			RedrawAllLandSkins(0);
+		}
+
+		return true;
+	}
+
+	float fTile = float(g_iSkinPixels[g_iLandSkin[0]]) * LANDSKIN_DECAL_SCALE;
+
+	int iAcross = RoundToCeil((fMax[0] - fMin[0]) / fTile), iAlong = RoundToCeil((fMax[1] - fMin[1]) / fTile);
+
+	if (iAcross < 1) iAcross = 1;
+	if (iAlong < 1) iAlong = 1;
+
+	for (int x = 0; x < iAcross && x < 16; x++)
+	{
+		for (int y = 0; y < iAlong && y < 16; y++)
+		{
+			fStart[0] = SkinTileCentre(fMin[0], fMax[0], fTile, x);
+			fStart[1] = SkinTileCentre(fMin[1], fMax[1], fTile, y);
+			fStart[2] = fMax[2];
+
+			fEnd = fStart;
+			fEnd[2] = fMin[2];
+
+			Handle hTrace = TR_TraceRayFilterEx(fStart, fEnd, MASK_SOLID_BRUSHONLY, RayType_EndPoint, Filter_WorldOnlySkin);
+
+			bool bHit = TR_DidHit(hTrace) && TR_GetEntityIndex(hTrace) == 0;
+
+			TR_GetEndPosition(fHit, hTrace);
+
+			delete hTrace;
+
+			if (bHit)
+			{
+				g_alSkinTiles[0].PushArray(fHit, 3);
+			}
+		}
+	}
+
+	RedrawAllLandSkins(0);
+
+	return true;
+}
+
 public bool Filter_WorldOnlySkin(int iEntity, int iContentsMask)
 {
 	return iEntity == 0;
@@ -2025,7 +2093,8 @@ public Action Timer_SendAllLandSkins(Handle hTimer, any iUserId)
 		}
 	}
 
-	for (int i = 1; i <= MaxClients; i++)
+	//Slot 0 is a floor another plugin asked for (the Guess Booth's), the rest are players' lands.
+	for (int i = 0; i <= MaxClients; i++)
 	{
 		if (g_alSkinTiles[i].Length > 0)
 		{

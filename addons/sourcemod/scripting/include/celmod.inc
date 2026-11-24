@@ -1125,6 +1125,9 @@ native int Cel_GetTriggerLink(int iEntity, int iSlot = 0);
 
 native void Cel_SetTriggerLink(int iEntity, int iTarget);
 
+/** Covers an area's floor with a land skin (1-26), kept up like a land's; 0 removes it (celmod-land). */
+native bool Cel_SetFloorSkin(const float fMin[3], const float fMax[3], int iSkin);
+
 /** Whether an entity is a camera cel (celmod-camera). */
 native bool Cel_IsCamera(int iEntity);
 

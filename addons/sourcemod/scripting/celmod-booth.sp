@@ -19,6 +19,7 @@
 #define BOOTH_HALF 136.0
 #define DISPLAY_SIZE 38.0
 #define HOST_MODEL "models/breen.mdl"
+#define FLOOR_SKIN 18 // land skin 18, the Citadel metal floor
 #define HOST_HELLO "vo/breencast/br_welcome01.wav"
 #define HOLO_HEIGHT 60.0
 #define HOLO_SPACING 80.0
@@ -51,7 +52,6 @@ int g_iBeam = -1;
 int g_iHostRef = INVALID_ENT_REFERENCE;
 ArrayList g_alStructure; //the Combine props the booth is built from
 float g_fPostTop[4][3]; //the top of each corner post (back left, back right, front left, front right)
-float g_fHostForward; //how far back Dr. Breen stands (in front of his monitor wall)
 int g_iGlowSprite = -1;
 int g_iBoothTick;
 
@@ -59,8 +59,6 @@ int g_iBoothTick;
 char g_sStructureModels[][] =
 {
 	"models/props_combine/breenconsole.mdl",
-	"models/props_combine/combine_monitorbay.mdl",
-	"models/props_combine/breenglobe.mdl",
 	"models/props_combine/combine_fence01a.mdl",
 	"models/props_combine/combine_fence01b.mdl",
 	"models/props_combine/railing_256.mdl",
@@ -99,6 +97,7 @@ public Plugin myinfo =
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
+	MarkNativeAsOptional("Cel_SetFloorSkin");
 	MarkNativeAsOptional("Cel_AddTacticsXP");
 	
 	CreateNative("Cel_GetGuessBoothArea", Native_GetGuessBoothArea);
@@ -325,6 +324,13 @@ void RemoveBooth()
 	
 	RemoveRef(g_iHostRef);
 	RemoveStructure();
+	
+	if (GetFeatureStatus(FeatureType_Native, "Cel_SetFloorSkin") == FeatureStatus_Available)
+	{
+		float fZero[3];
+		
+		Cel_SetFloorSkin(fZero, fZero, 0);
+	}
 	
 	g_bBooth = false;
 }
@@ -567,6 +573,7 @@ void PlaceBooth(float fOrigin[3])
 	
 	BuildStructure(fOrigin);
 	PlaceHost(fOrigin);
+	SetBoothFloor(fOrigin);
 	
 	if (g_bBooth)
 	{
@@ -633,13 +640,14 @@ void PlaceHost(float fCenter[3])
 		return;
 	}
 	
-	BoothPoint(fCenter, g_fHostForward, 0.0, 0.0, fPos);
+	BoothPoint(fCenter, BOOTH_HALF - 28.0, 0.0, 0.0, fPos);
 	
 	//Facing into the booth, back toward whoever walks up.
 	fAngles[1] = g_fBoothYaw + 180.0;
 	
 	DispatchKeyValue(iHost, "model", HOST_MODEL);
 	DispatchKeyValue(iHost, "solid", "2");
+	DispatchKeyValue(iHost, "DefaultAnim", "ragdoll");
 	
 	DispatchSpawn(iHost);
 	// Named after spawning: a prop_dynamic_override renamed before it spawns loses its override.
@@ -647,19 +655,14 @@ void PlaceHost(float fCenter[3])
 	
 	TeleportEntity(iHost, fPos, fAngles, NULL_VECTOR);
 	
-	//Standing idle (the model's own idle animation, found in its files).
-	char sIdle[64];
+	//His arms held out, presenting the booth: the model's own reference pose, held still.
+	SetVariantString("ragdoll");
+	AcceptEntityInput(iHost, "SetDefaultAnimation");
 	
-	if (FindIdleSequence(HOST_MODEL, sIdle, sizeof(sIdle)))
-	{
-		PrintToServer("|CelMod| Guess Booth: Dr. Breen stands with the '%s' animation.", sIdle);
-		
-		SetVariantString(sIdle);
-		AcceptEntityInput(iHost, "SetDefaultAnimation");
-		
-		SetVariantString(sIdle);
-		AcceptEntityInput(iHost, "SetAnimation");
-	}
+	SetVariantString("ragdoll");
+	AcceptEntityInput(iHost, "SetAnimation");
+	
+	SetEntPropFloat(iHost, Prop_Send, "m_flPlaybackRate", 0.0);
 	
 	g_iHostRef = EntIndexToEntRef(iHost);
 }
@@ -672,17 +675,9 @@ void BuildStructure(float fCenter[3])
 	
 	float fPos[3];
 	
-	//Dr. Breen's monitor wall across the back, inside the booth (its back against the far edge).
-	float fFront = AddPieceFlush("models/props_combine/combine_monitorbay.mdl", fCenter, BOOTH_HALF, 0.0, g_fBoothYaw + 180.0, true, true);
-	
-	//Breen stands just in front of it, with his console in front of him, facing the players.
-	g_fHostForward = fFront - 26.0;
-	
-	float fConsole = AddPieceFlush("models/props_combine/breenconsole.mdl", fCenter, g_fHostForward - 22.0, 0.0, g_fBoothYaw + 180.0, false, true);
-	
-	//His globe beside the console.
-	BoothPoint(fCenter, (g_fHostForward + fConsole) * 0.5, BOOTH_HALF - 52.0, 0.0, fPos);
-	AddPiece("models/props_combine/breenglobe.mdl", fPos, g_fBoothYaw + 200.0, false, true);
+	//Dr. Breen's console, in front of him, facing the players.
+	BoothPoint(fCenter, BOOTH_HALF - 76.0, 0.0, 0.0, fPos);
+	AddPiece("models/props_combine/breenconsole.mdl", fPos, g_fBoothYaw + 180.0, false, true);
 	
 	//A post at each corner, with a Combine-blue light on top.
 	for (int iCorner = 0; iCorner < 4; iCorner++)
@@ -744,41 +739,31 @@ void BuildStructure(float fCenter[3])
 	AddLight(fPos);
 }
 
-//A piece with its back against a line across the booth (fBack, measured forward from the middle), centred at fRight.
-//Returns how far forward its front reaches, to line the next piece up in front of it.
-float AddPieceFlush(const char[] sModel, float fCenter[3], float fBack, float fRight, float fYaw, bool bAlong, bool bSolid)
+//The booth's floor: land skin 18 over its square (drawn by celmod-land, like a land's).
+void SetBoothFloor(float fCenter[3])
 {
-	float fPos[3];
-	
-	BoothPoint(fCenter, fBack, fRight, 0.0, fPos);
-	
-	int iPiece = AddPiece(sModel, fPos, fYaw, bAlong, bSolid);
-	
-	if (iPiece == -1)
+	if (GetFeatureStatus(FeatureType_Native, "Cel_SetFloorSkin") != FeatureStatus_Available)
 	{
-		return fBack - 16.0;
+		return;
 	}
 	
-	//Its depth along the booth: measured from its size and the way it's turned.
-	float fMins[3], fMaxs[3], fAngles[3];
+	float fMin[3] = { 999999.0, 999999.0, 0.0 }, fMax[3] = { -999999.0, -999999.0, 0.0 }, fCorner[3];
 	
-	GetEntPropVector(iPiece, Prop_Send, "m_vecMins", fMins);
-	GetEntPropVector(iPiece, Prop_Send, "m_vecMaxs", fMaxs);
-	GetEntPropVector(iPiece, Prop_Data, "m_angAbsRotation", fAngles);
+	for (int iCorner = 0; iCorner < 4; iCorner++)
+	{
+		BoothPoint(fCenter, (iCorner < 2) ? BOOTH_HALF : -BOOTH_HALF, (iCorner % 2 == 0) ? -BOOTH_HALF : BOOTH_HALF, 0.0, fCorner);
+		
+		for (int a = 0; a < 2; a++)
+		{
+			if (fCorner[a] < fMin[a]) fMin[a] = fCorner[a];
+			if (fCorner[a] > fMax[a]) fMax[a] = fCorner[a];
+		}
+	}
 	
-	float fTurn = DegToRad(fAngles[1] - g_fBoothYaw);
-	float fHalfDepth = (FloatAbs(Cosine(fTurn)) * (fMaxs[0] - fMins[0]) + FloatAbs(Sine(fTurn)) * (fMaxs[1] - fMins[1])) * 0.5;
+	fMin[2] = fCenter[2] - 64.0;
+	fMax[2] = fCenter[2] + 48.0;
 	
-	//Pulled in so its back sits on the line instead of its middle.
-	float fOrigin[3], fShift[3];
-	
-	GetEntPropVector(iPiece, Prop_Data, "m_vecAbsOrigin", fOrigin);
-	BoothPoint(view_as<float>({ 0.0, 0.0, 0.0 }), -fHalfDepth, 0.0, 0.0, fShift);
-	AddVectors(fOrigin, fShift, fOrigin);
-	
-	TeleportEntity(iPiece, fOrigin, NULL_VECTOR, NULL_VECTOR);
-	
-	return fBack - fHalfDepth * 2.0;
+	Cel_SetFloorSkin(fMin, fMax, FLOOR_SKIN);
 }
 
 //A Combine-blue glow (a light seen from anywhere around it).

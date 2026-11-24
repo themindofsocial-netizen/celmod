@@ -687,3 +687,5 @@
 		   over glowing rings.
 		 - Emblems no longer show their rarity (Common, Rare, Legendary...) in game or on the website. Drops still use
 		   it behind the scenes for how often each emblem turns up.
+		 - The Guess Booth's floor is land skin 18 (Citadel metal), Dr. Breen holds his arms out over the booth, and the
+		   booth is back to its Combine posts, railings, console and emitters (with its lights) after a build that broke.
