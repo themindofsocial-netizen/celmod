@@ -710,3 +710,5 @@
 		   Bloodletting heals you by what it really drains, and tells you when its target can't be hurt there.
 		 - Blood emblem: no more Wide Eyes form. Held, it's frightening instead: blood drips from your hand, a dim
 		   blood-red glow pulses around you, a slow heartbeat thumps, and you turn a very dark red.
+		 - Admin commands (!adminmode, !goto, !bring, !bringall, !punfreeze, !punkick and the rest) no longer show in the
+		   command feed.

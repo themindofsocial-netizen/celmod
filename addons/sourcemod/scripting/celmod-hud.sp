@@ -18,7 +18,8 @@ Handle g_hHudTimer;
 int g_iClientColor[MAXPLAYERS + 1][4];
 bool g_bHudColorChosen[MAXPLAYERS + 1]; //!hudcolor: a colour the player picked (kept, never re-randomized)
 
-char g_sLabel[MAXENTITIES + 1][48]; //!label: a name given to a button or cel, shown when it's looked at
+char g_sLabel[MAXENTITIES + 1][48];
+StringMap g_smAdminCommands; //!commands that need admin rights: never shown in the command feed //!label: a name given to a button or cel, shown when it's looked at
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
@@ -64,6 +65,8 @@ public void OnPluginStart()
 
 public void OnMapStart()
 {
+	FindAdminCommands();
+
 	g_hCommandTimer = CreateTimer(0.1, Timer_CommandHUD, _, TIMER_REPEAT);
 	g_hHudTimer = CreateTimer(0.1, Timer_HUD, _, TIMER_REPEAT);
 	
@@ -274,6 +277,19 @@ bool IsPrivateCommand(const char[] sText)
 	if (iSpace != -1)
 	{
 		sName[iSpace] = '\0';
+	}
+	
+	//Admin commands (adminmode, goto, bring, punfreeze, punkick...) aren't shown either.
+	int iDummy;
+	
+	for (int i = 0; sName[i] != '\0'; i++)
+	{
+		sName[i] = CharToLower(sName[i]);
+	}
+	
+	if (g_smAdminCommands != null && g_smAdminCommands.GetValue(sName, iDummy))
+	{
+		return true;
 	}
 	
 	for (int i = 0; i < sizeof(sPrivate); i++)
@@ -1041,4 +1057,71 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 	{
 		kvSave.GetString("x_label", g_sLabel[iEntity], sizeof(g_sLabel[]), "");
 	}
+}
+
+
+//Every command that needs admin rights, by the name players type after ! (v_bring and sm_bring are both !bring).
+//A few that check their rights inside the command are named here as well.
+void FindAdminCommands()
+{
+	static const char sKnown[][] =
+	{
+		"adminmode", "zonebypass", "goto", "bring", "bringall", "punfreeze", "pungag", "punungag", "punkick", "punban",
+		"givemoney", "takemoney", "setbalance", "disputes", "powerbooth", "setguessbooth", "delguessbooth", "givemodel"
+	};
+	
+	if (g_smAdminCommands == null)
+	{
+		g_smAdminCommands = new StringMap();
+	}
+	
+	g_smAdminCommands.Clear();
+	
+	for (int i = 0; i < sizeof(sKnown); i++)
+	{
+		g_smAdminCommands.SetValue(sKnown[i], true);
+	}
+	
+	char sName[64];
+	CommandIterator ciCommands = new CommandIterator();
+	
+	while (ciCommands.Next())
+	{
+		if (ciCommands.AdminFlags == 0)
+		{
+			continue;
+		}
+		
+		ciCommands.GetName(sName, sizeof(sName));
+		
+		int iStart = 0;
+		
+		if (strncmp(sName, "v_", 2, false) == 0)
+		{
+			iStart = 2;
+		} else if (strncmp(sName, "sm_", 3, false) == 0) {
+			iStart = 3;
+			
+			//SourceMod's sm_freeze is an admin command, but !freeze is CelMod's (player) v_freeze: kept.
+			char sCel[64];
+			
+			FormatEx(sCel, sizeof(sCel), "v_%s", sName[3]);
+			
+			if (CommandExists(sCel))
+			{
+				continue;
+			}
+		} else {
+			continue;
+		}
+		
+		for (int i = iStart; sName[i] != '\0'; i++)
+		{
+			sName[i] = CharToLower(sName[i]);
+		}
+		
+		g_smAdminCommands.SetValue(sName[iStart], true);
+	}
+	
+	delete ciCommands;
 }
