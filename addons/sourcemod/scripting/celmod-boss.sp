@@ -54,6 +54,10 @@ bool g_bMapReady;
 bool g_bFight;
 bool g_bDoorLocked;
 bool g_bDoorClosing;
+float g_fFinalDoorSpot[3]; // where the final door's trigger was
+bool g_bFinalDoorSpot;
+float g_fNextCrowbar[MAXPLAYERS + 1];
+float g_fNextDoorCheck;
 int g_iFightId; // which fight a door timer belongs to // startboss was touched: finaldoor_block closes for good a few seconds later
 int g_iStage; // 1, 2 or 3, like a Dark Souls boss's phases
 float g_fShieldUntil; // between stages it can't be hurt
@@ -385,6 +389,39 @@ public Action Timer_SetupArena(Handle hTimer)
 	if (iTrigger != -1)
 	{
 		AcceptEntityInput(iTrigger, "Enable");
+
+		// Its trigger fires once and is then deleted by the game: the plugin opens the door itself whenever someone
+		// walks up to where it was (after a reset too).
+		GetEntPropVector(iTrigger, Prop_Data, "m_vecAbsOrigin", g_fFinalDoorSpot);
+		g_bFinalDoorSpot = true;
+	} else if (FindPoint("func_door", "finaldoor", g_fFinalDoorSpot)) {
+		g_bFinalDoorSpot = true;
+	}
+
+	// The fan puzzle: the map steps the fan's speed with values meant for a fan that speeds up and slows down by
+	// itself (func_rotating's Acc/Dcc flag), which this fan doesn't have, so it jumped to full speed and stopped
+	// dead. With the flag it winds up and down smoothly.
+	int iFan = FindByName("func_rotating", "fan");
+
+	if (iFan != -1)
+	{
+		SetEntProp(iFan, Prop_Data, "m_spawnflags", GetEntProp(iFan, Prop_Data, "m_spawnflags") | 16);
+	}
+
+	// The crowbar in the dungeon (a crowbar model, not a weapon): pressing E on it gives a crowbar, and it stays for
+	// everyone else.
+	int iCrowbar = FindByName("prop_physics_override", "crowbarspawn");
+
+	if (iCrowbar == -1)
+	{
+		iCrowbar = FindByName("prop_physics", "crowbarspawn");
+	}
+
+	if (iCrowbar != -1)
+	{
+		AcceptEntityInput(iCrowbar, "DisableMotion");
+		SetEntProp(iCrowbar, Prop_Data, "m_spawnflags", GetEntProp(iCrowbar, Prop_Data, "m_spawnflags") | 256);
+		SDKHook(iCrowbar, SDKHook_UsePost, Hook_CrowbarUse);
 	}
 
 	int iBlock = FindByName("func_door", "finaldoor_block");
@@ -445,13 +482,19 @@ public void Output_StartTouch(const char[] sOutput, int iCaller, int iActivator,
 
 	if (StrEqual(sName, "removeweps"))
 	{
-		StripWeapons(iActivator);
+		// Everything but the gravity gun.
+		StripWeapons(iActivator, true);
+
+		if (GetPlayerWeaponByClass(iActivator, "weapon_physcannon") == -1)
+		{
+			GivePlayerItem(iActivator, "weapon_physcannon");
+		}
 
 		if (GetGameTime() >= g_fNextStrip[iActivator])
 		{
 			g_fNextStrip[iActivator] = GetGameTime() + 10.0;
 
-			Chat(iActivator, "Something in the vent pulled your weapons away.");
+			Chat(iActivator, "Something in the vent pulled your weapons away. You still have your gravity gun.");
 		}
 	} else if (StrEqual(sName, "finaldoor_trig")) {
 		int iDoor = FindByName("func_door", "finaldoor");
@@ -593,6 +636,36 @@ public Action Timer_LockDoor(Handle hTimer, any iFightId)
 
 public Action Timer_Think(Handle hTimer)
 {
+	// The final door opens for anyone who walks up to it.
+	if (g_bFinalDoorSpot && GetGameTime() >= g_fNextDoorCheck)
+	{
+		g_fNextDoorCheck = GetGameTime() + 0.5;
+
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (!IsClientInGame(i) || !IsPlayerAlive(i))
+			{
+				continue;
+			}
+
+			float fPos[3];
+
+			GetClientAbsOrigin(i, fPos);
+
+			if (GetVectorDistance(fPos, g_fFinalDoorSpot) < 140.0)
+			{
+				int iDoor = FindByName("func_door", "finaldoor");
+
+				if (iDoor != -1)
+				{
+					AcceptEntityInput(iDoor, "Open");
+				}
+
+				break;
+			}
+		}
+	}
+
 	if (!g_bFight)
 	{
 		return Plugin_Continue;
@@ -2038,6 +2111,27 @@ public void Event_PlayerDeath(Event eEvent, const char[] sName, bool bDontBroadc
 	}
 }
 
+public void Hook_CrowbarUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	if (iActivator < 1 || iActivator > MaxClients || !IsClientInGame(iActivator) || !IsPlayerAlive(iActivator) || GetGameTime() < g_fNextCrowbar[iActivator])
+	{
+		return;
+	}
+
+	g_fNextCrowbar[iActivator] = GetGameTime() + 1.0;
+
+	if (GetPlayerWeaponByClass(iActivator, "weapon_crowbar") != -1)
+	{
+		PrintHintText(iActivator, "You already have a crowbar");
+		return;
+	}
+
+	GivePlayerItem(iActivator, "weapon_crowbar");
+	FakeClientCommand(iActivator, "use weapon_crowbar");
+
+	Chat(iActivator, "You took a {green}crowbar{default}. You'll need it to get through.");
+}
+
 // Only the gravity gun in the arena.
 public Action Hook_WeaponCanUse(int iClient, int iWeapon)
 {
@@ -2088,9 +2182,10 @@ void ShowBossHud()
 	}
 }
 
-void StripWeapons(int iClient)
+void StripWeapons(int iClient, bool bKeepGravGun = false)
 {
 	int iSize = GetEntPropArraySize(iClient, Prop_Send, "m_hMyWeapons");
+	char sClass[32];
 
 	for (int i = 0; i < iSize; i++)
 	{
@@ -2098,6 +2193,11 @@ void StripWeapons(int iClient)
 
 		if (iWeapon > MaxClients && IsValidEntity(iWeapon))
 		{
+			if (bKeepGravGun && GetEntityClassname(iWeapon, sClass, sizeof(sClass)) && StrEqual(sClass, "weapon_physcannon"))
+			{
+				continue;
+			}
+
 			RemovePlayerItem(iClient, iWeapon);
 			AcceptEntityInput(iWeapon, "Kill");
 		}

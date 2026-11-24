@@ -691,3 +691,6 @@
 		   booth is back to its Combine posts, railings, console and emitters (with its lights) after a build that broke.
 		 - Build boxes (box1, box2, box3) no longer show a missing texture on their first skin: the Phoenix Storm
 		   materials are sent to players (and come with the release).
+		 - gm_bloodyconstruct_cm12: the vent keeps your gravity gun when it takes your weapons; the crowbar in the dungeon
+		   gives a crowbar to everyone who presses E on it (and stays put); the final door opens whenever someone walks up
+		   to it, after a boss reset too; and the fan winds up and down smoothly.
