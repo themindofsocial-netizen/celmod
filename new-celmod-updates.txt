@@ -720,3 +720,5 @@
 		   Anyone standing in your land or looking at it sees the price in the bottom-right HUD and buys a copy with
 		   !buybuild <savename>; it goes into their saves and you keep yours (less a 10% fee). Emblems, hats and celweps
 		   never come with a build, and shop props you do not own are left out when loading.
+		 - Cyclers (dolls) can be locked: !lock freezes their animation so shooting or pressing E on them no longer changes
+		   or pauses it. !unlock frees them. The lock is kept in saved builds.

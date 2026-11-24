@@ -13,6 +13,7 @@ bool g_bCopyRainbow[MAXPLAYERS + 1];
 bool g_bMotion[MAXENTITIES + 1];
 bool g_bLate;
 bool g_bLocked[MAXENTITIES + 1];
+bool g_bCyclerHooked[MAXENTITIES + 1]; //a cycler's shots and +use are watched, so a locked one keeps its animation
 bool g_bHasCopyEntity[MAXPLAYERS + 1];
 bool g_bIsFading[MAXENTITIES + 1];
 bool g_bRainbow[MAXENTITIES + 1];
@@ -276,6 +277,8 @@ public void OnEntityDestroyed(int iEntity)
 	if (iEntity > 0 && iEntity <= MAXENTITIES)
 	{
 		g_bPerm[iEntity] = false;
+		g_bLocked[iEntity] = false;
+		g_bCyclerHooked[iEntity] = false;
 
 		StopSpin(iEntity);
 	}
@@ -1191,7 +1194,7 @@ public Action Command_Lock(int iClient, int iArgs)
 	
 	if (Cel_CanEdit(iClient, iProp))
 	{
-		if(Cel_CheckEntityType(iProp, "cycler") || Cel_CheckEntityType(iProp, "dynamic") || Cel_CheckEntityType(iProp, "ladder") || 
+		if(Cel_CheckEntityType(iProp, "dynamic") || Cel_CheckEntityType(iProp, "ladder") || 
 			Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "cleer") || Cel_CheckEntityType(iProp, "bit") || Cel_CheckEntityType(iProp, "unknown"))
 		{
 			Cel_ReplyToCommand(iClient, "%t", "CannotLock");
@@ -1628,6 +1631,36 @@ public void Cel_OnSaveEntity(int iEntity, KeyValues kvSave)
 	{
 		kvSave.SetVector("x_spin", g_fSpin[iEntity]);
 	}
+	
+	if (iEntity <= MAXENTITIES && g_bLocked[iEntity] && Cel_IsCycler(iEntity))
+	{
+		kvSave.SetNum("x_animlock", 1);
+	}
+}
+
+public Action Hook_CyclerDamage(int iVictim, int &iAttacker, int &iInflictor, float &fDamage, int &iDamageType)
+{
+	if (iVictim <= MAXENTITIES && g_bLocked[iVictim])
+	{
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
+}
+
+public Action Hook_CyclerUse(int iEntity, int iActivator, int iCaller, UseType utType, float fValue)
+{
+	if (iEntity <= MAXENTITIES && g_bLocked[iEntity])
+	{
+		if (iActivator >= 1 && iActivator <= MaxClients)
+		{
+			PrintCenterText(iActivator, "This doll's animation is locked.");
+		}
+		
+		return Plugin_Handled;
+	}
+	
+	return Plugin_Continue;
 }
 
 public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
@@ -1639,6 +1672,11 @@ public void Cel_OnLoadEntity(int iClient, int iEntity, KeyValues kvSave)
 	if (iEntity > 0 && iEntity <= MAXENTITIES && (fSpin[0] != 0.0 || fSpin[1] != 0.0 || fSpin[2] != 0.0))
 	{
 		StartSpin(iEntity, fSpin);
+	}
+	
+	if (kvSave.GetNum("x_animlock", 0) == 1 && Cel_IsCycler(iEntity))
+	{
+		Cel_LockEntity(iEntity, true);
 	}
 }
 
@@ -2353,7 +2391,7 @@ public Action Command_Unlock(int iClient, int iArgs)
 	
 	if (Cel_CanEdit(iClient, iProp))
 	{
-		if(Cel_CheckEntityType(iProp, "cycler") || Cel_CheckEntityType(iProp, "dynamic") || Cel_CheckEntityType(iProp, "ladder") || 
+		if(Cel_CheckEntityType(iProp, "dynamic") || Cel_CheckEntityType(iProp, "ladder") || 
 			Cel_CheckEntityType(iProp, "physics") || Cel_CheckEntityType(iProp, "cleer") || Cel_CheckEntityType(iProp, "bit") || Cel_CheckEntityType(iProp, "unknown"))
 		{
 			Cel_ReplyToCommandEntity(iClient, iProp, "%t", "CannotUnlock");
@@ -3469,6 +3507,15 @@ public int Native_LockEntity(Handle hPlugin, int iNumParams)
 		{
 			AcceptEntityInput(iEntity, bLock ? "lock" : "unlock");
 		}
+	}
+	
+	//A locked cycler (doll) can't be shot to a new animation, or paused / played with +use.
+	if (bLock && iEntity <= MAXENTITIES && !g_bCyclerHooked[iEntity] && Cel_IsCycler(iEntity))
+	{
+		g_bCyclerHooked[iEntity] = true;
+		
+		SDKHook(iEntity, SDKHook_OnTakeDamage, Hook_CyclerDamage);
+		SDKHook(iEntity, SDKHook_Use, Hook_CyclerUse);
 	}
 	
 	g_bLocked[iEntity] = bLock;
