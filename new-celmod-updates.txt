@@ -685,3 +685,5 @@
 		   glowing Combine-blue lights top the corner posts, spotlights shine on the holograms, a pulsing blue light fills
 		   the booth, lightning arcs between the front posts, a pulse ripples across the floor, and the holograms bob
 		   over glowing rings.
+		 - Emblems no longer show their rarity (Common, Rare, Legendary...) in game or on the website. Drops still use
+		   it behind the scenes for how often each emblem turns up.

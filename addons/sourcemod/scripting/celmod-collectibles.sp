@@ -7684,8 +7684,8 @@ public int Native_GetDropBoxEmblem(Handle hPlugin, int iNumParams)
 
 	char sLabel[96];
 
-	// The HUD shows the box's emblem with its rarity, e.g. "Fire (Common)".
-	FormatEx(sLabel, sizeof(sLabel), "%s (%s)", g_Items[g_iEntItem[iEntity]].sName, g_sRarityName[g_Items[g_iEntItem[iEntity]].iRarity]);
+	// The HUD shows the box's emblem by name (rarity is only used behind the scenes, for drop odds).
+	strcopy(sLabel, sizeof(sLabel), g_Items[g_iEntItem[iEntity]].sName);
 
 	SetNativeString(2, sLabel, GetNativeCell(3));
 
@@ -12231,7 +12231,7 @@ void BuildBankList(int iClient, ArrayList alInfo, ArrayList alNames)
 
 			if (iKind == KIND_EMBLEM)
 			{
-				FormatEx(sName, sizeof(sName), "%s emblem (%s)", g_Items[i].sName, g_sRarityName[g_Items[i].iRarity]);
+				FormatEx(sName, sizeof(sName), "%s emblem", g_Items[i].sName);
 			} else {
 				FormatEx(sName, sizeof(sName), "%s (celwep)", g_Items[i].sName);
 			}
@@ -12355,7 +12355,7 @@ void ShowBankCollectibles(int iClient, int iKind)
 
 		if (iKind == KIND_EMBLEM)
 		{
-			FormatEx(sLine, sizeof(sLine), "%s (%s)%s", g_Items[i].sName, g_sRarityName[g_Items[i].iRarity], iOwned > 1 ? " x" : "");
+			FormatEx(sLine, sizeof(sLine), "%s%s", g_Items[i].sName, iOwned > 1 ? " x" : "");
 
 			if (iOwned > 1)
 			{
