@@ -79,7 +79,8 @@ char g_sEventAllowed[][] =
 	"v_owner", "v_commandlist", "v_cmds", "v_commands", "v_updates", "v_updatelist", "v_switch", "v_guess", "v_bid", "v_auction", 
 	"v_playermodel", "v_playermodels", "v_buymodel", "v_zones", "v_celmusic", "v_block", "v_unblock", "v_speed", "v_motd", "v_rules", "v_pass", "v_tacticlvl", "v_tacticxp", "v_spawnpads", "v_presents",
 	"v_npckills", "v_soundlist", "v_sounds", "v_pmute", "v_punmute", "v_reportbug", "v_hudcolor", "v_pungag", "v_punungag", "v_punkick", "v_punban",
-	"v_timeleft", "v_colorlist", "v_colors", "v_effectlist", "v_effects", "v_proplist", "v_props", "v_feed"
+	"v_timeleft", "v_colorlist", "v_colors", "v_effectlist", "v_effects", "v_proplist", "v_props", "v_feed",
+	"v_market", "v_buildmarket", "v_buybuild", "v_sellbuild", "v_unsellbuild", "v_saves", "v_builds"
 };
 
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)

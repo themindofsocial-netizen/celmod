@@ -17,6 +17,16 @@ Handle g_hOnSaveEntity;
 
 int g_iSaveOverride[MAXPLAYERS + 1];
 
+//The build market: players sell copies of their saved builds. A listing is a copy of the save, taken when it is
+//listed, kept in data/celmod/buildmarket/<id>.txt; the listings themselves, and what each seller has earned while
+//offline, are in data/celmod/buildmarket/market.txt. Selling never takes the build away from its seller.
+char g_sMarketDir[PLATFORM_MAX_PATH];
+char g_sMarketFile[PLATFORM_MAX_PATH];
+ConVar g_cvMarketMax;
+ConVar g_cvMarketMaxPrice;
+ConVar g_cvMarketFee;
+int g_iLockedSkipped[MAXPLAYERS + 1]; //shop props left out of the build that is loading, because the player doesn't own them
+
 public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr_max)
 {
 	CreateNative("Cel_LoadBuild", Native_LoadBuild);
@@ -59,6 +69,26 @@ public void OnPluginStart()
 	RegConsoleCmd("v_save", Command_SaveBuild, "|CelMod| Saves all server entities that are in your land.");
 	RegConsoleCmd("v_saves", Command_ListSaves, "|CelMod| Lists your saved builds.");
 	RegConsoleCmd("v_builds", Command_ListSaves, "|CelMod| Lists your saved builds.");
+	
+	RegConsoleCmd("v_sellbuild", Command_SellBuild, "|CelMod| Puts a copy of one of your saved builds on the build market: !sellbuild <save> <price>.");
+	RegConsoleCmd("v_unsellbuild", Command_UnsellBuild, "|CelMod| Takes one of your builds off the build market: !unsellbuild <save or listing number>.");
+	RegConsoleCmd("v_buildmarket", Command_BuildMarket, "|CelMod| Shows the builds other players are selling.");
+	RegConsoleCmd("v_market", Command_BuildMarket, "|CelMod| Shows the builds other players are selling.");
+	RegConsoleCmd("v_buybuild", Command_BuyBuild, "|CelMod| Buys a copy of a build from the build market: !buybuild <listing number>.");
+	RegAdminCmd("v_delbuildlisting", Command_DelListing, ADMFLAG_SLAY, "|CelMod| Removes any listing from the build market: v_delbuildlisting <listing number>.");
+	
+	g_cvMarketMax = CreateConVar("cm_buildmarket_max", "5", "Most builds one player can have on the build market at once.", _, true, 1.0);
+	g_cvMarketMaxPrice = CreateConVar("cm_buildmarket_maxprice", "1000000", "Highest price a build can be sold for on the build market.", _, true, 1.0);
+	g_cvMarketFee = CreateConVar("cm_buildmarket_fee", "10", "Percent of each build market sale kept by the server (taken out of what the seller gets).", _, true, 0.0, true, 100.0);
+	
+	BuildPath(Path_SM, g_sMarketDir, sizeof(g_sMarketDir), "data/celmod/buildmarket");
+	
+	if (!DirExists(g_sMarketDir))
+	{
+		CreateDirectory(g_sMarketDir, 511);
+	}
+	
+	BuildPath(Path_SM, g_sMarketFile, sizeof(g_sMarketFile), "data/celmod/buildmarket/market.txt");
 }
 
 public void OnClientPutInServer(int iClient)
@@ -297,6 +327,7 @@ public int Native_LoadBuild(Handle hPlugin, int iNumParams)
 		}
 		
 		g_bLoading[iClient] = true;
+		g_iLockedSkipped[iClient] = 0;
 		
 		DataPack dpLoad = new DataPack();
 		
@@ -342,6 +373,20 @@ void LoadBuildEntry(int iClient, KeyValues kvLoadBuild)
 	kvLoadBuild.GetString("model", sBuffer[2], sizeof(sBuffer[]));
 	
 	EntityType etType = view_as<EntityType>(kvLoadBuild.GetNum("entitytype"));
+	
+	//A shop prop the player hasn't bought is left out (a build bought on the build market can hold some).
+	kvLoadBuild.GetString("propname", sPropName, sizeof(sPropName));
+	
+	if (sPropName[0] != '\0')
+	{
+		char sSpawn[PLATFORM_MAX_PATH];
+		
+		if (Cel_CheckShopProp(iClient, sPropName, sSpawn, sizeof(sSpawn)) == -1)
+		{
+			g_iLockedSkipped[iClient]++;
+			return;
+		}
+	}
 	
 	//Entity types that cannot be loaded are skipped instead of re-using the previous entity.
 	iProp = -1;
@@ -499,6 +544,11 @@ public void Frame_LoadBatch(DataPack dpLoad)
 			g_bLoading[iClient] = false;
 			
 			Cel_ReplyToCommand(iClient, "%t", "LoadedBuild", sSaveName);
+			
+			if (g_iLockedSkipped[iClient] > 0)
+			{
+				Cel_PrintToChat(iClient, "{green}%d{default} shop prop%s in this build %s left out: you don't own %s. Buy %s in the shop to load %s.", g_iLockedSkipped[iClient], g_iLockedSkipped[iClient] == 1 ? "" : "s", g_iLockedSkipped[iClient] == 1 ? "was" : "were", g_iLockedSkipped[iClient] == 1 ? "it" : "them", g_iLockedSkipped[iClient] == 1 ? "it" : "them", g_iLockedSkipped[iClient] == 1 ? "it" : "them");
+			}
 			
 			Call_StartForward(g_hOnBuildLoaded);
 			Call_PushCell(iClient);
@@ -912,4 +962,680 @@ public Action Command_ListSaves(int iClient, int iArgs)
 public void OnClientDisconnect(int iClient)
 {
 	g_bLoading[iClient] = false;
+}
+
+//Build market:
+
+//Only letters, digits, - and _ : a save name goes into a file path.
+bool IsSafeSaveName(const char[] sName)
+{
+	int iLength = strlen(sName);
+	
+	if (iLength < 1 || iLength > 48)
+	{
+		return false;
+	}
+	
+	for (int i = 0; i < iLength; i++)
+	{
+		if (!IsCharAlpha(sName[i]) && !IsCharNumeric(sName[i]) && sName[i] != '-' && sName[i] != '_')
+		{
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+KeyValues OpenMarket()
+{
+	KeyValues kvMarket = new KeyValues("BuildMarket");
+	
+	kvMarket.ImportFromFile(g_sMarketFile);
+	
+	return kvMarket;
+}
+
+void SaveMarket(KeyValues kvMarket)
+{
+	kvMarket.Rewind();
+	
+	if (!kvMarket.ExportToFile(g_sMarketFile))
+	{
+		LogError("|CelMod| Could not save the build market to %s.", g_sMarketFile);
+	}
+}
+
+//Counts the entities in a save file, and copies it to sTo (when given) without any emblems, hats or celweps:
+//those belong to their owner and never come with a build.
+int CopyBuild(const char[] sFrom, const char[] sTo, const char[] sBoughtFrom = "")
+{
+	KeyValues kvBuild = new KeyValues("Vault");
+	
+	if (!kvBuild.ImportFromFile(sFrom))
+	{
+		delete kvBuild;
+		return -1;
+	}
+	
+	int iEntities = 0;
+	
+	if (kvBuild.GotoFirstSubKey())
+	{
+		bool bMore = true;
+		
+		while (bMore)
+		{
+			EntityType etType = view_as<EntityType>(kvBuild.GetNum("entitytype"));
+			
+			if (etType == ENTTYPE_EMBLEM || etType == ENTTYPE_HAT || etType == ENTTYPE_CELWEP)
+			{
+				bMore = (kvBuild.DeleteThis() == 1);
+			} else {
+				iEntities++;
+				bMore = kvBuild.GotoNextKey();
+			}
+		}
+		
+		kvBuild.Rewind();
+	}
+	
+	if (sTo[0] != '\0')
+	{
+		//Marks a bought copy, so it can't be put straight back on the market by its buyer.
+		if (sBoughtFrom[0] != '\0')
+		{
+			kvBuild.SetString("boughtfrom", sBoughtFrom);
+		}
+		
+		if (!kvBuild.ExportToFile(sTo))
+		{
+			iEntities = -1;
+		}
+	}
+	
+	delete kvBuild;
+	
+	return iEntities;
+}
+
+public Action Command_SellBuild(int iClient, int iArgs)
+{
+	char sAuthID[64], sSave[64], sPrice[16], sFile[PLATFORM_MAX_PATH], sCopy[PLATFORM_MAX_PATH], sId[16], sSeller[64];
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 2)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]sellbuild{default} <save> <price>. Buyers get a copy; you keep your build and get paid every time someone buys it.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sSave, sizeof(sSave));
+	GetCmdArg(2, sPrice, sizeof(sPrice));
+	
+	int iPrice = StringToInt(sPrice);
+	
+	if (!IsSafeSaveName(sSave))
+	{
+		Cel_ReplyToCommand(iClient, "There is no save called {green}%s{default}. See your saves with {green}[tag]saves{default}.", sSave);
+		return Plugin_Handled;
+	}
+	
+	if (iPrice < 1 || iPrice > g_cvMarketMaxPrice.IntValue)
+	{
+		Cel_ReplyToCommand(iClient, "The price has to be between {green}1{default} and {green}%d CL{default}.", g_cvMarketMaxPrice.IntValue);
+		return Plugin_Handled;
+	}
+	
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Your saves can't be found until Steam has confirmed who you are. Try again in a moment.");
+		return Plugin_Handled;
+	}
+	
+	BuildPath(Path_SM, sFile, sizeof(sFile), "data/celmod/users/%s/saves/%s.txt", sAuthID, sSave);
+	
+	if (!FileExists(sFile))
+	{
+		Cel_ReplyToCommand(iClient, "There is no save called {green}%s{default}. See your saves with {green}[tag]saves{default}.", sSave);
+		return Plugin_Handled;
+	}
+	
+	KeyValues kvCheck = new KeyValues("Vault");
+	
+	kvCheck.ImportFromFile(sFile);
+	kvCheck.GetString("boughtfrom", sSeller, sizeof(sSeller), "");
+	
+	delete kvCheck;
+	
+	if (sSeller[0] != '\0')
+	{
+		Cel_ReplyToCommand(iClient, "{green}%s{default} is a build you bought from {green}%s{default}: only builds you made can be sold.", sSave, sSeller);
+		return Plugin_Handled;
+	}
+	
+	KeyValues kvMarket = OpenMarket();
+	
+	//Already listed: the price is changed, and the listing gets a fresh copy of the save.
+	int iMine = 0, iExisting = 0, iNext = kvMarket.GetNum("nextid", 1);
+	
+	if (kvMarket.JumpToKey("Listings") && kvMarket.GotoFirstSubKey())
+	{
+		do
+		{
+			kvMarket.GetString("seller", sSeller, sizeof(sSeller));
+			
+			if (StrEqual(sSeller, sAuthID))
+			{
+				iMine++;
+				
+				kvMarket.GetString("save", sCopy, sizeof(sCopy));
+				
+				if (StrEqual(sCopy, sSave, false))
+				{
+					kvMarket.GetSectionName(sId, sizeof(sId));
+					iExisting = StringToInt(sId);
+				}
+			}
+		}
+		while (kvMarket.GotoNextKey());
+	}
+	
+	kvMarket.Rewind();
+	
+	if (iExisting == 0 && iMine >= g_cvMarketMax.IntValue)
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "You already have {green}%d{default} builds on the market, the most you can. Take one off with {green}[tag]unsellbuild <save>{default}.", iMine);
+		return Plugin_Handled;
+	}
+	
+	int iId = iExisting != 0 ? iExisting : iNext;
+	
+	BuildPath(Path_SM, sCopy, sizeof(sCopy), "data/celmod/buildmarket/%d.txt", iId);
+	
+	int iEntities = CopyBuild(sFile, sCopy);
+	
+	if (iEntities < 1)
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, iEntities == 0 ? "{green}%s{default} has nothing in it that can be sold (emblems, hats and celweps never come with a build)." : "{green}%s{default} could not be copied to the market. Try again later.", sSave);
+		return Plugin_Handled;
+	}
+	
+	if (iExisting == 0)
+	{
+		kvMarket.SetNum("nextid", iNext + 1);
+	}
+	
+	IntToString(iId, sId, sizeof(sId));
+	
+	kvMarket.JumpToKey("Listings", true);
+	kvMarket.JumpToKey(sId, true);
+	
+	GetClientName(iClient, sSeller, sizeof(sSeller));
+	
+	kvMarket.SetString("seller", sAuthID);
+	kvMarket.SetString("sellername", sSeller);
+	kvMarket.SetString("save", sSave);
+	kvMarket.SetNum("price", iPrice);
+	kvMarket.SetNum("entities", iEntities);
+	
+	if (iExisting == 0)
+	{
+		kvMarket.SetNum("listed", GetTime());
+		kvMarket.SetNum("sold", 0);
+	}
+	
+	SaveMarket(kvMarket);
+	delete kvMarket;
+	
+	if (iExisting != 0)
+	{
+		Cel_ReplyToCommand(iClient, "Your build {green}%s{default} (listing {green}#%d{default}) is now {green}%d CL{default}, with its latest save.", sSave, iId, iPrice);
+	} else {
+		Cel_PrintToChatAll("{green}%N{default} put the build {green}%s{default} ({green}%d{default} entities) on the market for {green}%d CL{default}. Type {green}[tag]market{default} to see it.", iClient, sSave, iEntities, iPrice);
+	}
+	
+	return Plugin_Handled;
+}
+
+//Finds a listing by its number, or by one of the client's own save names. Leaves kvMarket on it.
+bool FindListing(KeyValues kvMarket, const char[] sWhat, const char[] sAuthID, char[] sId, int iIdLength)
+{
+	char sSave[64], sSeller[64];
+	
+	kvMarket.Rewind();
+	
+	if (!kvMarket.JumpToKey("Listings"))
+	{
+		return false;
+	}
+	
+	char sNumber[16];
+	strcopy(sNumber, sizeof(sNumber), sWhat);
+	
+	if (sNumber[0] == '#')
+	{
+		strcopy(sNumber, sizeof(sNumber), sWhat[1]);
+	}
+	
+	if (StringToInt(sNumber) > 0 && kvMarket.JumpToKey(sNumber))
+	{
+		strcopy(sId, iIdLength, sNumber);
+		return true;
+	}
+	
+	if (sAuthID[0] != '\0' && kvMarket.GotoFirstSubKey())
+	{
+		do
+		{
+			kvMarket.GetString("seller", sSeller, sizeof(sSeller));
+			kvMarket.GetString("save", sSave, sizeof(sSave));
+			
+			if (StrEqual(sSeller, sAuthID) && StrEqual(sSave, sWhat, false))
+			{
+				kvMarket.GetSectionName(sId, iIdLength);
+				return true;
+			}
+		}
+		while (kvMarket.GotoNextKey());
+	}
+	
+	return false;
+}
+
+void RemoveListing(KeyValues kvMarket, const char[] sId)
+{
+	char sCopy[PLATFORM_MAX_PATH];
+	
+	kvMarket.Rewind();
+	
+	if (kvMarket.JumpToKey("Listings") && kvMarket.JumpToKey(sId))
+	{
+		kvMarket.DeleteThis();
+	}
+	
+	BuildPath(Path_SM, sCopy, sizeof(sCopy), "data/celmod/buildmarket/%s.txt", sId);
+	
+	if (FileExists(sCopy))
+	{
+		DeleteFile(sCopy);
+	}
+	
+	SaveMarket(kvMarket);
+}
+
+public Action Command_UnsellBuild(int iClient, int iArgs)
+{
+	char sAuthID[64], sWhat[64], sId[16], sSeller[64], sSave[64];
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]unsellbuild{default} <save or listing number>.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sWhat, sizeof(sWhat));
+	
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Steam hasn't confirmed who you are yet. Try again in a moment.");
+		return Plugin_Handled;
+	}
+	
+	KeyValues kvMarket = OpenMarket();
+	
+	if (!FindListing(kvMarket, sWhat, sAuthID, sId, sizeof(sId)))
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "You don't have a build called {green}%s{default} on the market.", sWhat);
+		return Plugin_Handled;
+	}
+	
+	kvMarket.GetString("seller", sSeller, sizeof(sSeller));
+	kvMarket.GetString("save", sSave, sizeof(sSave));
+	
+	if (!StrEqual(sSeller, sAuthID))
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "Listing {green}#%s{default} isn't yours.", sId);
+		return Plugin_Handled;
+	}
+	
+	RemoveListing(kvMarket, sId);
+	delete kvMarket;
+	
+	Cel_ReplyToCommand(iClient, "{green}%s{default} is off the market. Everyone who bought it keeps their copy.", sSave);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_DelListing(int iClient, int iArgs)
+{
+	char sWhat[16], sId[16], sSave[64], sSeller[64];
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]delbuildlisting{default} <listing number>.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sWhat, sizeof(sWhat));
+	
+	KeyValues kvMarket = OpenMarket();
+	
+	if (!FindListing(kvMarket, sWhat, "", sId, sizeof(sId)))
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "There is no listing {green}#%s{default}.", sWhat);
+		return Plugin_Handled;
+	}
+	
+	kvMarket.GetString("save", sSave, sizeof(sSave));
+	kvMarket.GetString("sellername", sSeller, sizeof(sSeller));
+	
+	RemoveListing(kvMarket, sId);
+	delete kvMarket;
+	
+	Cel_ReplyToCommand(iClient, "Removed listing {green}#%s{default} ({green}%s{default} by {green}%s{default}).", sId, sSave, sSeller);
+	
+	return Plugin_Handled;
+}
+
+public Action Command_BuildMarket(int iClient, int iArgs)
+{
+	char sId[16], sSave[64], sSeller[64], sLine[128];
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	KeyValues kvMarket = OpenMarket();
+	
+	Menu mMarket = new Menu(Menu_Market);
+	
+	mMarket.SetTitle("Build Market\nBuy a copy of another player's build.\nIt goes into your saves: !load it in your land.\n ");
+	
+	if (kvMarket.JumpToKey("Listings") && kvMarket.GotoFirstSubKey())
+	{
+		do
+		{
+			kvMarket.GetSectionName(sId, sizeof(sId));
+			kvMarket.GetString("save", sSave, sizeof(sSave));
+			kvMarket.GetString("sellername", sSeller, sizeof(sSeller));
+			
+			Format(sLine, sizeof(sLine), "#%s %s by %s - %d CL (%d entities, %d sold)", sId, sSave, sSeller, kvMarket.GetNum("price"), kvMarket.GetNum("entities"), kvMarket.GetNum("sold"));
+			
+			mMarket.AddItem(sId, sLine);
+			PrintToConsole(iClient, "%s", sLine);
+		}
+		while (kvMarket.GotoNextKey());
+	}
+	
+	delete kvMarket;
+	
+	if (mMarket.ItemCount == 0)
+	{
+		delete mMarket;
+		Cel_ReplyToCommand(iClient, "Nobody is selling a build right now. Sell one of yours with {green}[tag]sellbuild <save> <price>{default}.");
+		return Plugin_Handled;
+	}
+	
+	mMarket.Display(iClient, MENU_TIME_FOREVER);
+	
+	return Plugin_Handled;
+}
+
+public int Menu_Market(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_Select)
+	{
+		char sId[16], sSave[64], sSeller[64], sLine[128];
+		
+		mMenu.GetItem(iItem, sId, sizeof(sId));
+		
+		KeyValues kvMarket = OpenMarket();
+		
+		if (!FindListing(kvMarket, sId, "", sId, sizeof(sId)))
+		{
+			delete kvMarket;
+			Cel_PrintToChat(iClient, "That build is no longer on the market.");
+			return 0;
+		}
+		
+		kvMarket.GetString("save", sSave, sizeof(sSave));
+		kvMarket.GetString("sellername", sSeller, sizeof(sSeller));
+		
+		Menu mConfirm = new Menu(Menu_MarketConfirm);
+		
+		mConfirm.SetTitle("%s by %s\n%d entities, sold %d time%s\nPrice: %d CL (you have %d CL)\n ", sSave, sSeller, kvMarket.GetNum("entities"), kvMarket.GetNum("sold"), kvMarket.GetNum("sold") == 1 ? "" : "s", kvMarket.GetNum("price"), Cel_GetClientBalance(iClient));
+		
+		Format(sLine, sizeof(sLine), "Buy it for %d CL", kvMarket.GetNum("price"));
+		
+		mConfirm.AddItem(sId, sLine);
+		mConfirm.AddItem("", "Back to the market");
+		
+		delete kvMarket;
+		
+		mConfirm.Display(iClient, MENU_TIME_FOREVER);
+	} else if (maAction == MenuAction_End) {
+		delete mMenu;
+	}
+	
+	return 0;
+}
+
+public int Menu_MarketConfirm(Menu mMenu, MenuAction maAction, int iClient, int iItem)
+{
+	if (maAction == MenuAction_Select)
+	{
+		char sId[16];
+		
+		mMenu.GetItem(iItem, sId, sizeof(sId));
+		
+		if (sId[0] == '\0')
+		{
+			FakeClientCommand(iClient, "v_buildmarket");
+		} else {
+			BuyBuild(iClient, sId);
+		}
+	} else if (maAction == MenuAction_End) {
+		delete mMenu;
+	}
+	
+	return 0;
+}
+
+public Action Command_BuyBuild(int iClient, int iArgs)
+{
+	char sId[16];
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Handled;
+	}
+	
+	if (iArgs < 1)
+	{
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]buybuild{default} <listing number>. See what's for sale with {green}[tag]market{default}.");
+		return Plugin_Handled;
+	}
+	
+	GetCmdArg(1, sId, sizeof(sId));
+	
+	BuyBuild(iClient, sId);
+	
+	return Plugin_Handled;
+}
+
+void BuyBuild(int iClient, const char[] sWhat)
+{
+	char sAuthID[64], sId[16], sSave[64], sSeller[64], sSellerName[64], sCopy[PLATFORM_MAX_PATH], sTo[PLATFORM_MAX_PATH], sName[64];
+	
+	if (!Cel_PrepareSaveFolder(iClient, sAuthID, sizeof(sAuthID)))
+	{
+		Cel_ReplyToCommand(iClient, "Steam hasn't confirmed who you are yet. Try again in a moment.");
+		return;
+	}
+	
+	KeyValues kvMarket = OpenMarket();
+	
+	if (!FindListing(kvMarket, sWhat, "", sId, sizeof(sId)))
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "There is no listing {green}#%s{default} on the market. See what's for sale with {green}[tag]market{default}.", sWhat);
+		return;
+	}
+	
+	kvMarket.GetString("seller", sSeller, sizeof(sSeller));
+	kvMarket.GetString("sellername", sSellerName, sizeof(sSellerName));
+	kvMarket.GetString("save", sSave, sizeof(sSave));
+	
+	int iPrice = kvMarket.GetNum("price");
+	
+	if (StrEqual(sSeller, sAuthID))
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "That's your own build.");
+		return;
+	}
+	
+	if (kvMarket.JumpToKey("buyers") && kvMarket.GetNum(sAuthID, 0) == 1)
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "You already bought {green}%s{default}. It's in your saves.", sSave);
+		return;
+	}
+	
+	kvMarket.Rewind();
+	FindListing(kvMarket, sId, "", sId, sizeof(sId));
+	
+	if (Cel_GetClientBalance(iClient) < iPrice)
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "{green}%s{default} costs {green}%d CL{default}; you have {green}%d CL{default}.", sSave, iPrice, Cel_GetClientBalance(iClient));
+		return;
+	}
+	
+	//Into the buyer's saves under the build's name, or name_2, name_3... if they already have a save called that.
+	strcopy(sName, sizeof(sName), sSave);
+	BuildPath(Path_SM, sTo, sizeof(sTo), "data/celmod/users/%s/saves/%s.txt", sAuthID, sName);
+	
+	for (int n = 2; FileExists(sTo) && n < 100; n++)
+	{
+		Format(sName, sizeof(sName), "%s_%d", sSave, n);
+		BuildPath(Path_SM, sTo, sizeof(sTo), "data/celmod/users/%s/saves/%s.txt", sAuthID, sName);
+	}
+	
+	BuildPath(Path_SM, sCopy, sizeof(sCopy), "data/celmod/buildmarket/%s.txt", sId);
+	
+	if (FileExists(sTo) || CopyBuild(sCopy, sTo, sSellerName) < 0)
+	{
+		delete kvMarket;
+		Cel_ReplyToCommand(iClient, "The build couldn't be copied to your saves. Nothing was paid.");
+		return;
+	}
+	
+	Cel_SubFromClientBalance(iClient, iPrice);
+	
+	kvMarket.SetNum("sold", kvMarket.GetNum("sold") + 1);
+	kvMarket.JumpToKey("buyers", true);
+	kvMarket.SetNum(sAuthID, 1);
+	
+	//The seller's share, less the market's fee: paid now if they're here, or the next time they join.
+	int iEarned = iPrice - (iPrice * g_cvMarketFee.IntValue) / 100;
+	int iSeller = FindClientByAuth(sSeller);
+	
+	if (iSeller > 0)
+	{
+		Cel_AddToClientBalance(iSeller, iEarned);
+		Cel_PrintToChat(iSeller, "{green}%N{default} bought your build {green}%s{default}. You got {green}%d CL{default}.", iClient, sSave, iEarned);
+	} else if (iEarned > 0) {
+		kvMarket.Rewind();
+		kvMarket.JumpToKey("Earnings", true);
+		kvMarket.SetNum(sSeller, kvMarket.GetNum(sSeller, 0) + iEarned);
+	}
+	
+	SaveMarket(kvMarket);
+	delete kvMarket;
+	
+	Cel_ReplyToCommand(iClient, "You bought {green}%s{default} by {green}%s{default} for {green}%d CL{default}. It's saved as {green}%s{default}: type {green}[tag]load %s{default} in your land.", sSave, sSellerName, iPrice, sName, sName);
+}
+
+int FindClientByAuth(const char[] sAuthID)
+{
+	char sOther[64];
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i))
+		{
+			Cel_GetAuthID(i, sOther, sizeof(sOther));
+			
+			if (StrEqual(sOther, sAuthID))
+			{
+				return i;
+			}
+		}
+	}
+	
+	return 0;
+}
+
+//Builds sold while the seller was away are paid once their balance has loaded.
+public void OnClientPostAdminCheck(int iClient)
+{
+	if (!IsFakeClient(iClient))
+	{
+		CreateTimer(5.0, Timer_PayEarnings, GetClientUserId(iClient), TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
+
+public Action Timer_PayEarnings(Handle hTimer, int iUserId)
+{
+	char sAuthID[64];
+	int iClient = GetClientOfUserId(iUserId);
+	
+	if (iClient < 1 || !IsClientInGame(iClient))
+	{
+		return Plugin_Stop;
+	}
+	
+	Cel_GetAuthID(iClient, sAuthID, sizeof(sAuthID));
+	
+	if (sAuthID[0] == '\0')
+	{
+		return Plugin_Stop;
+	}
+	
+	KeyValues kvMarket = OpenMarket();
+	
+	if (kvMarket.JumpToKey("Earnings"))
+	{
+		int iEarned = kvMarket.GetNum(sAuthID, 0);
+		
+		if (iEarned > 0)
+		{
+			kvMarket.DeleteKey(sAuthID);
+			SaveMarket(kvMarket);
+			
+			Cel_AddToClientBalance(iClient, iEarned);
+			Cel_PrintToChat(iClient, "Your builds sold on the market while you were away: you got {green}%d CL{default}.", iEarned);
+		}
+	}
+	
+	delete kvMarket;
+	
+	return Plugin_Stop;
 }

@@ -716,3 +716,7 @@
 		   shown, and naming any of the three props wins Cleers and a bit of experience. One guess per map.
 		 - A right guess at the Guess Booth makes Dr. Kleiner cheer while the props spin up, rise and vanish in a flash; three
 		   new props fade in for the next guess. Still one guess per player per map.
+		 - Build market: !sellbuild <save> <price> puts a copy of a saved build up for sale (you keep yours, up to 5
+		   listings), !market lists them, !buybuild <number> buys a copy into your saves. Sellers are paid on every sale, less
+		   a 10% fee, even while offline. Emblems, hats and celweps never come with a build, shop props you do not own are
+		   left out when loading, and a bought build cannot be resold. !unsellbuild takes one off the market.
