@@ -681,3 +681,7 @@
 		 - Most Generous on the website counts props and cels handed over with !give too, not just wrapped presents
 		   (trades don't count).
 		 - !timeleft (and the color, effect and prop lists, and !feed) work inside event areas (dungeons, parkour).
+		 - The Guess Booth got a makeover: Dr. Breen stands in front of his monitor wall with his console and globe,
+		   glowing Combine-blue lights top the corner posts, spotlights shine on the holograms, a pulsing blue light fills
+		   the booth, lightning arcs between the front posts, a pulse ripples across the floor, and the holograms bob
+		   over glowing rings.

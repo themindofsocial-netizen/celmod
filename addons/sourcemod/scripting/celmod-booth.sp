@@ -50,12 +50,17 @@ int g_iAuctionRef = INVALID_ENT_REFERENCE;
 int g_iBeam = -1;
 int g_iHostRef = INVALID_ENT_REFERENCE;
 ArrayList g_alStructure; //the Combine props the booth is built from
+float g_fPostTop[4][3]; //the top of each corner post (back left, back right, front left, front right)
+float g_fHostForward; //how far back Dr. Breen stands (in front of his monitor wall)
+int g_iGlowSprite = -1;
+int g_iBoothTick;
 
 //The stock Half-Life 2 props the booth is built from.
 char g_sStructureModels[][] =
 {
 	"models/props_combine/breenconsole.mdl",
-	"models/props_combine/combine_barricade_tall01a.mdl",
+	"models/props_combine/combine_monitorbay.mdl",
+	"models/props_combine/breenglobe.mdl",
 	"models/props_combine/combine_fence01a.mdl",
 	"models/props_combine/combine_fence01b.mdl",
 	"models/props_combine/railing_256.mdl",
@@ -139,6 +144,11 @@ public void OnMapStart()
 	{
 		PrecacheModel(g_sStructureModels[i], true);
 	}
+	
+	g_iGlowSprite = PrecacheModel("sprites/glow01.vmt", true);
+	PrecacheModel("sprites/light_glow02_add.vmt", true);
+	PrecacheSound("ambient/energy/zap5.wav", true);
+	PrecacheSound("ambient/energy/zap6.wav", true);
 	
 	g_iHostRef = INVALID_ENT_REFERENCE;
 	
@@ -555,8 +565,8 @@ void PlaceBooth(float fOrigin[3])
 	g_fCenter = fOrigin;
 	g_bBooth = (alAliases.Length >= 3);
 	
-	PlaceHost(fOrigin);
 	BuildStructure(fOrigin);
+	PlaceHost(fOrigin);
 	
 	if (g_bBooth)
 	{
@@ -623,7 +633,7 @@ void PlaceHost(float fCenter[3])
 		return;
 	}
 	
-	BoothPoint(fCenter, BOOTH_HALF - 28.0, 0.0, 0.0, fPos);
+	BoothPoint(fCenter, g_fHostForward, 0.0, 0.0, fPos);
 	
 	//Facing into the booth, back toward whoever walks up.
 	fAngles[1] = g_fBoothYaw + 180.0;
@@ -662,22 +672,47 @@ void BuildStructure(float fCenter[3])
 	
 	float fPos[3];
 	
-	//Dr. Breen's console, in front of him, facing the players.
-	BoothPoint(fCenter, BOOTH_HALF - 76.0, 0.0, 0.0, fPos);
-	AddPiece("models/props_combine/breenconsole.mdl", fPos, g_fBoothYaw + 180.0, false, true);
+	//Dr. Breen's monitor wall across the back, inside the booth (its back against the far edge).
+	float fFront = AddPieceFlush("models/props_combine/combine_monitorbay.mdl", fCenter, BOOTH_HALF, 0.0, g_fBoothYaw + 180.0, true, true);
 	
-	//The back wall behind him, across the far edge.
-	BoothPoint(fCenter, BOOTH_HALF + 8.0, 0.0, 0.0, fPos);
-	AddPiece("models/props_combine/combine_barricade_tall01a.mdl", fPos, g_fBoothYaw + 90.0, true, true);
+	//Breen stands just in front of it, with his console in front of him, facing the players.
+	g_fHostForward = fFront - 26.0;
 	
-	//A post at each corner.
+	float fConsole = AddPieceFlush("models/props_combine/breenconsole.mdl", fCenter, g_fHostForward - 22.0, 0.0, g_fBoothYaw + 180.0, false, true);
+	
+	//His globe beside the console.
+	BoothPoint(fCenter, (g_fHostForward + fConsole) * 0.5, BOOTH_HALF - 52.0, 0.0, fPos);
+	AddPiece("models/props_combine/breenglobe.mdl", fPos, g_fBoothYaw + 200.0, false, true);
+	
+	//A post at each corner, with a Combine-blue light on top.
 	for (int iCorner = 0; iCorner < 4; iCorner++)
 	{
 		float fForward = (iCorner < 2) ? BOOTH_HALF : -BOOTH_HALF;
 		float fRight = (iCorner % 2 == 0) ? -BOOTH_HALF : BOOTH_HALF;
 		
 		BoothPoint(fCenter, fForward, fRight, 0.0, fPos);
-		AddPiece((iCorner % 2 == 0) ? "models/props_combine/combine_fence01a.mdl" : "models/props_combine/combine_fence01b.mdl", fPos, g_fBoothYaw + 90.0, false, true);
+		
+		int iPost = AddPiece((iCorner % 2 == 0) ? "models/props_combine/combine_fence01a.mdl" : "models/props_combine/combine_fence01b.mdl", fPos, g_fBoothYaw + 90.0, false, true);
+		
+		float fTop = 128.0;
+		
+		if (iPost != -1)
+		{
+			float fMaxs[3], fMins[3];
+			
+			GetEntPropVector(iPost, Prop_Send, "m_vecMaxs", fMaxs);
+			GetEntPropVector(iPost, Prop_Send, "m_vecMins", fMins);
+			
+			if (fMaxs[2] - fMins[2] > 8.0)
+			{
+				fTop = fMaxs[2] - fMins[2];
+			}
+		}
+		
+		g_fPostTop[iCorner] = fPos;
+		g_fPostTop[iCorner][2] += fTop + 4.0;
+		
+		AddGlow(g_fPostTop[iCorner], 0.55);
 	}
 	
 	//Railings along the two sides; the front stays open.
@@ -693,10 +728,140 @@ void BuildStructure(float fCenter[3])
 		BoothPoint(fCenter, 0.0, (i - 1) * HOLO_SPACING, 0.0, fPos);
 		AddPiece("models/props_combine/combine_emitter01.mdl", fPos, g_fBoothYaw + 180.0, false, false);
 	}
+	
+	//Spotlights from the back posts onto the holograms.
+	float fTarget[3];
+	
+	BoothPoint(fCenter, 0.0, 0.0, HOLO_HEIGHT, fTarget);
+	
+	for (int iCorner = 0; iCorner < 2; iCorner++)
+	{
+		AddSpotlight(g_fPostTop[iCorner], fTarget);
+	}
+	
+	//A slow-pulsing blue light over the booth.
+	BoothPoint(fCenter, 0.0, 0.0, 150.0, fPos);
+	AddLight(fPos);
+}
+
+//A piece with its back against a line across the booth (fBack, measured forward from the middle), centred at fRight.
+//Returns how far forward its front reaches, to line the next piece up in front of it.
+float AddPieceFlush(const char[] sModel, float fCenter[3], float fBack, float fRight, float fYaw, bool bAlong, bool bSolid)
+{
+	float fPos[3];
+	
+	BoothPoint(fCenter, fBack, fRight, 0.0, fPos);
+	
+	int iPiece = AddPiece(sModel, fPos, fYaw, bAlong, bSolid);
+	
+	if (iPiece == -1)
+	{
+		return fBack - 16.0;
+	}
+	
+	//Its depth along the booth: measured from its size and the way it's turned.
+	float fMins[3], fMaxs[3], fAngles[3];
+	
+	GetEntPropVector(iPiece, Prop_Send, "m_vecMins", fMins);
+	GetEntPropVector(iPiece, Prop_Send, "m_vecMaxs", fMaxs);
+	GetEntPropVector(iPiece, Prop_Data, "m_angAbsRotation", fAngles);
+	
+	float fTurn = DegToRad(fAngles[1] - g_fBoothYaw);
+	float fHalfDepth = (FloatAbs(Cosine(fTurn)) * (fMaxs[0] - fMins[0]) + FloatAbs(Sine(fTurn)) * (fMaxs[1] - fMins[1])) * 0.5;
+	
+	//Pulled in so its back sits on the line instead of its middle.
+	float fOrigin[3], fShift[3];
+	
+	GetEntPropVector(iPiece, Prop_Data, "m_vecAbsOrigin", fOrigin);
+	BoothPoint(view_as<float>({ 0.0, 0.0, 0.0 }), -fHalfDepth, 0.0, 0.0, fShift);
+	AddVectors(fOrigin, fShift, fOrigin);
+	
+	TeleportEntity(iPiece, fOrigin, NULL_VECTOR, NULL_VECTOR);
+	
+	return fBack - fHalfDepth * 2.0;
+}
+
+//A Combine-blue glow (a light seen from anywhere around it).
+void AddGlow(const float fPos[3], float fScale)
+{
+	int iGlow = CreateEntityByName("env_sprite");
+	
+	if (iGlow == -1)
+	{
+		return;
+	}
+	
+	DispatchKeyValue(iGlow, "model", "sprites/light_glow02_add.vmt");
+	DispatchKeyValue(iGlow, "rendermode", "9");
+	DispatchKeyValue(iGlow, "rendercolor", "40 150 255");
+	DispatchKeyValue(iGlow, "renderamt", "230");
+	DispatchKeyValueFloat(iGlow, "scale", fScale);
+	DispatchKeyValue(iGlow, "spawnflags", "1");
+	DispatchKeyValue(iGlow, "GlowProxySize", "4");
+	
+	TeleportEntity(iGlow, fPos, NULL_VECTOR, NULL_VECTOR);
+	DispatchSpawn(iGlow);
+	AcceptEntityInput(iGlow, "ShowSprite");
+	
+	g_alStructure.Push(EntIndexToEntRef(iGlow));
+}
+
+//A visible beam of light from fFrom onto fTo.
+void AddSpotlight(const float fFrom[3], const float fTo[3])
+{
+	int iSpot = CreateEntityByName("point_spotlight");
+	
+	if (iSpot == -1)
+	{
+		return;
+	}
+	
+	float fDir[3], fAngles[3];
+	
+	SubtractVectors(fTo, fFrom, fDir);
+	GetVectorAngles(fDir, fAngles);
+	
+	char sLength[16];
+	
+	FormatEx(sLength, sizeof(sLength), "%.0f", GetVectorLength(fDir) + 24.0);
+	
+	DispatchKeyValue(iSpot, "spotlightlength", sLength);
+	DispatchKeyValue(iSpot, "spotlightwidth", "28");
+	DispatchKeyValue(iSpot, "rendercolor", "40 150 255");
+	DispatchKeyValue(iSpot, "renderamt", "160");
+	DispatchKeyValue(iSpot, "spawnflags", "3"); // on from the start, no dynamic light
+	
+	TeleportEntity(iSpot, fFrom, fAngles, NULL_VECTOR);
+	DispatchSpawn(iSpot);
+	AcceptEntityInput(iSpot, "LightOn");
+	
+	g_alStructure.Push(EntIndexToEntRef(iSpot));
+}
+
+//A blue light over the booth that slowly pulses (light style 11), lighting the booth and whoever stands in it.
+void AddLight(const float fPos[3])
+{
+	int iLight = CreateEntityByName("light_dynamic");
+	
+	if (iLight == -1)
+	{
+		return;
+	}
+	
+	DispatchKeyValue(iLight, "_light", "40 140 255 255");
+	DispatchKeyValue(iLight, "brightness", "4");
+	DispatchKeyValue(iLight, "distance", "380");
+	DispatchKeyValue(iLight, "style", "11");
+	
+	TeleportEntity(iLight, fPos, NULL_VECTOR, NULL_VECTOR);
+	DispatchSpawn(iLight);
+	AcceptEntityInput(iLight, "TurnOn");
+	
+	g_alStructure.Push(EntIndexToEntRef(iLight));
 }
 
 //One piece of the frame, its bottom on the floor at fPos. bAlong: its long side runs along fYaw.
-void AddPiece(const char[] sModel, const float fPos[3], float fYaw, bool bAlong, bool bSolid)
+int AddPiece(const char[] sModel, const float fPos[3], float fYaw, bool bAlong, bool bSolid)
 {
 	if (g_alStructure == null)
 	{
@@ -707,7 +872,7 @@ void AddPiece(const char[] sModel, const float fPos[3], float fYaw, bool bAlong,
 	
 	if (iPiece == -1)
 	{
-		return;
+		return -1;
 	}
 	
 	DispatchKeyValue(iPiece, "model", sModel);
@@ -716,7 +881,7 @@ void AddPiece(const char[] sModel, const float fPos[3], float fYaw, bool bAlong,
 	
 	if (!DispatchSpawn(iPiece))
 	{
-		return;
+		return -1;
 	}
 	
 	DispatchKeyValue(iPiece, "classname", "cel_booth_frame");
@@ -747,6 +912,8 @@ void AddPiece(const char[] sModel, const float fPos[3], float fYaw, bool bAlong,
 	TeleportEntity(iPiece, fOrigin, fAngles, NULL_VECTOR);
 	
 	g_alStructure.Push(EntIndexToEntRef(iPiece));
+	
+	return iPiece;
 }
 
 void RemoveStructure()
@@ -999,6 +1166,12 @@ public Action Timer_Spin(Handle hTimer)
 		fOrigin[1] = g_fSpinCenter[iEntity][1] - (fX * fSin + fY * fCos);
 		fOrigin[2] = g_fSpinCenter[iEntity][2] - g_fSpinOffset[iEntity][2];
 		
+		//The holograms bob gently as they turn, each a little out of step.
+		if (i < 3)
+		{
+			fOrigin[2] += Sine(GetGameTime() * 1.8 + float(i) * 2.1) * 4.0;
+		}
+		
 		TeleportEntity(iEntity, fOrigin, fAngles, NULL_VECTOR);
 	}
 	
@@ -1047,6 +1220,42 @@ public Action Timer_Booth(Handle hTimer)
 		
 		TE_SetupBeamPoints(fBase, fTop, g_iBeam, 0, 0, 0, 1.05, 2.0, 24.0, 0, 0.0, iHolo, 0);
 		TE_SendToAll();
+		
+		//A glowing ring under each hologram, over its emitter.
+		TE_SetupBeamRingPoint(fBase, 44.0, 52.0, g_iBeam, 0, 0, 0, 1.05, 3.0, 0.0, { 60, 170, 255, 170 }, 0, 0);
+		TE_SendToAll();
+	}
+	
+	g_iBoothTick++;
+	
+	//A pulse rippling out across the floor.
+	if (g_iBoothTick % 2 == 0)
+	{
+		float fFloor[3];
+		
+		BoothPoint(g_fCenter, 0.0, 0.0, 3.0, fFloor);
+		
+		TE_SetupBeamRingPoint(fFloor, 30.0, BOOTH_HALF * 2.0, g_iBeam, 0, 0, 0, 1.6, 5.0, 0.0, { 40, 150, 255, 130 }, 0, 0);
+		TE_SendToAll();
+	}
+	
+	//Blue lightning arcing between the front posts.
+	if (g_iBoothTick % 3 == 0)
+	{
+		TE_SetupBeamPoints(g_fPostTop[2], g_fPostTop[3], g_iBeam, 0, 0, 0, 0.45, 3.0, 3.0, 0, 12.0, { 120, 200, 255, 255 }, 0);
+		TE_SendToAll();
+		
+		TE_SetupBeamPoints(g_fPostTop[2], g_fPostTop[3], g_iBeam, 0, 0, 0, 0.3, 1.5, 1.5, 0, 6.0, { 220, 240, 255, 255 }, 0);
+		TE_SendToAll(0.1);
+		
+		float fMid[3];
+		
+		for (int k = 0; k < 3; k++)
+		{
+			fMid[k] = (g_fPostTop[2][k] + g_fPostTop[3][k]) * 0.5;
+		}
+		
+		EmitAmbientSound(GetRandomInt(0, 1) ? "ambient/energy/zap5.wav" : "ambient/energy/zap6.wav", fMid, SOUND_FROM_WORLD, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.35);
 	}
 	
 	int iLeft = RoundToFloor(g_fAuctionEnd - GetGameTime());
