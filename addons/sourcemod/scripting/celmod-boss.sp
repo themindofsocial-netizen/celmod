@@ -48,6 +48,7 @@
 #define MAX_SHOTS 24
 #define MAX_POINTS 16
 
+ConVar g_cvManhackInterval;
 ConVar g_cvEnable, g_cvHits, g_cvHitsPerPlayer, g_cvReward, g_cvXP, g_cvEmblem, g_cvLaserDamage, g_cvManhacks, g_cvLockDelay, g_cvSlamDamage, g_cvRockDamage;
 
 bool g_bMapReady;
@@ -178,7 +179,8 @@ public void OnPluginStart()
 	g_cvRockDamage = CreateConVar("cm_boss_rock_damage", "80", "Damage of a falling rock (stage 3).", _, true, 0.0);
 	g_cvReward = CreateConVar("cm_boss_reward", "10000", "CL each player still standing gets for beating the boss.", _, true, 0.0);
 	g_cvLaserDamage = CreateConVar("cm_boss_laser_damage", "55", "Damage of one of the boss's lasers.", _, true, 0.0);
-	g_cvManhacks = CreateConVar("cm_boss_manhacks", "3", "Manhacks in the arena at once (one more for each extra player).", _, true, 1.0, true, 12.0);
+	g_cvManhacks = CreateConVar("cm_boss_manhacks", "6", "Manhacks in the arena at once (one more for each extra player).", _, true, 1.0, true, 16.0);
+	g_cvManhackInterval = CreateConVar("cm_boss_manhack_interval", "1.5", "Seconds between waves of manhacks (two a wave, faster in the last stage).", _, true, 0.5);
 	g_cvXP = CreateConVar("cm_tactics_xp_boss", "200", "Tactics experience everyone still in the arena gets for beating the boss.", _, true, 0.0);
 	g_cvEmblem = CreateConVar("cm_boss_emblem", "blood", "Emblem everyone still in the arena gets for beating the boss (empty = none).");
 	g_cvLockDelay = CreateConVar("cm_boss_lock_delay", "5", "Seconds the door behind stays open after the first player drops in (so friends can follow); then it closes for the rest of the map.", _, true, 0.0);
@@ -576,7 +578,7 @@ void StartFight()
 	float fNow = GetGameTime();
 
 	g_fFightStart = fNow;
-	g_fNextManhack = fNow + 3.0;
+	g_fNextManhack = fNow + 1.5;
 	g_fNextAttack = fNow + g_cvLockDelay.FloatValue + 2.0;
 
 	for (int i = 0; i < MAX_SHOTS; i++)
@@ -722,8 +724,10 @@ public Action Timer_Think(Handle hTimer)
 
 	if (fNow >= g_fNextManhack)
 	{
-		g_fNextManhack = fNow + (g_iStage == 3 ? 2.5 : 4.0);
+		g_fNextManhack = fNow + g_cvManhackInterval.FloatValue * (g_iStage == 3 ? 0.6 : 1.0);
 
+		// Two at a time.
+		SpawnManhacks();
 		SpawnManhacks();
 	}
 

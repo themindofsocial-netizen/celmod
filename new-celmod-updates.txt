@@ -703,3 +703,5 @@
 		 - The Blood emblem has Wide Eyes' powers: left click fires its blood laser, right click latches a Bloodletting
 		   tether onto the nearest target in sight to drain them and heal you, and while you hold it you take Wide Eyes'
 		   form (its model).
+		 - Many more manhacks in the boss fight: two every 1.5 seconds (faster in the last stage), up to 6 at once plus one
+		   per extra player (cm_boss_manhacks, cm_boss_manhack_interval).
