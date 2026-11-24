@@ -700,3 +700,6 @@
 		   (lightning between the front two). The server console says how far it got if anything goes wrong.
 		 - Build boxes (box1-3) spawn on skin 1, since their skin 0 is a missing texture for players who don't have the
 		   Phoenix Storm materials yet; loaded builds that had them on skin 0 move to skin 1 too. !skin still sets any skin.
+		 - The Blood emblem has Wide Eyes' powers: left click fires its blood laser, right click latches a Bloodletting
+		   tether onto the nearest target in sight to drain them and heal you, and while you hold it you take Wide Eyes'
+		   form (its model).

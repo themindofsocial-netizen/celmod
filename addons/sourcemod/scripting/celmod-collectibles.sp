@@ -295,6 +295,16 @@ int g_iPlayerModelCount;
 
 PlayerModel g_PlayerModels[MAX_PLAYERMODELS];
 
+// The Blood emblem (power "boss"): Wide Eyes' powers. Left click a blood laser, right click a Bloodletting tether, and
+// while it's held you take its form (its model), where the server has the model.
+#define BOSS_FORM_MODEL "models/celmod/wide_eyes.mdl"
+bool g_bBossForm[MAXPLAYERS + 1];
+bool g_bBossModelOk;
+int g_iBossSpray = -1;
+int g_iBossBeam = -1;
+int g_iBossDrop = -1;
+int g_iBossDecal[4];
+
 bool g_bLate;
 bool g_bDropBox[MAXENTITIES + 1];
 bool g_bFrozenTint[MAXPLAYERS + 1];
@@ -660,6 +670,8 @@ public void OnPluginEnd()
 
 public void OnMapStart()
 {
+	BossPowersMapStart();
+
 	Fx_Precache();
 
 	GetCurrentMap(g_sMap, sizeof(g_sMap));
@@ -781,6 +793,8 @@ public void OnClientPutInServer(int iClient)
 
 public void OnClientDisconnect(int iClient)
 {
+	g_bBossForm[iClient] = false;
+
 	// A map change disconnects everyone without a player_disconnect event, before OnMapEnd: a box held right then
 	// is given now, while the player's inventory is still open. Someone really leaving forfeits it.
 	if (!g_bRealLeave[iClient])
@@ -2554,7 +2568,7 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 	// Pressing an ability that is still recharging says how long is left (rapid-fire powers aren't nagged about).
 	if (!g_bInEvent[iClient])
 	{
-		if ((iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && (IsShotPower(g_Items[iItem].sPower) || StrEqual(g_Items[iItem].sPower, "time")))
+		if ((iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && (IsShotPower(g_Items[iItem].sPower) || StrEqual(g_Items[iItem].sPower, "time") || StrEqual(g_Items[iItem].sPower, "boss")))
 		{
 			CooldownNotice(iClient, iItem, g_fNextPower[iClient], "left click");
 		}
@@ -2563,6 +2577,14 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 		{
 			CooldownNotice(iClient, iItem, g_fNextSecondary[iClient], "right click");
 		}
+	}
+
+	// Blood (Wide Eyes' power): left click fires its blood laser.
+	if (StrEqual(g_Items[iItem].sPower, "boss") && (iButtons & IN_ATTACK) && !(iLast & IN_ATTACK) && GetGameTime() >= g_fNextPower[iClient] && !g_bInEvent[iClient])
+	{
+		g_fNextPower[iClient] = GetGameTime() + g_Items[iItem].fCooldown;
+
+		FireBloodLaser(iClient, iItem);
 	}
 
 	// Time: left click fast-forwards you (double speed for "value" seconds).
@@ -2609,7 +2631,266 @@ public Action OnPlayerRunCmd(int iClient, int &iButtons)
 	return Plugin_Changed;
 }
 
+// ---- Blood (Wide Eyes' powers) ----------------------------------------------------------------------------------
+
+void BossPowersMapStart()
+{
+	g_iBossSpray = PrecacheModel("sprites/bloodspray.vmt", true);
+	g_iBossBeam = PrecacheModel("sprites/laserbeam.vmt", true);
+	g_iBossDrop = PrecacheModel("sprites/blood.vmt", true);
+
+	for (int i = 0; i < 4; i++)
+	{
+		char sDecal[32];
+
+		FormatEx(sDecal, sizeof(sDecal), "decals/blood%d", i + 1);
+		g_iBossDecal[i] = PrecacheDecal(sDecal, true);
+	}
+
+	PrecacheSound("npc/strider/fire.wav", true);
+	PrecacheSound("npc/barnacle/barnacle_tongue_pull1.wav", true);
+	PrecacheSound("player/pl_burnpain1.wav", true);
+
+	// Its model is part of gm_bloodyconstruct_cm12's content: the form only where the server has it.
+	g_bBossModelOk = FileExists(BOSS_FORM_MODEL, true);
+
+	if (g_bBossModelOk)
+	{
+		PrecacheModel(BOSS_FORM_MODEL, true);
+		AddModelToDownloads(BOSS_FORM_MODEL);
+	}
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_bBossForm[i] = false;
+	}
+}
+
+void SetBossForm(int iClient, bool bOn)
+{
+	g_bBossForm[iClient] = bOn;
+
+	if (!IsClientInGame(iClient) || !IsPlayerAlive(iClient))
+	{
+		return;
+	}
+
+	if (bOn)
+	{
+		SetEntityModel(iClient, BOSS_FORM_MODEL);
+	} else if (g_iPlayerModel[iClient] >= 0 && g_iPlayerModel[iClient] < g_iPlayerModelCount) {
+		ApplyPlayerModel(iClient);
+	} else {
+		// No model of their own chosen: the game's model for them comes back.
+		char sModel[PLATFORM_MAX_PATH];
+
+		GetClientInfo(iClient, "cl_playermodel", sModel, sizeof(sModel));
+
+		if (sModel[0] == '\0' || !IsModelPrecached(sModel))
+		{
+			strcopy(sModel, sizeof(sModel), "models/humans/group03/male_07.mdl");
+		}
+
+		SetEntityModel(iClient, sModel);
+	}
+
+	// A hat sits on the model's attachments: it goes on again on the new one.
+	if (g_iActiveHat[iClient] != -1)
+	{
+		CreateHatEntity(iClient);
+	}
+
+	if (g_bHeldShown[iClient])
+	{
+		RestoreWeapon(iClient);
+	}
+}
+
+void BossBlood(const float fPos[3], int iCount)
+{
+	for (int i = 0; i < iCount; i++)
+	{
+		float fDir[3];
+
+		fDir[0] = GetRandomFloat(-1.0, 1.0);
+		fDir[1] = GetRandomFloat(-1.0, 1.0);
+		fDir[2] = GetRandomFloat(0.2, 1.0);
+
+		TE_SetupBloodSprite(fPos, fDir, { 160, 0, 0, 255 }, 10, g_iBossSpray, g_iBossDrop);
+		TE_SendToAll(i * 0.03);
+	}
+}
+
+void BossDecal(const float fPos[3])
+{
+	TE_Start("World Decal");
+	TE_WriteVector("m_vecOrigin", fPos);
+	TE_WriteNum("m_nIndex", g_iBossDecal[GetRandomInt(0, 3)]);
+	TE_SendToAll();
+}
+
+// Left click: a blood-red laser that burns what it hits and leaves blood where it lands.
+void FireBloodLaser(int iClient, int iItem)
+{
+	float fStart[3], fAngles[3], fDir[3], fEnd[3];
+
+	GetClientEyePosition(iClient, fStart);
+	GetClientEyeAngles(iClient, fAngles);
+	GetAngleVectors(fAngles, fDir, NULL_VECTOR, NULL_VECTOR);
+
+	for (int k = 0; k < 3; k++)
+	{
+		fEnd[k] = fStart[k] + fDir[k] * 2400.0;
+	}
+
+	Handle hTrace = TR_TraceRayFilterEx(fStart, fEnd, MASK_SHOT, RayType_EndPoint, Filter_NotSelf, iClient);
+
+	TR_GetEndPosition(fEnd, hTrace);
+
+	int iHit = TR_GetEntityIndex(hTrace);
+
+	delete hTrace;
+
+	float fFrom[3];
+
+	fFrom = fStart;
+	fFrom[2] -= 10.0;
+
+	TE_SetupBeamPoints(fFrom, fEnd, g_iBossBeam, 0, 0, 0, 0.3, 12.0, 9.0, 0, 1.5, { 170, 0, 0, 255 }, 0);
+	TE_SendToAll();
+	TE_SetupBeamPoints(fFrom, fEnd, g_iBossBeam, 0, 0, 0, 0.2, 3.0, 2.0, 0, 0.0, { 255, 120, 110, 255 }, 0);
+	TE_SendToAll();
+
+	EmitSoundToAll("npc/strider/fire.wav", iClient, SNDCHAN_WEAPON);
+
+	float fDamage = g_Items[iItem].fValue > 1.0 ? g_Items[iItem].fValue : 35.0;
+
+	if (CanBeHurt(iClient, iHit) || IsHurtableNpc(iHit))
+	{
+		SDKHooks_TakeDamage(iHit, iClient, iClient, fDamage, DMG_ENERGYBEAM);
+
+		BossBlood(fEnd, 3);
+
+		if (iHit <= MaxClients)
+		{
+			EmitSoundToAll("player/pl_burnpain1.wav", iHit);
+		}
+	} else if (iHit == 0) {
+		BossDecal(fEnd);
+	}
+}
+
+// Right click: Bloodletting. A tether latches onto the nearest target in sight (a player it may hurt, or an NPC) and
+// drains them for 2 seconds, healing the holder by as much. It snaps if they get out of sight or reach.
+bool StartBloodTether(int iClient)
+{
+	float fEye[3], fPos[3];
+	int iBest = -1;
+	float fBest = 700.0;
+
+	GetClientEyePosition(iClient, fEye);
+
+	for (int i = 1; i <= MAXENTITIES; i++)
+	{
+		if (!(i <= MaxClients ? CanBeHurt(iClient, i) : IsHurtableNpc(i)))
+		{
+			continue;
+		}
+
+		if (!BloodTetherReaches(iClient, fEye, i, fPos))
+		{
+			continue;
+		}
+
+		float fDistance = GetVectorDistance(fEye, fPos);
+
+		if (fDistance < fBest)
+		{
+			fBest = fDistance;
+			iBest = i;
+		}
+	}
+
+	if (iBest == -1)
+	{
+		PrintHintText(iClient, "Nothing in sight to drain");
+		return false;
+	}
+
+	EmitSoundToAll("npc/barnacle/barnacle_tongue_pull1.wav", iClient);
+
+	DataPack dpTether;
+
+	CreateDataTimer(0.25, Timer_BloodTether, dpTether, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+
+	dpTether.WriteCell(GetClientUserId(iClient));
+	dpTether.WriteCell(EntIndexToEntRef(iBest));
+	dpTether.WriteCell(8); // 8 ticks of 0.25 s
+
+	return true;
+}
+
+bool BloodTetherReaches(int iClient, const float fEye[3], int iTarget, float fPos[3])
+{
+	GetEntPropVector(iTarget, Prop_Data, "m_vecAbsOrigin", fPos);
+	fPos[2] += 40.0;
+
+	if (GetVectorDistance(fEye, fPos) > 700.0)
+	{
+		return false;
+	}
+
+	Handle hTrace = TR_TraceRayFilterEx(fEye, fPos, MASK_SOLID_BRUSHONLY, RayType_EndPoint, Filter_NotSelf, iClient);
+	bool bClear = !TR_DidHit(hTrace);
+
+	delete hTrace;
+
+	return bClear;
+}
+
+public Action Timer_BloodTether(Handle hTimer, DataPack dpTether)
+{
+	dpTether.Reset();
+
+	int iClient = GetClientOfUserId(dpTether.ReadCell());
+	int iTarget = EntRefToEntIndex(dpTether.ReadCell());
+	DataPackPos dpTicks = dpTether.Position;
+	int iTicks = dpTether.ReadCell();
+
+	if (iClient < 1 || !IsClientInGame(iClient) || !IsPlayerAlive(iClient) || iTarget == INVALID_ENT_REFERENCE || iTicks < 1)
+	{
+		return Plugin_Stop;
+	}
+
+	bool bAlive = (iTarget <= MaxClients) ? CanBeHurt(iClient, iTarget) : IsHurtableNpc(iTarget);
+	float fEye[3], fPos[3];
+
+	GetClientEyePosition(iClient, fEye);
+
+	if (!bAlive || !BloodTetherReaches(iClient, fEye, iTarget, fPos))
+	{
+		return Plugin_Stop;
+	}
+
+	TE_SetupBeamPoints(fEye, fPos, g_iBossBeam, 0, 0, 0, 0.27, 5.0, 2.0, 0, 4.0, { 200, 0, 0, 255 }, 0);
+	TE_SendToAll();
+
+	SDKHooks_TakeDamage(iTarget, iClient, iClient, 6.0, DMG_ENERGYBEAM);
+	BossBlood(fPos, 1);
+
+	int iHealth = GetClientHealth(iClient) + 6, iMax = ClientMaxHealth(iClient);
+
+	SetEntityHealth(iClient, iHealth > iMax ? iMax : iHealth);
+
+	dpTether.Position = dpTicks;
+	dpTether.WriteCell(iTicks - 1);
+
+	return Plugin_Continue;
+}
+
 float g_fNextCooldownNotice[MAXPLAYERS + 1];
+
+
 
 // "Fire's right click is recharging: ready in 2.4s." Only for waits of over half a second, at most once a second.
 void CooldownNotice(int iClient, int iItem, float fReadyAt, const char[] sWhich)
@@ -3200,12 +3481,12 @@ void RewindTime(int iClient)
 
 	int iColor[4] = { 90, 90, 90, 255 };
 
-	TE_SetupBeamRingPoint(fNow, 10.0, 120.0, g_iBmLaser, 0, 0, 15, 0.4, 6.0, 0.0, iColor, 10, 0);
+	TE_SetupBeamRingPoint(fNow, 10.0, 120.0, g_iBossBeam, 0, 0, 15, 0.4, 6.0, 0.0, iColor, 10, 0);
 	TE_SendToAll();
 
 	TeleportEntity(iClient, fTo, g_fTimeAng[iClient][iSlot], fZero);
 
-	TE_SetupBeamRingPoint(fTo, 120.0, 10.0, g_iBmLaser, 0, 0, 15, 0.4, 6.0, 0.0, iColor, 10, 0);
+	TE_SetupBeamRingPoint(fTo, 120.0, 10.0, g_iBossBeam, 0, 0, 15, 0.4, 6.0, 0.0, iColor, 10, 0);
 	TE_SendToAll();
 
 	EmitSoundToAll("buttons/blip1.wav", iClient);
@@ -3312,6 +3593,22 @@ public Action Timer_Think(Handle hTimer)
 			GetEntityClassname(iWeapon, sClassname, sizeof(sClassname));
 
 			g_bHoldingGravGun[i] = StrEqual(sClassname, GRAVGUN_CLASS);
+		}
+
+		// Blood held: the player takes Wide Eyes' form; put away, their own model comes back.
+		bool bForm = (g_bBossModelOk && g_bHoldingGravGun[i] && iItem != -1 && !g_bInEvent[i] && StrEqual(g_Items[iItem].sPower, "boss"));
+
+		// (Checked against the model too: dying and respawning gives the player their own model back.)
+		char sNowModel[PLATFORM_MAX_PATH];
+
+		if (bForm)
+		{
+			GetClientModel(i, sNowModel, sizeof(sNowModel));
+		}
+
+		if (bForm != g_bBossForm[i] || (bForm && !StrEqual(sNowModel, BOSS_FORM_MODEL, false)))
+		{
+			SetBossForm(i, bForm);
 		}
 
 		// Third person model: other players see the emblem in this player's hand in place of the
@@ -7029,6 +7326,17 @@ void SecondaryEmblemPower(int iClient, int iItem)
 		return;
 	}
 
+	// Blood: right click latches a Bloodletting tether onto the nearest target in sight.
+	if (StrEqual(sPower, "boss"))
+	{
+		if (StartBloodTether(iClient))
+		{
+			g_fNextSecondary[iClient] = GetGameTime() + 8.0;
+		}
+
+		return;
+	}
+
 	// Time: right click rewinds you to where you were 3 seconds ago (where your shadow was a moment ago).
 	if (StrEqual(sPower, "time"))
 	{
@@ -9063,7 +9371,7 @@ public Action Timer_BoothExplode(Handle hTimer, any iRef)
 
 	Fx_Starburst(fBooth, 8, 140.0, g_iBmLightning, 6.0, 0.6, iGreen);
 	Fx_Ring(fBooth, 10.0, 300.0, g_iBmPhys, 14.0, 0.6, 0.0, iGreen);
-	Fx_Ring(fBooth, 10.0, 200.0, g_iBmLaser, 8.0, 0.4, 0.0, iWhite);
+	Fx_Ring(fBooth, 10.0, 200.0, g_iBossBeam, 8.0, 0.4, 0.0, iWhite);
 	Fx_Sparks(fBooth, fUp, 8, 6);
 	Fx_Light(fBooth, iGreen, 450.0, 1.0, 7);
 
@@ -9841,7 +10149,7 @@ public void Hook_VialUse(int iVial, int iActivator, int iCaller, UseType utType,
 
 	fCenter[2] += 4.0;
 
-	Fx_Ring(fCenter, 8.0, fRange * 2.0, g_iBmLaser, 4.0, 0.8, 0.0, iColor);
+	Fx_Ring(fCenter, 8.0, fRange * 2.0, g_iBossBeam, 4.0, 0.8, 0.0, iColor);
 
 	EmitSoundToAll(bFound ? "buttons/blip1.wav" : "buttons/button10.wav", iVial);
 
@@ -10546,7 +10854,7 @@ void CelWepHitEffect(int iItem, float fHit[3])
 	{
 		int iPower[4] = { 255, 230, 150, 255 };
 
-		Fx_Ring(fHit, 4.0, 60.0, g_iBmLaser, 6.0, 0.3, 0.0, iPower);
+		Fx_Ring(fHit, 4.0, 60.0, g_iBossBeam, 6.0, 0.3, 0.0, iPower);
 		Fx_Sparks(fHit, fUp, 4, 3);
 	}
 }
@@ -10682,7 +10990,7 @@ void LaunchCelWepProjectile(int iClient, int iItem, float fStart[3], float fAngl
 		iColor[2] = g_Items[iItem].iBeamColor[2];
 		iColor[3] = 200;
 
-		TE_SetupBeamFollow(iShot, g_iBmLaser, g_iBmHalo, 0.3, 4.0, 0.5, 1, iColor);
+		TE_SetupBeamFollow(iShot, g_iBossBeam, g_iBmHalo, 0.3, 4.0, 0.5, 1, iColor);
 		TE_SendToAll();
 	}
 

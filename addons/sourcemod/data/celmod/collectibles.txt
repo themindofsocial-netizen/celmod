@@ -30,6 +30,9 @@
 //               blast     Explosion where you aim. value = magnitude.
 //               demon     A tower of dark power rises where you aim (value = damage). Right click shakes nearby screens.
 //               blink     Teleports you to where you aim.
+//               boss      Wide Eyes' powers (the boss's): a blood laser (value = damage). Right click latches a
+//                         Bloodletting tether onto the nearest target in sight, draining them to heal you. While held,
+//                         you take Wide Eyes' form (its model, where the server has it).
 //               Passive powers:
 //               speed     Run faster. value = speed multiplier.
 //               sprint    Sprint never runs out.
@@ -1166,7 +1169,9 @@
 	"handscale"		"1.0"
 	"handoffset"	"8 5 -2"
 	"handangles"	"0 -90 0"
-	"power"			"none"
+	"power"			"boss"
+	"value"			"35"
+	"cooldown"		"1.2"
 	"upgradesto"	"inferno"
 	"upgradecost"	"3"
 	"dropweight"	"15"
