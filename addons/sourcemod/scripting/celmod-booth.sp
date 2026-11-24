@@ -59,8 +59,6 @@ int g_iBoothTick;
 char g_sStructureModels[][] =
 {
 	"models/props_combine/breenconsole.mdl",
-	"models/props_combine/combine_fence01a.mdl",
-	"models/props_combine/combine_fence01b.mdl",
 	"models/props_combine/railing_256.mdl",
 	"models/props_combine/combine_emitter01.mdl"
 };
@@ -571,9 +569,10 @@ void PlaceBooth(float fOrigin[3])
 	g_fCenter = fOrigin;
 	g_bBooth = (alAliases.Length >= 3);
 	
-	BuildStructure(fOrigin);
+	// The parts that matter first (Breen, then the holograms below); the frame and its lights last, so nothing they
+	// do can keep the booth itself from appearing.
 	PlaceHost(fOrigin);
-	SetBoothFloor(fOrigin);
+	PrintToServer("|CelMod| Guess Booth: Dr. Breen placed.");
 	
 	if (g_bBooth)
 	{
@@ -624,6 +623,12 @@ void PlaceBooth(float fOrigin[3])
 	
 	delete alAliases;
 	delete alModels;
+	
+	BuildStructure(fOrigin);
+	PrintToServer("|CelMod| Guess Booth: frame built.");
+	
+	SetBoothFloor(fOrigin);
+	PrintToServer("|CelMod| Guess Booth: floor set.");
 }
 
 //Dr. Breen stands at the back of the booth behind his console, facing whoever walks up.
@@ -673,49 +678,26 @@ void BuildStructure(float fCenter[3])
 {
 	RemoveStructure();
 	
-	float fPos[3];
-	
-	//Dr. Breen's console, in front of him, facing the players.
-	BoothPoint(fCenter, BOOTH_HALF - 76.0, 0.0, 0.0, fPos);
-	AddPiece("models/props_combine/breenconsole.mdl", fPos, g_fBoothYaw + 180.0, false, true);
-	
-	//A post at each corner, with a Combine-blue light on top.
-	for (int iCorner = 0; iCorner < 4; iCorner++)
+	if (g_alStructure == null)
 	{
-		float fForward = (iCorner < 2) ? BOOTH_HALF : -BOOTH_HALF;
-		float fRight = (iCorner % 2 == 0) ? -BOOTH_HALF : BOOTH_HALF;
-		
-		BoothPoint(fCenter, fForward, fRight, 0.0, fPos);
-		
-		int iPost = AddPiece((iCorner % 2 == 0) ? "models/props_combine/combine_fence01a.mdl" : "models/props_combine/combine_fence01b.mdl", fPos, g_fBoothYaw + 90.0, false, true);
-		
-		float fTop = 128.0;
-		
-		if (iPost != -1)
-		{
-			float fMaxs[3], fMins[3];
-			
-			GetEntPropVector(iPost, Prop_Send, "m_vecMaxs", fMaxs);
-			GetEntPropVector(iPost, Prop_Send, "m_vecMins", fMins);
-			
-			if (fMaxs[2] - fMins[2] > 8.0)
-			{
-				fTop = fMaxs[2] - fMins[2];
-			}
-		}
-		
-		g_fPostTop[iCorner] = fPos;
-		g_fPostTop[iCorner][2] += fTop + 4.0;
-		
-		AddGlow(g_fPostTop[iCorner], 0.55);
+		g_alStructure = new ArrayList();
 	}
 	
-	//Railings along the two sides; the front stays open.
+	float fPos[3];
+	
+	//A U of Combine railings: down both sides and across the back behind Breen. The front stays open.
 	for (int iSide = -1; iSide <= 1; iSide += 2)
 	{
 		BoothPoint(fCenter, 0.0, iSide * (BOOTH_HALF + 4.0), 0.0, fPos);
 		AddPiece("models/props_combine/railing_256.mdl", fPos, g_fBoothYaw, true, true);
 	}
+	
+	BoothPoint(fCenter, BOOTH_HALF + 4.0, 0.0, 0.0, fPos);
+	AddPiece("models/props_combine/railing_256.mdl", fPos, g_fBoothYaw + 90.0, true, true);
+	
+	//Dr. Breen's console, in front of him, facing the players.
+	BoothPoint(fCenter, BOOTH_HALF - 76.0, 0.0, 0.0, fPos);
+	AddPiece("models/props_combine/breenconsole.mdl", fPos, g_fBoothYaw + 180.0, false, true);
 	
 	//An emitter on the floor under each hologram, projecting it.
 	for (int i = 0; i < 3; i++)
@@ -724,14 +706,11 @@ void BuildStructure(float fCenter[3])
 		AddPiece("models/props_combine/combine_emitter01.mdl", fPos, g_fBoothYaw + 180.0, false, false);
 	}
 	
-	//Spotlights from the back posts onto the holograms.
-	float fTarget[3];
-	
-	BoothPoint(fCenter, 0.0, 0.0, HOLO_HEIGHT, fTarget);
-	
-	for (int iCorner = 0; iCorner < 2; iCorner++)
+	//A glowing Combine-blue orb over each corner (lightning arcs between the front two, like an energy gate).
+	for (int iCorner = 0; iCorner < 4; iCorner++)
 	{
-		AddSpotlight(g_fPostTop[iCorner], fTarget);
+		BoothPoint(fCenter, (iCorner < 2) ? BOOTH_HALF : -BOOTH_HALF, (iCorner % 2 == 0) ? -BOOTH_HALF : BOOTH_HALF, 72.0, g_fPostTop[iCorner]);
+		AddGlow(g_fPostTop[iCorner], 0.5);
 	}
 	
 	//A slow-pulsing blue light over the booth.
@@ -789,38 +768,6 @@ void AddGlow(const float fPos[3], float fScale)
 	AcceptEntityInput(iGlow, "ShowSprite");
 	
 	g_alStructure.Push(EntIndexToEntRef(iGlow));
-}
-
-//A visible beam of light from fFrom onto fTo.
-void AddSpotlight(const float fFrom[3], const float fTo[3])
-{
-	int iSpot = CreateEntityByName("point_spotlight");
-	
-	if (iSpot == -1)
-	{
-		return;
-	}
-	
-	float fDir[3], fAngles[3];
-	
-	SubtractVectors(fTo, fFrom, fDir);
-	GetVectorAngles(fDir, fAngles);
-	
-	char sLength[16];
-	
-	FormatEx(sLength, sizeof(sLength), "%.0f", GetVectorLength(fDir) + 24.0);
-	
-	DispatchKeyValue(iSpot, "spotlightlength", sLength);
-	DispatchKeyValue(iSpot, "spotlightwidth", "28");
-	DispatchKeyValue(iSpot, "rendercolor", "40 150 255");
-	DispatchKeyValue(iSpot, "renderamt", "160");
-	DispatchKeyValue(iSpot, "spawnflags", "3"); // on from the start, no dynamic light
-	
-	TeleportEntity(iSpot, fFrom, fAngles, NULL_VECTOR);
-	DispatchSpawn(iSpot);
-	AcceptEntityInput(iSpot, "LightOn");
-	
-	g_alStructure.Push(EntIndexToEntRef(iSpot));
 }
 
 //A blue light over the booth that slowly pulses (light style 11), lighting the booth and whoever stands in it.
