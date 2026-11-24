@@ -646,6 +646,31 @@ public Action Timer_CommandHUD(Handle hTimer)
 	return Plugin_Continue;
 }*/
 
+//The player whose land the client is standing in, or else looking at, when that land's build is for sale. 0 if none.
+int BuildSeller(int iClient)
+{
+	float fOrigin[3];
+	
+	GetClientAbsOrigin(iClient, fOrigin);
+	fOrigin[2] += 8.0;
+	
+	int iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+	
+	if (iOwner < 1 || iOwner > MaxClients || Cel_GetBuildSalePrice(iOwner) <= 0)
+	{
+		Cel_GetCrosshairHitOrigin(iClient, fOrigin);
+		
+		iOwner = Cel_GetLandOwnerFromPosition(fOrigin);
+	}
+	
+	if (iOwner < 1 || iOwner > MaxClients || !IsClientInGame(iOwner) || Cel_GetBuildSalePrice(iOwner) <= 0)
+	{
+		return 0;
+	}
+	
+	return iOwner;
+}
+
 public Action Timer_HUD(Handle hTimer)
 {
 	char sBalance[32], sCelBuffer[64], sCelBufferArray[2][64], sHUDMessage[MAX_MESSAGE_LENGTH], sPropName[64];
@@ -900,6 +925,19 @@ public Action Timer_HUD(Handle hTimer)
 					FormatPlayerHUD(i, sBalance, sHUDMessage, sizeof(sHUDMessage));
 					
 					Cel_GetHudColor(i, iHUDColor);
+				}
+				
+				//Standing in, or looking at, a land whose build is for sale (!sellbuild) shows the price.
+				int iSeller = BuildSeller(i);
+				
+				if (iSeller != 0)
+				{
+					if (iSeller == i)
+					{
+						Format(sHUDMessage, sizeof(sHUDMessage), "%s\nYour build is for sale: %d CL", sHUDMessage, Cel_GetBuildSalePrice(i));
+					} else {
+						Format(sHUDMessage, sizeof(sHUDMessage), "%s\n%N's build is for sale: %d CL\n!buybuild <savename>", sHUDMessage, iSeller, Cel_GetBuildSalePrice(iSeller));
+					}
 				}
 				
 				Cel_SendHudMessage(i, 1, g_bHudLeft[i] ? -2.010 : 2.010, -0.110, iHUDColor[0], iHUDColor[1], iHUDColor[2], iHUDColor[3], 0, 0.6, 0.01, 0.2, 0.01, sHUDMessage);

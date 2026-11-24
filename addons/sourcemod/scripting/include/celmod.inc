@@ -1310,7 +1310,12 @@ native void Cel_ReplyToCommandEntity(int iClient, int iEntity, const char[] sMes
  * @param iClient   The client index.
  * @param sSaveName The name of the save file.
  */
-native void Cel_SaveBuild(int iClient, const char[] sSaveName);
+native bool Cel_SaveBuild(int iClient, const char[] sSaveName);
+
+/**
+ * The price a player's build is for sale at (!sellbuild), or 0 when it isn't for sale.
+ */
+native int Cel_GetBuildSalePrice(int iClient);
 
 /**
  * Saves a purchase state for a client.
