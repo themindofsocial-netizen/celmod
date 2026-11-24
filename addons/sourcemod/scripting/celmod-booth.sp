@@ -18,6 +18,10 @@
  */
 
 #define BOOTH_HALF 136.0
+#define KLEINER_CHEER "combined/k_lab/k_lab_kl_excellent_cc.wav"
+#define SOUND_ROLL "ambient/machines/teleport1.wav"
+#define SOUND_ROLLDONE "buttons/blip1.wav"
+#define ROLL_TICKS 25 //0.1 s each: the old props spin up, rise and fade out, then the new ones fade in
 #define DISPLAY_SIZE 40.0
 #define KLEINER_MODEL "models/kleiner.mdl"
 #define HAT_MODEL "models/celmod/delaware.mdl"
@@ -34,6 +38,13 @@ char g_sAuctionId[64];
 char g_sAuctionKind[32];
 char g_sAuctionName[64];
 char g_sPropAlias[3][64];
+
+//While the props are being swapped after a right guess, nobody can guess. g_iRollId stops an old swap's timer
+//when the booth is moved or rebuilt in the middle of one.
+bool g_bRolling;
+int g_iRollId;
+int g_iRollTick;
+float g_fSpinSpeed = 1.2;
 char g_sSpawnDB[PLATFORM_MAX_PATH];
 char g_sBoothDB[PLATFORM_MAX_PATH];
 
@@ -48,6 +59,7 @@ float g_fBoothYaw = 90.0;
 
 int g_iAuctionRef = INVALID_ENT_REFERENCE;
 int g_iBeam = -1;
+int g_iGlow = -1;
 int g_iKleinerRef = INVALID_ENT_REFERENCE;
 int g_iConeRef = INVALID_ENT_REFERENCE;
 
@@ -133,6 +145,13 @@ public void OnMapStart()
 	
 	PrecacheSound("buttons/button9.wav", true);
 	PrecacheSound("buttons/button8.wav", true);
+	PrecacheSound(KLEINER_CHEER, true);
+	PrecacheSound(SOUND_ROLL, true);
+	PrecacheSound(SOUND_ROLLDONE, true);
+	
+	g_iGlow = PrecacheModel("materials/sprites/glow01.vmt", true);
+	g_bRolling = false;
+	g_fSpinSpeed = 1.2;
 	
 	g_bBooth = false;
 	g_bAuction = false;
@@ -469,6 +488,18 @@ void BoothPoint(const float fCenter[3], float fForward, float fRight, float fUp,
 
 void PlaceBooth(float fOrigin[3])
 {
+	g_fCenter = fOrigin;
+	g_bRolling = false;
+	g_iRollId++;
+	
+	PlaceKleiner(fOrigin);
+	
+	RollProps(fOrigin, false);
+}
+
+//Three new random props float in the booth. bFadeIn starts them invisible, for Timer_Reroll to fade in.
+void RollProps(float fOrigin[3], bool bFadeIn)
+{
 	char sAlias[64], sBuffer[2][PLATFORM_MAX_PATH], sValue[PLATFORM_MAX_PATH];
 	float fPos[3];
 	
@@ -501,10 +532,7 @@ void PlaceBooth(float fOrigin[3])
 		RemoveRef(g_iPropRef[i]);
 	}
 	
-	g_fCenter = fOrigin;
 	g_bBooth = (alAliases.Length >= 3);
-	
-	PlaceKleiner(fOrigin);
 	
 	if (g_bBooth)
 	{
@@ -535,6 +563,11 @@ void PlaceBooth(float fOrigin[3])
 			
 			g_iPropRef[iShown] = EntIndexToEntRef(iEntity);
 			
+			if (bFadeIn)
+			{
+				SetEntityRenderColor(iEntity, 90, 210, 255, 0);
+			}
+			
 			iShown++;
 		}
 		
@@ -546,9 +579,7 @@ void PlaceBooth(float fOrigin[3])
 		} else {
 			LogError("|CelMod| The Guess Booth could only show %d of its three props. Check that the models in '%s' are on the server.", iShown, g_sSpawnDB);
 		}
-		
-		//New props: everyone gets a new winning prop of their own the next time they guess.
-		} else {
+	} else {
 		LogError("|CelMod| The Guess Booth needs at least three props in '%s'.", g_sSpawnDB);
 	}
 	
@@ -870,7 +901,7 @@ public Action Timer_Spin(Handle hTimer)
 {
 	float fAngles[3], fOrigin[3];
 	
-	g_fSpinYaw += 1.2;
+	g_fSpinYaw += g_fSpinSpeed;
 	
 	if (g_fSpinYaw >= 360.0)
 	{
@@ -1041,6 +1072,118 @@ void MoveBooth(float fOrigin[3])
 	}
 }
 
+//After a right guess: the props spin faster and faster, rise and fade away in a flash, then three new ones fade in.
+void StartReroll()
+{
+	int iKleiner = EntRefToEntIndex(g_iKleinerRef);
+	
+	g_bRolling = true;
+	g_iRollTick = 0;
+	
+	EmitAmbientSound(KLEINER_CHEER, g_fCenter, iKleiner != INVALID_ENT_REFERENCE ? iKleiner : SOUND_FROM_WORLD);
+	EmitAmbientSound(SOUND_ROLL, g_fCenter);
+	
+	CreateTimer(0.1, Timer_Reroll, g_iRollId, TIMER_FLAG_NO_MAPCHANGE | TIMER_REPEAT);
+}
+
+public Action Timer_Reroll(Handle hTimer, int iRollId)
+{
+	float fPos[3];
+	
+	if (iRollId != g_iRollId || !g_bBooth)
+	{
+		g_fSpinSpeed = 1.2;
+		return Plugin_Stop;
+	}
+	
+	g_iRollTick++;
+	
+	int iHalf = ROLL_TICKS / 2;
+	
+	if (g_iRollTick < iHalf)
+	{
+		//Spinning up and rising, fading out.
+		g_fSpinSpeed = 1.2 + float(g_iRollTick) * 2.5;
+		
+		for (int i = 0; i < 3; i++)
+		{
+			int iEntity = EntRefToEntIndex(g_iPropRef[i]);
+			
+			if (iEntity != INVALID_ENT_REFERENCE && iEntity > MaxClients && iEntity <= MAXENTITIES)
+			{
+				g_fSpinCenter[iEntity][2] += 3.0;
+				SetEntityRenderColor(iEntity, 90, 210, 255, 150 - (150 * g_iRollTick) / iHalf);
+			}
+		}
+		
+		if (g_iRollTick % 3 == 0)
+		{
+			fPos = g_fCenter;
+			fPos[2] += 4.0;
+			
+			TE_SetupBeamRingPoint(fPos, 20.0, BOOTH_HALF * 2.0, g_iBeam, 0, 0, 15, 0.5, 6.0, 0.0, {90, 210, 255, 255}, 0, 0);
+			TE_SendToAll();
+		}
+	} else if (g_iRollTick == iHalf) {
+		//A flash where each prop was, and three new ones in their place.
+		for (int i = 0; i < 3; i++)
+		{
+			int iEntity = EntRefToEntIndex(g_iPropRef[i]);
+			
+			if (iEntity != INVALID_ENT_REFERENCE && iEntity > MaxClients && iEntity <= MAXENTITIES)
+			{
+				fPos = g_fSpinCenter[iEntity];
+				
+				TE_SetupGlowSprite(fPos, g_iGlow, 0.6, 2.0, 255);
+				TE_SendToAll();
+				
+				TE_SetupSparks(fPos, NULL_VECTOR, 8, 4);
+				TE_SendToAll();
+			}
+		}
+		
+		g_fSpinSpeed = 1.2;
+		
+		RollProps(g_fCenter, true);
+		
+		if (!g_bBooth)
+		{
+			g_bRolling = false;
+			return Plugin_Stop;
+		}
+	} else if (g_iRollTick < ROLL_TICKS) {
+		int iAlpha = (150 * (g_iRollTick - iHalf)) / (ROLL_TICKS - iHalf);
+		
+		for (int i = 0; i < 3; i++)
+		{
+			int iEntity = EntRefToEntIndex(g_iPropRef[i]);
+			
+			if (iEntity != INVALID_ENT_REFERENCE)
+			{
+				SetEntityRenderColor(iEntity, 90, 210, 255, iAlpha);
+			}
+		}
+	} else {
+		for (int i = 0; i < 3; i++)
+		{
+			int iEntity = EntRefToEntIndex(g_iPropRef[i]);
+			
+			if (iEntity != INVALID_ENT_REFERENCE)
+			{
+				SetEntityRenderColor(iEntity, 90, 210, 255, 150);
+			}
+		}
+		
+		EmitAmbientSound(SOUND_ROLLDONE, g_fCenter);
+		
+		g_bRolling = false;
+		
+		return Plugin_Stop;
+	}
+	
+	return Plugin_Continue;
+}
+
 public Action Command_Guess(int iClient, int iArgs)
 {
 	char sAuthID[64], sGuess[64];
@@ -1066,6 +1209,12 @@ public Action Command_Guess(int iClient, int iArgs)
 	if (iArgs < 1)
 	{
 		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]guess{default} <prop name>. Name any of the three props to win. You get one guess per map.");
+		return Plugin_Handled;
+	}
+	
+	if (g_bRolling)
+	{
+		Cel_ReplyToCommand(iClient, "New props are on their way. Wait a moment, then guess.");
 		return Plugin_Handled;
 	}
 	
@@ -1101,8 +1250,10 @@ public Action Command_Guess(int iClient, int iArgs)
 		
 		EmitSoundToClient(iClient, "buttons/button9.wav");
 		
-		//Which prop it was isn't said.
-		Cel_PrintToChatAll("{green}%N{default} guessed right at the Guess Booth and won {green}%d CL{default}!", iClient, g_cvReward.IntValue);
+		//Which prop it was isn't said: the props are swapped for new ones anyway.
+		Cel_PrintToChatAll("{green}%N{default} guessed right at the Guess Booth and won {green}%d CL{default}! Dr. Kleiner is bringing out three new props.", iClient, g_cvReward.IntValue);
+		
+		StartReroll();
 	} else {
 		EmitSoundToClient(iClient, "buttons/button8.wav");
 		

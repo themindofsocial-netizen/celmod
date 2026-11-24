@@ -714,3 +714,5 @@
 		   command feed.
 		 - The Guess Booth is back to Dr. Kleiner in his Delaware hat. Guess with !guess <prop name>: the names are never
 		   shown, and naming any of the three props wins Cleers and a bit of experience. One guess per map.
+		 - A right guess at the Guess Booth makes Dr. Kleiner cheer while the props spin up, rise and vanish in a flash; three
+		   new props fade in for the next guess. Still one guess per player per map.
