@@ -1,0 +1,11 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "Metal/metalwall048a"
+	"$surfaceprop" "metal"
+	"$bumpmap" "Metal/metalwall048a_normal"
+	"$envmap" "env_cubemap"
+	"$normalmapalphaenvmapmask" 1
+	"$envmapcontrast" 1
+	"$envmapsaturation" 1
+	"$envmaptint" "[ .56 .56 .56 ]"
+}

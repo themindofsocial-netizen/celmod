@@ -1,0 +1,9 @@
+"VertexLitGeneric"
+{
+	"$basetexture" "phoenix_storms/metal_plate"
+	"$surfaceprop" "metal"
+         "$selfillum" "1"
+         "$envmap" "CustomCubeMaps/simplespec"
+}
+
+

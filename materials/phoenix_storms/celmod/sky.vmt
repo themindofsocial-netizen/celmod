@@ -1,0 +1,5 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "skybox/sky_day01_05up"
+	"$nodecal" 1
+}

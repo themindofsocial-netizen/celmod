@@ -1,0 +1,5 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "matsys_regressiontest/background"
+	"$surfaceprop" "flesh"
+}

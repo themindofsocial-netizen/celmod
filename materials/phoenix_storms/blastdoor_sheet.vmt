@@ -1,0 +1,5 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "phoenix_storms/blastdoor_sheet"
+	"$surfaceprop" "Metal"
+}

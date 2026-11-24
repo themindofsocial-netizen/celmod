@@ -1,0 +1,6 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "phoenix_storms/celmod/cmlogo"
+	"$surfaceprop" "Metal"
+	"$nodecal" 1
+}

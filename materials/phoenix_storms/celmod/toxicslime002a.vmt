@@ -1,0 +1,12 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "Nature/toxicslime002a"
+	"$bumpmap" "Nature/slime_normal"
+	"$normalmapalphaenvmapmask" "1"
+	"$surfaceprop" "slime"
+	"$envmap" "env_cubemap"
+	"$envmaptint" "[ 1.00 .89 .80 ]"
+	"$envmapcontrast" "1"
+}
+
+

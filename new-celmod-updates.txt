@@ -689,3 +689,5 @@
 		   it behind the scenes for how often each emblem turns up.
 		 - The Guess Booth's floor is land skin 18 (Citadel metal), Dr. Breen holds his arms out over the booth, and the
 		   booth is back to its Combine posts, railings, console and emitters (with its lights) after a build that broke.
+		 - Build boxes (box1, box2, box3) no longer show a missing texture on their first skin: the Phoenix Storm
+		   materials are sent to players (and come with the release).

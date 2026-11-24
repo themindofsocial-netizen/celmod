@@ -1,0 +1,34 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "dev/water"
+	"$surfaceprop" "water"
+	"$translucent" 1
+	"$texoffset" "[0 0]"
+
+	// The water generally looks better if we scale it down a bit
+	"$texscale" "0.5"
+
+	"Proxies"
+	{
+		"AnimatedTexture"
+		{
+			"animatedtexturevar" "$basetexture"
+			"animatedtextureframenumvar" "$frame"
+			"animatedtextureframerate" 20.00
+		}
+
+		"TextureScroll"
+		{
+			"texturescrollvar" "$texoffset"
+			"texturescrollrate" .025
+			"texturescrollangle" 45.00
+		}
+
+		"TextureTransform"
+		{
+			"translateVar" "$texoffset"
+			"scaleVar" "$texscale"
+			"resultVar" "$basetexturetransform"
+		}
+	}
+}

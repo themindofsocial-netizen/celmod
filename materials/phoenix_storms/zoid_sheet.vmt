@@ -1,0 +1,5 @@
+"VertexlitGeneric"
+{
+	"$basetexture" "phoenix_storms/zoid_sheet"
+	"$surfaceprop" "Flesh"
+}
