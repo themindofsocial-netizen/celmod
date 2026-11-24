@@ -9,7 +9,8 @@
  *
  * A small yellow square at a spot an admin chose for the map (!setguessbooth, saved as data/celmod/guessbooth/<map>.txt),
  * with three props floating in it. Maps without a saved spot have no Guess Booth.
- * One of the three is the winner. A player standing in the booth gets one guess per map; a right guess pays out.
+ * The props' names are never shown. A player standing in the booth gets one guess per map (!guess <prop name>);
+ * naming any of the three pays out Cleers and a little experience.
  *
  * Players auction their own emblems, hats and celweps above the booth (!auction): others bid with !bid, and when
  * it ends the item goes to the highest bidder and their bid to the seller. Nothing changes hands until the end, so
@@ -69,7 +70,6 @@ ConVar g_cvAuctionMinutes;
 
 //Steam ids of everyone who has used their guess on this map.
 StringMap g_smGuessed;
-StringMap g_smAnswer; //each player's own winning prop (0-2) for this map, by Steam ID
 
 public Plugin myinfo =
 {
@@ -97,7 +97,6 @@ public void OnPluginStart()
 	BuildPath(Path_SM, g_sBoothDB, sizeof(g_sBoothDB), "data/celmod/guessbooth.txt");
 	
 	g_smGuessed = new StringMap();
-	g_smAnswer = new StringMap();
 	
 	g_cvXPGuess = CreateConVar("cm_tactics_xp_guess", "15", "Tactics experience for a correct guess at the Guess Booth.", _, true, 0.0);
 	g_cvReward = CreateConVar("cm_guess_reward", "5000", "Cleers paid for a correct guess at the Guess Booth.", _, true, 0.0);
@@ -145,7 +144,6 @@ public void OnMapStart()
 	}
 	
 	g_smGuessed.Clear();
-	g_smAnswer.Clear();
 	
 	//Placed before the Power Booth, which then keeps out of its sight.
 	CreateTimer(3.0, Timer_PlaceBooth, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -550,8 +548,7 @@ void PlaceBooth(float fOrigin[3])
 		}
 		
 		//New props: everyone gets a new winning prop of their own the next time they guess.
-		g_smAnswer.Clear();
-	} else {
+		} else {
 		LogError("|CelMod| The Guess Booth needs at least three props in '%s'.", g_sSpawnDB);
 	}
 	
@@ -975,7 +972,7 @@ public Action Timer_Booth(Handle hTimer)
 			
 			EmitSoundToClient(i, KLEINER_HELLO, iKleiner);
 			
-			Cel_PrintToChat(i, "{green}Dr. Kleiner:{default} Ah, hello! Welcome to the Guess Booth. One of these three props is your winner, and it's not the same for everyone. Name it with {green}!guess <prop>{default}: {green}%s{default}, {green}%s{default} or {green}%s{default}.", g_sPropAlias[0], g_sPropAlias[1], g_sPropAlias[2]);
+			Cel_PrintToChat(i, "{green}Dr. Kleiner:{default} Ah, hello! Welcome to the Guess Booth. Name any one of these three props with {green}!guess <prop name>{default} and you win. One guess per map, so choose carefully!");
 		}
 		
 		if (g_bAuction)
@@ -987,7 +984,7 @@ public Action Timer_Booth(Handle hTimer)
 				Format(sText, sizeof(sText), "Auction: %s (sold by %s)\nStarting bid: %d CL\n%d:%02d left  -  !bid <amount>", g_sAuctionName, g_sSellerName, g_iTopBid, iLeft / 60, iLeft % 60);
 			}
 		} else {
-			Format(sText, sizeof(sText), "Guess Booth\nOne of the three props is your winner: %s, %s or %s\nStand in the square and type !guess <prop name>", g_sPropAlias[0], g_sPropAlias[1], g_sPropAlias[2]);
+			Format(sText, sizeof(sText), "Guess Booth\nName any of the three props to win.\nStand in the square and type !guess <prop name>");
 		}
 		
 		//A quiet message at the top of the screen; hint text beeps every time it is shown.
@@ -1068,7 +1065,7 @@ public Action Command_Guess(int iClient, int iArgs)
 	
 	if (iArgs < 1)
 	{
-		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]guess{default} <prop name>: {green}%s{default}, {green}%s{default} or {green}%s{default}. You get one guess per map.", g_sPropAlias[0], g_sPropAlias[1], g_sPropAlias[2]);
+		Cel_ReplyToCommand(iClient, "Usage: {green}[tag]guess{default} <prop name>. Name any of the three props to win. You get one guess per map.");
 		return Plugin_Handled;
 	}
 	
@@ -1095,24 +1092,9 @@ public Action Command_Guess(int iClient, int iArgs)
 		}
 	}
 	
-	if (iGuess == -1)
-	{
-		Cel_ReplyToCommand(iClient, "That is not one of the three props. Type {green}!guess{default} and one of {green}%s{default}, {green}%s{default} or {green}%s{default}. This did not use your guess.", g_sPropAlias[0], g_sPropAlias[1], g_sPropAlias[2]);
-		return Plugin_Handled;
-	}
-	
 	g_smGuessed.SetValue(sAuthID, 1);
 	
-	//Every player has their own winning prop, so one player's answer is no help to anyone else.
-	int iAnswer;
-	
-	if (!g_smAnswer.GetValue(sAuthID, iAnswer))
-	{
-		iAnswer = GetRandomInt(0, 2);
-		g_smAnswer.SetValue(sAuthID, iAnswer);
-	}
-	
-	if (iGuess == iAnswer)
+	if (iGuess != -1)
 	{
 		Cel_AddToClientBalance(iClient, g_cvReward.IntValue);
 		Cel_AddXP(iClient, g_cvXPGuess.IntValue);
@@ -1124,7 +1106,7 @@ public Action Command_Guess(int iClient, int iArgs)
 	} else {
 		EmitSoundToClient(iClient, "buttons/button8.wav");
 		
-		Cel_ReplyToCommand(iClient, "Wrong, that wasn't your winning prop. Better luck on the next map.");
+		Cel_ReplyToCommand(iClient, "Wrong, that isn't the name of any of the three props. Better luck on the next map.");
 	}
 	
 	return Plugin_Handled;

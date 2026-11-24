@@ -712,5 +712,5 @@
 		   blood-red glow pulses around you, a slow heartbeat thumps, and you turn a very dark red.
 		 - Admin commands (!adminmode, !goto, !bring, !bringall, !punfreeze, !punkick and the rest) no longer show in the
 		   command feed.
-		 - The Guess Booth is back to Dr. Kleiner in his Delaware hat. Guess with !guess <prop name>; the HUD and Kleiner
-		   list the three names.
+		 - The Guess Booth is back to Dr. Kleiner in his Delaware hat. Guess with !guess <prop name>: the names are never
+		   shown, and naming any of the three props wins Cleers and a bit of experience. One guess per map.
