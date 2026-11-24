@@ -2581,3 +2581,30 @@ public Action Timer_DisRemove(Handle hTimer, any iRef)
 	
 	return Plugin_Continue;
 }
+
+/**
+ * Props whose skin 0 is a missing texture on some players' games (the build boxes' first skin uses a Phoenix Storm
+ * material that not everyone has): left on skin 0, they're moved to their first good skin. Other skins are kept.
+ */
+stock void Cel_FixDefaultSkin(int iEntity)
+{
+	static const char sModels[][] = { "models/celmod/build/box1.mdl", "models/celmod/build/box2.mdl", "models/celmod/build/box3.mdl" };
+	char sModel[PLATFORM_MAX_PATH];
+
+	if (iEntity <= 0 || !IsValidEntity(iEntity) || !HasEntProp(iEntity, Prop_Send, "m_nSkin") || GetEntProp(iEntity, Prop_Send, "m_nSkin") != 0)
+	{
+		return;
+	}
+
+	GetEntPropString(iEntity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+
+	for (int i = 0; i < sizeof(sModels); i++)
+	{
+		if (StrEqual(sModel, sModels[i], false))
+		{
+			SetEntProp(iEntity, Prop_Send, "m_nSkin", 1);
+			return;
+		}
+	}
+}
+

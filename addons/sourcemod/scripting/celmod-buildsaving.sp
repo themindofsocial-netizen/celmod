@@ -443,6 +443,7 @@ void LoadBuildEntry(int iClient, KeyValues kvLoadBuild)
 	Cel_SetEntity(iProp, true);
 	Entity_SetSpawnFlags(iProp, kvLoadBuild.GetNum("spawnflags"));
 	Entity_SetSkin(iProp, kvLoadBuild.GetNum("skin"));
+	Cel_FixDefaultSkin(iProp);
 	Cel_SetMotion(iProp, view_as<bool>(kvLoadBuild.GetNum("motion")));
 	Cel_SetSolid(iProp, view_as<bool>(kvLoadBuild.GetNum("solid")));
 	

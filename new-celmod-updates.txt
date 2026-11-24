@@ -698,3 +698,5 @@
 		 - Guess Booth fixed: Dr. Breen and the three holograms always appear (they're placed before the frame now), and
 		   the frame is a tidy U of Combine railings with his console, emitters under the holograms and glowing corner orbs
 		   (lightning between the front two). The server console says how far it got if anything goes wrong.
+		 - Build boxes (box1-3) spawn on skin 1, since their skin 0 is a missing texture for players who don't have the
+		   Phoenix Storm materials yet; loaded builds that had them on skin 0 move to skin 1 too. !skin still sets any skin.

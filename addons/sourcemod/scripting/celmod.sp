@@ -1739,6 +1739,8 @@ public int Native_SpawnProp(Handle hPlugin, int iNumParams)
 	
 	DispatchSpawn(iProp);
 	
+	Cel_FixDefaultSkin(iProp);
+	
 	if (bNoPhysics)
 	{
 		DispatchKeyValue(iProp, "classname", "cel_dynamic");
